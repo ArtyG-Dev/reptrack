@@ -9,16 +9,16 @@ _Measured 2026-08-07 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 126 passed, 0 failed | ✅ |
+| Automated tests | 127 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light theme) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon theme) | 100 | ✅ |
-| Lighthouse — Performance | 95 | ✅ |
+| Lighthouse — Performance | 96 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 100 | ✅ |
-| App shell size | 0.165 MB | ✅ |
+| App shell size | 0.166 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.289 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.29 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 

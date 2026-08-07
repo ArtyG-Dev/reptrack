@@ -126,12 +126,18 @@ A calisthenics plank is still a timed hold; a pilates roll-up is still counted r
 it's logged) vary independently. The seed data reflects that: Plank is
 `calisthenics`+`hold`, Roll Up is `pilates`+`reps`.
 
-### 18. `category` is freeform, not a fixed enum
+### 18. `category` is freeform, not a fixed enum — but the picker is a real `<select>`, not a `<datalist>`
 
 The follow-up said "extensible list, not hardcoded to five forever." `CATEGORIES` in
-`exercises-seed.js` is five values used to seed data and order the suggestion list, but the
-Exercises editor's category field is a plain text input with a `<datalist>` — type anything
-and it becomes a real, groupable category. No schema change needed to add a sixth.
+`exercises-seed.js` is five values used to seed data and order the picker, but nothing
+enforces them — a sixth is just a typed string away. No schema change needed to add one.
+
+The first version of this used a text `<input list="...">` with a `<datalist>` of
+suggestions. A user reported "not seeing the display choices" — `<datalist>` suggestion UI
+is genuinely unreliable across browsers, especially on mobile, where it can show no arrow
+and no visible options at all. Replaced with a real `<select>` listing every known category
+plus an explicit "Other (type your own)…" option that reveals a text field — every choice
+is now always visible, and freeform categories still work exactly as before.
 
 ### 19. A round becomes a separate SetEntry, same as a rep-mode "set"
 

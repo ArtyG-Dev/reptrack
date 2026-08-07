@@ -15,15 +15,33 @@ function exerciseSheet(existing = null) {
     const group = el('select', { id: 'ex-group' }, ...['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'other']
       .map((g) => el('option', { value: g, selected: (existing?.muscleGroup || 'other') === g }, g)));
 
-    // Category is a suggestion list, not a fixed enum — the datalist offers
-    // CATEGORIES ∪ whatever is already in use, but any typed value is accepted.
-    const inUse = new Set([...CATEGORIES, ...state.getState().exercises.map((ex) => ex.category || 'strength')]);
-    const category = el('input', {
-      type: 'text', id: 'ex-category', list: 'ex-category-options',
-      value: existing?.category || 'strength', placeholder: 'strength'
+    // Category is a suggestion list, not a fixed enum — the dropdown offers
+    // CATEGORIES ∪ whatever is already in use, plus an explicit "type your own"
+    // option. A real <select> (rather than a text input + <datalist>) is what
+    // actually shows a visible list of choices consistently across browsers —
+    // datalist suggestion UI is unreliable, especially on mobile.
+    const CUSTOM = '__custom__';
+    const inUse = [...new Set([...CATEGORIES, ...state.getState().exercises.map((ex) => ex.category || 'strength')])].sort();
+    const existingCategory = existing?.category || 'strength';
+    const isKnownCategory = inUse.includes(existingCategory);
+
+    const customCategory = el('input', {
+      type: 'text', id: 'ex-category-custom', placeholder: 'e.g. crossfit',
+      value: isKnownCategory ? '' : existingCategory
     });
-    const categoryOptions = el('datalist', { id: 'ex-category-options' },
-      ...[...inUse].sort().map((c) => el('option', { value: c }))
+    const customCategoryField = el('div', { class: 'field', id: 'ex-category-custom-field', hidden: isKnownCategory },
+      el('label', { for: 'ex-category-custom', text: 'Custom category name' }), customCategory
+    );
+
+    const category = el('select', {
+      id: 'ex-category',
+      onchange: (e) => {
+        customCategoryField.hidden = e.target.value !== CUSTOM;
+        if (e.target.value === CUSTOM) customCategory.focus();
+      }
+    },
+      ...inUse.map((c) => el('option', { value: c, selected: isKnownCategory && c === existingCategory }, titleCase(c))),
+      el('option', { value: CUSTOM, selected: !isKnownCategory }, 'Other (type your own)…')
     );
 
     const mode = el('select', { id: 'ex-mode' },
@@ -38,11 +56,12 @@ function exerciseSheet(existing = null) {
       onsubmit: (e) => {
         e.preventDefault();
         if (!name.value.trim()) { toast('Give the exercise a name.'); return; }
+        const chosenCategory = category.value === CUSTOM ? customCategory.value : category.value;
         ctx.close({
           name: name.value.trim(),
           aliases: aliases.value.split(',').map((a) => a.trim().toLowerCase()).filter(Boolean),
           muscleGroup: group.value,
-          category: (category.value.trim() || 'strength').toLowerCase(),
+          category: (chosenCategory.trim() || 'strength').toLowerCase(),
           mode: mode.value,
           isBodyweight: bodyweight.checked
         });
@@ -53,8 +72,9 @@ function exerciseSheet(existing = null) {
       el('div', { class: 'field' }, el('label', { for: 'ex-aliases', text: 'Aliases the voice parser should accept (comma separated)' }), aliases),
       el('div', { class: 'field-row' },
         el('div', {}, el('label', { for: 'ex-group', text: 'Muscle group' }), group),
-        el('div', {}, el('label', { for: 'ex-category', text: 'Category' }), category, categoryOptions)
+        el('div', {}, el('label', { for: 'ex-category', text: 'Category' }), category)
       ),
+      customCategoryField,
       el('div', { class: 'field' },
         el('label', { for: 'ex-mode', text: 'How it’s logged' }), mode,
         el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'Reps covers strength and calisthenics (weight is optional). Hold covers yoga poses, pilates holds, and timed calisthenics like a plank.' })

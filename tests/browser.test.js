@@ -491,6 +491,31 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await context.close();
   });
 
+  test('the exercise category field is a real dropdown with visible options, plus a custom fallback', async () => {
+    const { context, page } = await freshPage();
+    await page.click('#tab-exercises');
+    await page.waitForSelector('.disclosure-trigger');
+    await page.click('button:has-text("+ Add exercise")');
+    await page.waitForSelector('#ex-category');
+
+    // A real <select> — every option is present in the DOM and visible to
+    // the browser's native picker, unlike a <datalist> suggestion list.
+    const optionLabels = await page.$$eval('#ex-category option', (opts) => opts.map((o) => o.textContent));
+    assert.deepEqual(optionLabels, ['Calisthenics', 'Cardio', 'Pilates', 'Strength', 'Yoga', 'Other (type your own)…']);
+
+    // The custom-category field is hidden until "Other" is chosen.
+    assert.equal(await page.isVisible('#ex-category-custom-field'), false);
+    await page.selectOption('#ex-category', '__custom__');
+    assert.equal(await page.isVisible('#ex-category-custom-field'), true);
+
+    await page.fill('#ex-name', 'Bear Crawl');
+    await page.fill('#ex-category-custom', 'Crossfit');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForSelector('.disclosure-trigger:has-text("Crossfit")');
+
+    await context.close();
+  });
+
   test('every interactive control is reachable and labelled', async () => {
     const { context, page } = await freshPage();
     const unlabelled = await page.evaluate(() => {

@@ -11,11 +11,15 @@ Vanilla HTML/CSS/JS. No framework, no build step, no runtime dependencies.
 ## What it does
 
 - **Today** — start/end a timed session, log sets by voice or by tap, log runs, rest timer.
+  A mixed session (strength + a yoga hold, say) groups into collapsible sections by category.
 - **Diary** — a calendar you can navigate by year, month, week or day; tap a day to see it.
-- **Progress** — per-exercise charts of estimated 1RM, top-set weight and reps, with PR
-  flags and a quiet “you've hit this twice, try a bit more” nudge.
-- **Exercises** — your own dictionary; add lifts and the aliases you actually say out loud.
-- **Settings** — units, rest timer, theme, JSON export/import, wipe.
+- **Progress** — per-exercise charts. Weight/rep exercises chart estimated 1RM, top-set
+  weight and reps; yoga/pilates/timed-hold exercises chart hold duration instead. PR flags
+  either way, and a quiet “you've hit this twice, try a bit more” nudge for weighted lifts.
+- **Exercises** — your own dictionary, grouped into collapsible categories (Strength,
+  Calisthenics, Yoga, Pilates, or anything you type — it's not a fixed list). Add lifts,
+  poses or holds and the aliases you actually say out loud.
+- **Settings** — units, rest timer, **Light or High-Contrast Neon theme**, JSON export/import, wipe.
 - **Weekly summary** — one tap turns the week into a plain-text file (sessions, lifts, PRs,
   volume, runs) that you can share or save. Generated on-device, works offline.
 
@@ -60,6 +64,14 @@ Tap the mic, say one phrase, confirm. Phrases it understands:
 | “bench press same as last time” | pulls last session's sets for that lift |
 | “pull ups 12” | 12 bodyweight reps |
 | “deadlift 140 for 5 rpe 8” | records the RPE too |
+| “plank for 60 seconds” | 1 hold — 60s |
+| “downward dog 30 seconds each side” | 2 holds, 30s each, one per side |
+| “child's pose for a minute” | 1 hold — 60s |
+| “plank 30 seconds 3 rounds” | 3 holds, 30s each |
+
+Which grammar applies is decided by the exercise, not the phrase — anything logged as
+`hold` mode (yoga poses, pilates holds, a timed calisthenics hold like a plank) parses
+duration instead of weight/reps. Set an exercise's mode in **Exercises → Edit**.
 
 Spoken numbers work (“sixty two point five kilos”), as do pounds, and near-misses in
 transcription are fuzzy-matched against your exercise dictionary. **Every voice log shows
@@ -99,12 +111,20 @@ runs with pace, and a day-by-day line. Plain text, no network, no formatting to 
 
 ---
 
+## Colour schemes
+
+**Settings → Theme.** Light is the default — clean, minimal, soft neutrals. High-Contrast
+Neon is a dark, saturated alternative (electric cyan/green/pink accents) built for the same
+accessibility bar: every colour pair still meets 4.5:1 contrast, and nothing flashes,
+strobes or glows — the boldness is in the colours, not in motion. The choice applies
+instantly and is remembered next time you open the app.
+
 ## Development
 
 ```bash
-npm test               # 100+ unit, integration and browser tests
+npm test               # 125+ unit, integration and browser tests
 npm run footprint      # app shell + a simulated year of data, in MB
-npm run lighthouse     # PWA + accessibility scores
+npm run lighthouse     # PWA + accessibility scores, for both colour schemes
 npm run acceptance     # all of the above, and rewrites ACCEPTANCE.md
 npm run icons          # regenerate the PWA icons
 ```

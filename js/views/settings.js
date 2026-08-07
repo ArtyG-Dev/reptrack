@@ -39,11 +39,10 @@ async function doImport(file, mode) {
   }
 }
 
+/** Only 'light' and 'neon' are real schemes — anything else (including an old
+ * saved 'auto'/'dark' from before this toggle existed) falls back to light. */
 export function applyTheme(theme) {
-  const resolved = theme === 'auto'
-    ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : theme;
-  document.documentElement.setAttribute('data-theme', resolved);
+  document.documentElement.setAttribute('data-theme', theme === 'neon' ? 'neon' : 'light');
 }
 
 export function render(container) {
@@ -71,8 +70,8 @@ export function render(container) {
   const themeSelect = el('select', {
     id: 'set-theme',
     onchange: async (e) => { await state.updateSettings({ theme: e.target.value }); applyTheme(e.target.value); }
-  }, ...[['auto', 'Match system'], ['light', 'Light'], ['dark', 'Dark']]
-    .map(([value, label]) => el('option', { value, selected: s.settings.theme === value }, label)));
+  }, ...[['light', 'Light'], ['neon', 'High-Contrast Neon']]
+    .map(([value, label]) => el('option', { value, selected: (s.settings.theme === 'neon' ? 'neon' : 'light') === value }, label)));
 
   containerRef.append(el('div', { class: 'card stack' },
     el('h3', { text: 'Preferences' }),

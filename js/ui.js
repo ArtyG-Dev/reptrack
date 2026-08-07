@@ -154,6 +154,38 @@ export async function shareOrDownloadText(text, filename, title = 'RepTrack') {
   return 'downloaded';
 }
 
+/**
+ * Accessible disclosure (show/hide) panel — the WAI-ARIA APG "Disclosure"
+ * pattern. The trigger is a real `<button>`, so Enter/Space work for free with
+ * no extra key handling. The panel is hidden with the `hidden` attribute (not
+ * a CSS class), and `aria-expanded`/`aria-controls` stay in sync with it —
+ * that combination is what makes this a real disclosure widget rather than
+ * just visually hiding a div.
+ * @param {{id:string, summary:string, expanded:boolean, onToggle:(next:boolean)=>void, content:Node}} options
+ */
+export function disclosure({ id, summary, expanded, onToggle, content }) {
+  const panelId = `${id}-panel`;
+  const triggerId = `${id}-trigger`;
+  const trigger = el('button', {
+    class: 'disclosure-trigger', type: 'button', id: triggerId,
+    'aria-expanded': expanded ? 'true' : 'false', 'aria-controls': panelId,
+    onclick: () => onToggle(!expanded)
+  },
+    el('span', { class: 'disclosure-chevron', 'aria-hidden': 'true' }, expanded ? '▾' : '▸'),
+    el('span', { class: 'disclosure-summary' }, summary)
+  );
+  const panel = el('div', {
+    id: panelId, class: 'disclosure-panel', role: 'region', 'aria-labelledby': triggerId,
+    hidden: !expanded
+  }, content);
+  return el('div', { class: 'disclosure' }, trigger, panel);
+}
+
+/** "downward dog" → "Downward Dog". Used for category labels, which may be freeform. */
+export function titleCase(text) {
+  return String(text).replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /* ---------- formatting ---------- */
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

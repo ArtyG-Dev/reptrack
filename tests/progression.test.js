@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 
 import {
   estimate1RM, toKg, fromKg, bestSet, buildSeries, isPersonalRecord,
-  markPRs, suggestProgression, totalVolume, formatDuration, roundToIncrement
+  markPRs, suggestProgression, totalVolume, formatDuration, roundToIncrement, recordScore
 } from '../js/progression.js';
 
 const set = (dateISO, weight, reps, unit = 'kg', order = 0) => ({ dateISO, weight, reps, unit, order });
+const hold = (dateISO, holdSeconds, side = null, order = 0) => ({ dateISO, weight: 0, reps: 0, unit: 'kg', holdSeconds, side, order });
 
 test('unit conversion round-trips', () => {
   assert.ok(Math.abs(toKg(100, 'lb') - 45.359) < 0.01);
@@ -116,4 +117,54 @@ test('durations format as mm:ss and h:mm:ss', () => {
   assert.equal(formatDuration(0), '00:00');
   assert.equal(formatDuration(65), '01:05');
   assert.equal(formatDuration(3725), '1:02:05');
+});
+
+/* ---------- hold-mode scoring: yoga, pilates, timed calisthenics ---------- */
+
+test('recordScore scores a hold by its duration and a reps set by estimated 1RM', () => {
+  assert.equal(recordScore(hold('2026-01-01', 60)), 60);
+  assert.equal(recordScore(set('2026-01-01', 100, 1)), 100);
+  assert.equal(recordScore(set('2026-01-01', 0, 0)), 0);
+  assert.equal(recordScore(null), 0);
+});
+
+test('bestSet picks the longest hold, not merely the first one logged', () => {
+  const best = bestSet([hold('2026-01-01', 30), hold('2026-01-01', 45), hold('2026-01-01', 20)]);
+  assert.equal(best.holdSeconds, 45);
+});
+
+test('a hold series is one point per day, with holdSeconds carried through and PRs flagged', () => {
+  const series = buildSeries([
+    hold('2026-01-01', 30),
+    hold('2026-01-08', 45),
+    hold('2026-01-08', 40),
+    hold('2026-01-15', 35)
+  ]);
+  assert.deepEqual(series.map((p) => p.dateISO), ['2026-01-01', '2026-01-08', '2026-01-15']);
+  assert.deepEqual(series.map((p) => p.holdSeconds), [30, 45, 35]);
+  assert.deepEqual(series.map((p) => p.isPR), [true, true, false]);
+});
+
+test('isPersonalRecord compares holds against hold history, on duration', () => {
+  const history = [hold('2026-01-01', 30)];
+  assert.equal(isPersonalRecord(hold('2026-01-08', 45), history), true);
+  assert.equal(isPersonalRecord(hold('2026-01-08', 30), history), false);
+  assert.equal(isPersonalRecord(hold('2026-01-08', 20), history), false);
+});
+
+test('markPRs works on a hold history the same way it works on a weight history', () => {
+  const marked = markPRs([hold('2026-01-15', 40), hold('2026-01-01', 30), hold('2026-01-08', 50)]);
+  assert.deepEqual(marked.map((s) => [s.dateISO, s.isPR]), [
+    ['2026-01-01', true],
+    ['2026-01-08', true],
+    ['2026-01-15', false]
+  ]);
+});
+
+test('the weight-progression nudge stays silent for a hold-mode series', () => {
+  assert.equal(suggestProgression([hold('2026-01-01', 30), hold('2026-01-08', 30)]), null);
+});
+
+test('a hold contributes nothing to weight×reps volume', () => {
+  assert.equal(totalVolume([hold('2026-01-01', 60), set('2026-01-01', 50, 10)]), 500);
 });

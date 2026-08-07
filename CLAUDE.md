@@ -44,21 +44,21 @@ js/
   store.js              THE STORAGE SEAM — every feature module reads/writes through this
   db.js                 IndexedDB primitives: schema, transactions, CRUD, export/import
   state.js              in-memory app state + actions; the only place views mutate data
-  parser.js             natural language → structured sets (pure)
+  parser.js             natural language → structured sets, reps-mode AND hold-mode (pure)
   voice.js              one-shot SpeechRecognition wrapper (transcript only)
-  progression.js        1RM, PR detection, progression nudge, unit conversion (pure)
-  summary.js            weekly plain-text summary (pure)
+  progression.js        1RM/hold-duration scoring, PR detection, progression nudge (pure)
+  summary.js            weekly plain-text summary, reps- and hold-mode rows (pure)
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
-  ui.js                 element builder, toasts, <dialog> sheets, share/download, dates
-  exercises-seed.js     starter exercise dictionary with voice aliases
+  ui.js                 element builder, toasts, <dialog> sheets, disclosure, share/download
+  exercises-seed.js     starter exercise dictionary + CATEGORIES suggestion list
   views/
-    today.js            session lifecycle, mic, confirm sheet, runs, rest timer
+    today.js            session lifecycle, mic, mode-aware confirm sheet, runs, rest timer
     diary.js            year/month/week/day calendar + weekly summary button
-    progress.js         per-exercise charts, personal bests, nudge
-    exercises.js        exercise dictionary CRUD
-    settings.js         preferences, export/import, wipe, storage estimate
+    progress.js         per-exercise charts (mode-aware), personal bests, nudge
+    exercises.js        exercise dictionary CRUD, grouped into collapsible categories
+    settings.js         preferences incl. theme, export/import, wipe, storage estimate
 
-scripts/                serve, icon generation, footprint, Lighthouse, acceptance loop
+scripts/                serve, icon generation, footprint, Lighthouse (both themes), acceptance loop
 tests/                  node:test — unit, IndexedDB (fake-indexeddb) and Playwright browser
 ```
 
@@ -70,18 +70,18 @@ tests/                  node:test — unit, IndexedDB (fake-indexeddb) and Playw
 ## Data model (IndexedDB `reptrack`, version 1)
 
 ```
-Exercise  { id, name, aliases[], muscleGroup, isCustom, isBodyweight }
+Exercise  { id, name, aliases[], muscleGroup, category, mode, isCustom, isBodyweight }
 Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility }
-SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe, isPR,
-            lastModified, visibility }
+SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
+            holdSeconds, side, isPR, lastModified, visibility }
 Run       { id, dateISO, distance, distanceUnit, durationSec, notes, lastModified, visibility }
-Settings  { key, value }
+Settings  { key, value }   // includes theme ('light'|'neon') and panelState (see below)
 ```
 
 Indexes: `sessions.by_date`, `sets.by_session`, `sets.by_exercise`, `runs.by_date`,
 `exercises.by_name`.
 
-Three details that look redundant and are not:
+Details that look redundant and are not:
 
 - **`dateISO` on a set** is denormalised from its session so per-exercise history reads
   without joining every session. Keep it in sync when a session's date changes.
@@ -89,15 +89,43 @@ Three details that look redundant and are not:
   future sync needs.
 - **`visibility`** defaults to `'private'` and nothing reads it yet. It exists so Phase 3
   sharing is a feature flag, not a data migration.
+- **`Exercise.category`** (`strength | cardio | calisthenics | yoga | pilates | ...`) is
+  freeform — `CATEGORIES` in `exercises-seed.js` is a suggestion list for the Exercises
+  editor's `<datalist>`, not an enum. Anything typed there works; grouping code in
+  `today.js`/`exercises.js` just groups by whatever string is present.
+- **`Exercise.mode`** is `'reps'` (weight/reps/sets — strength, cardio, calisthenics) or
+  `'hold'` (a timed duration — yoga poses, pilates holds, a timed calisthenics hold like a
+  plank). It decides which grammar `parser.js` uses and which fields `today.js`'s confirm
+  sheet shows; nothing else branches on it directly.
+- **`SetEntry.holdSeconds`/`.side`** are additive and only ever set together, only for a
+  `hold`-mode exercise. A reps-mode set leaves both `null` — check `holdSeconds != null`
+  (never `mode`) to tell which kind of set you're holding, since a set object doesn't carry
+  its exercise's mode itself. `progression.recordScore()` is the one place that branch
+  lives; everything downstream (PRs, "best set", the chart series) uses its output and
+  doesn't need to know the difference.
+- **`settings.panelState`** — `{ [scope]: { [category]: boolean } }`, `scope` is
+  `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
+  `state.setPanelExpanded()`, which also supply the "most recently used category starts
+  expanded" default when no explicit choice is stored yet.
 
 ---
 
 ## Extending it
 
 ### Adding a voice phrase
-`js/parser.js`. `parseSegment` tags numbers by their neighbouring words; `parseTranscript`
-handles intents. Add a case to `tests/parser.test.js` first — the grammar is fully covered
-there and that is the cheapest place to see what you broke.
+`js/parser.js`. Reps-mode phrases: `parseSegment` tags numbers by their neighbouring words.
+Hold-mode phrases (used when the matched exercise's `mode === 'hold'`): `parseHoldSegment`,
+same idea but for seconds/minutes/rounds/"each side". `parseTranscript` picks the branch
+and handles intents. Add a case to `tests/parser.test.js` first — the grammar is fully
+covered there and that is the cheapest place to see what you broke.
+
+### Adding a collapsible section
+Use `disclosure()` from `js/ui.js` — pass `id`, `summary`, `expanded`, `onToggle`, `content`.
+It's a real `<button>` (so Enter/Space work with no extra code) toggling the panel's
+`hidden` attribute, with `aria-expanded`/`aria-controls` kept in sync — that combination is
+what makes it a real disclosure widget, not just a CSS-hidden div. Persist the open/closed
+choice through `state.isPanelExpanded(scope, category)` / `setPanelExpanded(...)`, not a
+new mechanism.
 
 ### Adding a screen
 Add a `<section class="view" id="view-x" role="tabpanel">` to `index.html`, a matching
@@ -118,6 +146,16 @@ Views are re-rendered wholesale on every state change — keep them cheap and st
 `visibility` flag. A sync adapter wraps the exported functions there — no view, and no
 feature module, needs to change.
 
+### Adding a colour scheme
+Two schemes exist: Light (`:root`, default) and High-Contrast Neon (`[data-theme="neon"]`).
+Add a third the same way — a new `[data-theme="..."]` block in `css/styles.css` overriding
+only the colour custom properties (never introduce a hardcoded colour in component CSS),
+an option in `views/settings.js`'s theme `<select>`, and a case in `applyTheme()`. Whatever
+you add: run `tests/contrast.test.js` (which checks every pair in every `[data-theme]`
+block it finds — extend `PAIRS`/the theme list there) and `npm run lighthouse` (loops
+`THEMES` in `scripts/run-lighthouse.mjs`) before committing. No scheme may introduce an
+`animation`/`@keyframes` — `contrast.test.js` enforces that too.
+
 ---
 
 ## Testing
@@ -127,14 +165,17 @@ npm test           # everything
 npm run acceptance # tests + footprint + Lighthouse, rewrites ACCEPTANCE.md
 ```
 
-- `parser`, `progression`, `summary`, `chart` — pure logic, fast.
-- `db` — real IndexedDB semantics via `fake-indexeddb`.
-- `contrast` — parses `css/styles.css` and checks every text pair ≥ 4.5:1 in both themes.
+- `parser`, `progression`, `summary`, `chart` — pure logic, fast. Covers both reps-mode and
+  hold-mode paths.
+- `db` — real IndexedDB semantics via `fake-indexeddb`, including category/mode/holdSeconds.
+- `contrast` — parses `css/styles.css` and checks every text pair ≥ 4.5:1 in both themes,
+  plus that the neon theme introduces no animation.
 - `pwa-static` — manifest, icon dimensions, service-worker precache completeness, and the
   architectural rules listed under "Hard constraints".
 - `browser` — real Chromium via Playwright: offline reload, voice (stubbed recogniser),
-  the tap-to-text fallback, runs, weekly summary download *and* Web Share, JSON export,
-  and an axe-core scan of every tab. Skips cleanly if no Chromium is present.
+  the tap-to-text fallback, hold-mode logging, collapsible-panel keyboard operation and
+  persistence, the theme toggle, runs, weekly summary download *and* Web Share, JSON
+  export, and an axe-core scan of every tab. Skips cleanly if no Chromium is present.
 
 **When you add a shipped file, add it to `PRECACHE` in `sw.js`** — the static test fails
 otherwise, because a missed entry means a blank screen when offline.

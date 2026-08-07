@@ -3,11 +3,12 @@
  * the single seam a future sync adapter plugs into (see PHASE_ROADMAP Phase 3).
  *
  * Stores
- *   exercises  { id, name, aliases[], muscleGroup, isCustom, isBodyweight }   key: id, index by_name
+ *   exercises  { id, name, aliases[], muscleGroup, category, mode,
+ *                isCustom, isBodyweight }                                     key: id, index by_name
  *   sessions   { id, dateISO, startTs, endTs, durationSec, notes,
  *                lastModified, visibility }                                   key: id, index by_date
  *   sets       { id, sessionId, exerciseId, dateISO, order, weight, unit,
- *                reps, rpe, isPR, lastModified, visibility }                  key: id, indexes by_session / by_exercise
+ *                reps, rpe, holdSeconds, side, isPR, lastModified, visibility } key: id, indexes by_session / by_exercise
  *   runs       { id, dateISO, distance, distanceUnit, durationSec, notes,
  *                lastModified, visibility }                                   key: id, index by_date
  *   settings   { key, value }                                                 key: key
@@ -18,6 +19,12 @@
  * Every record carries a UUID, a `lastModified` timestamp and a `visibility`
  * flag (`private` by default). Nothing reads `visibility` yet — it exists now so
  * that adding sharing later is a feature, not a data migration.
+ *
+ * `category` (strength | cardio | calisthenics | yoga | pilates | ...) and `mode`
+ * ('reps' — weight/reps/sets, or 'hold' — timed duration) are additive: a set
+ * logged before these existed simply has `holdSeconds`/`side` as undefined,
+ * which every reader treats the same as null. No IndexedDB version bump was
+ * needed for this — no index changed, only optional fields on existing stores.
  *
  * Reserved for Phase 2 (do not create yet): nutrition { id, dateISO, kcal, protein, carbs, fat, note }
  */
@@ -40,7 +47,7 @@ export const PRIVATE = 'private';
 export const DEFAULT_SETTINGS = Object.freeze({
   unit: 'kg',
   defaultRestSec: 90,
-  theme: 'auto',
+  theme: 'light',
   voiceEnabled: true,
   confirmBeforeLog: true,
   progressionStepKg: 2.5,
@@ -209,8 +216,20 @@ export async function listExercises() {
   return all.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function makeExercise({ name, aliases = [], muscleGroup = 'other', isCustom = true, isBodyweight = false }) {
-  return { id: uid('ex'), name: name.trim(), aliases: aliases.map((a) => a.trim().toLowerCase()), muscleGroup, isCustom, isBodyweight };
+export function makeExercise({
+  name, aliases = [], muscleGroup = 'other', category = 'strength', mode = 'reps',
+  isCustom = true, isBodyweight = false
+}) {
+  return {
+    id: uid('ex'),
+    name: name.trim(),
+    aliases: aliases.map((a) => a.trim().toLowerCase()),
+    muscleGroup,
+    category: (category || 'strength').trim().toLowerCase(),
+    mode: mode === 'hold' ? 'hold' : 'reps',
+    isCustom,
+    isBodyweight
+  };
 }
 
 export async function addExercise(input) {
@@ -288,8 +307,19 @@ export async function deleteSession(sessionId) {
 
 /* ---------- sets ---------- */
 
-export function makeSet({ sessionId, exerciseId, dateISO, order = 0, weight = 0, unit = 'kg', reps = 0, rpe = null, isPR = false }) {
-  return { id: uid('set'), sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe, isPR, lastModified: Date.now(), visibility: PRIVATE };
+/**
+ * `holdSeconds`/`side` are only meaningful for a `mode: 'hold'` exercise (yoga,
+ * pilates, a timed calisthenics hold like a plank). A `reps` exercise leaves
+ * both null — `weight`/`reps` cover strength and calisthenics rep work alike.
+ */
+export function makeSet({
+  sessionId, exerciseId, dateISO, order = 0, weight = 0, unit = 'kg', reps = 0, rpe = null,
+  holdSeconds = null, side = null, isPR = false
+}) {
+  return {
+    id: uid('set'), sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
+    holdSeconds, side, isPR, lastModified: Date.now(), visibility: PRIVATE
+  };
 }
 
 export async function addSet(input) {

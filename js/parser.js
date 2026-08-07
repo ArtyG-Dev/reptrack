@@ -3,13 +3,21 @@
  * Pure functions only: no DOM, no storage, no speech API. Everything here is
  * exercised directly by tests/parser.test.js.
  *
- * Supported (see BUILD_SPEC §4):
+ * Supported (see BUILD_SPEC §4) — reps-mode (strength, cardio, calisthenics):
  *   "bench press 60 kilos for 10"        → 1 set,  60 kg × 10
  *   "squat 100 kilos 5 reps 3 sets"      → 3 sets, 100 kg × 5
  *   "deadlift 140 for 5"                 → unit falls back to the user setting
  *   "add another set"                    → repeat the last logged set
  *   "same as last time"                  → pull the previous session's entry
  *   "60 kilos 10, 65 for 8, 70 for 6"    → three sets against the current exercise
+ *
+ * Supported — hold-mode (yoga, pilates, a timed calisthenics hold): which grammar
+ * applies is decided by the matched exercise's `mode`, not by anything in the
+ * phrase itself.
+ *   "plank for 60 seconds"                    → 1 hold, 60s
+ *   "downward dog 30 seconds each side"       → 2 holds, 30s each, side left/right
+ *   "child's pose for a minute"               → 1 hold, 60s
+ *   "plank 30 seconds 3 rounds"               → 3 holds, 30s each
  */
 
 const NUMBER_WORDS = {
@@ -27,6 +35,10 @@ const REPS_WORDS = new Set(['rep', 'reps', 'repetition', 'repetitions']);
 const SETS_WORDS = new Set(['set', 'sets']);
 const REPS_LEAD = new Set(['for', 'x', 'times', 'by', 'of']);
 const WEIGHT_LEAD = new Set(['at', 'with', 'on']);
+
+const SECOND_WORDS = new Set(['second', 'seconds', 'sec', 'secs']);
+const MINUTE_WORDS = new Set(['minute', 'minutes', 'min', 'mins']);
+const ROUND_WORDS = new Set(['round', 'rounds']);
 
 const LEADING_FILLER = ['ok', 'okay', 'hey', 'please', 'log', 'record', 'add', 'i', 'did', 'do', 'the', 'a', 'an', 'my', 'lets', 'let'];
 const TRAILING_FILLER = ['for', 'at', 'with', 'of', 'did', 'do', 'the', 'a', 'an', 'i', 'was', 'is'];
@@ -113,6 +125,11 @@ export function wordsToNumbers(text) {
   return out.join(' ');
 }
 
+/** "a minute" / "a second" — the indefinite article standing in for "one". */
+function repairIndefiniteDuration(text) {
+  return text.replace(/\ba (minute|second|round)\b/g, '1 $1');
+}
+
 /** Recognisers sometimes hear "for" as "four" between a weight and a rep count. */
 function repairForFourWords(text) {
   return text.replace(/\b(kg|lb) four\b/g, '$1 for');
@@ -123,7 +140,7 @@ function repairForFourDigits(text) {
 }
 
 export function prepare(text) {
-  return repairForFourDigits(wordsToNumbers(repairForFourWords(normalizeUnitWords(normalizeTranscript(text)))));
+  return repairForFourDigits(repairIndefiniteDuration(wordsToNumbers(repairForFourWords(normalizeUnitWords(normalizeTranscript(text))))));
 }
 
 /* ---------- fuzzy exercise matching ---------- */
@@ -176,7 +193,7 @@ export function matchExercise(spoken, exercises = []) {
   return best;
 }
 
-/* ---------- segment parsing ---------- */
+/* ---------- segment parsing: reps mode ---------- */
 
 const NUM_RE = /^\d+(?:\.\d+)?$/;
 
@@ -240,6 +257,35 @@ function parseSegment(tokens, { defaultUnit, isBodyweight }) {
   };
 }
 
+/* ---------- segment parsing: hold mode ---------- */
+
+/**
+ * @returns {{holdSeconds: number, rounds: number, each: boolean}|null}
+ */
+function parseHoldSegment(tokens) {
+  let holdSeconds = null;
+  let rounds = null;
+  let each = false;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tok = tokens[i];
+    if ((tok === 'each' || tok === 'per') && tokens[i + 1] === 'side') each = true;
+    if (tok === 'both' && tokens[i + 1] === 'sides') each = true;
+    if (!NUM_RE.test(tok)) continue;
+
+    const value = Number(tok);
+    const next = tokens[i + 1];
+
+    if (SECOND_WORDS.has(next)) holdSeconds = (holdSeconds || 0) + value;
+    else if (MINUTE_WORDS.has(next)) holdSeconds = (holdSeconds || 0) + value * 60;
+    else if (ROUND_WORDS.has(next) || SETS_WORDS.has(next)) rounds = value;
+    else if (holdSeconds === null) holdSeconds = value;   // a bare number defaults to seconds
+  }
+
+  if (holdSeconds === null || holdSeconds <= 0) return null;
+  return { holdSeconds, rounds: rounds && rounds > 0 ? Math.round(rounds) : 1, each };
+}
+
 function splitSegments(tokens) {
   const segments = [[]];
   for (const tok of tokens) {
@@ -253,6 +299,12 @@ function splitSegments(tokens) {
 }
 
 /* ---------- top-level parse ---------- */
+
+/** Carries holdSeconds/side through only when the source set actually has them. */
+function carrySet(source) {
+  const base = { weight: source.weight, unit: source.unit, reps: source.reps, rpe: source.rpe ?? null };
+  return source.holdSeconds != null ? { ...base, holdSeconds: source.holdSeconds, side: source.side ?? null } : base;
+}
 
 /**
  * @param {string} transcript raw text from speech recognition or the text fallback
@@ -291,7 +343,7 @@ export function parseTranscript(transcript, ctx = {}) {
   const tokens = normalized.split(' ');
 
   /* --- intent: repeat the last set --- */
-  if (/\b(add|log|do|one)\s+(another|more|again)\b/.test(normalized) || /\banother (one|set|rep)\b/.test(normalized) || /\bsame again\b/.test(normalized)) {
+  if (/\b(add|log|do|one)\s+(another|more|again)\b/.test(normalized) || /\banother (one|set|rep|hold)\b/.test(normalized) || /\bsame again\b/.test(normalized)) {
     if (!lastSet) {
       return { ...base, intent: 'repeat-last', error: 'No set logged yet to repeat.' };
     }
@@ -301,7 +353,7 @@ export function parseTranscript(transcript, ctx = {}) {
       intent: 'repeat-last',
       exercise: lastSet.exercise ?? currentExercise,
       exerciseConfidence: 1,
-      sets: [{ weight: lastSet.weight, unit: lastSet.unit, reps: lastSet.reps, rpe: lastSet.rpe ?? null }]
+      sets: [carrySet(lastSet)]
     };
   }
 
@@ -325,11 +377,11 @@ export function parseTranscript(transcript, ctx = {}) {
       intent: 'same-as-last',
       exercise,
       exerciseConfidence: match.score || 1,
-      sets: previous.map((s) => ({ weight: s.weight, unit: s.unit, reps: s.reps, rpe: s.rpe ?? null }))
+      sets: previous.map(carrySet)
     };
   }
 
-  /* --- intent: log one or more sets --- */
+  /* --- intent: log one or more sets/holds --- */
   const firstNumIdx = tokens.findIndex((t) => NUM_RE.test(t));
   let head = firstNumIdx === -1 ? tokens.slice() : tokens.slice(0, firstNumIdx);
 
@@ -369,34 +421,57 @@ export function parseTranscript(transcript, ctx = {}) {
   const segments = splitSegments(body);
   const parsedSets = [];
 
-  for (const segment of segments) {
-    const parsed = parseSegment(segment, { defaultUnit, isBodyweight: Boolean(exercise.isBodyweight) });
-    if (!parsed) continue;
-    if (parsed.reps === null || parsed.reps <= 0) {
-      warnings.push(`Skipped "${segment.join(' ')}" — no rep count in it.`);
-      continue;
+  if (exercise.mode === 'hold') {
+    for (const segment of segments) {
+      const parsed = parseHoldSegment(segment);
+      if (!parsed) {
+        warnings.push(`Skipped "${segment.join(' ')}" — no hold duration in it.`);
+        continue;
+      }
+      const sides = parsed.each ? ['left', 'right'] : [null];
+      const count = Math.min(Math.max(parsed.rounds, 1), 20);
+      for (let i = 0; i < count; i += 1) {
+        for (const side of sides) {
+          parsedSets.push({ holdSeconds: parsed.holdSeconds, side, rpe: null });
+        }
+      }
     }
-    if (parsed.weight === null) {
-      warnings.push(`Skipped "${segment.join(' ')}" — no weight in it.`);
-      continue;
+    if (!parsedSets.length) {
+      return { ...base, intent: 'log', exercise, exerciseConfidence: confidence, warnings, error: 'Heard the exercise but no hold duration.' };
     }
-    const count = Math.min(Math.max(Math.round(parsed.sets) || 1, 1), 20);
-    for (let i = 0; i < count; i += 1) {
-      parsedSets.push({ weight: parsed.weight, unit: parsed.unit, reps: Math.round(parsed.reps), rpe: parsed.rpe });
+  } else {
+    for (const segment of segments) {
+      const parsed = parseSegment(segment, { defaultUnit, isBodyweight: Boolean(exercise.isBodyweight) });
+      if (!parsed) continue;
+      if (parsed.reps === null || parsed.reps <= 0) {
+        warnings.push(`Skipped "${segment.join(' ')}" — no rep count in it.`);
+        continue;
+      }
+      if (parsed.weight === null) {
+        warnings.push(`Skipped "${segment.join(' ')}" — no weight in it.`);
+        continue;
+      }
+      const count = Math.min(Math.max(Math.round(parsed.sets) || 1, 1), 20);
+      for (let i = 0; i < count; i += 1) {
+        parsedSets.push({ weight: parsed.weight, unit: parsed.unit, reps: Math.round(parsed.reps), rpe: parsed.rpe });
+      }
     }
-  }
-
-  if (!parsedSets.length) {
-    return { ...base, intent: 'log', exercise, exerciseConfidence: confidence, warnings, error: 'Heard the exercise but no weight and reps.' };
+    if (!parsedSets.length) {
+      return { ...base, intent: 'log', exercise, exerciseConfidence: confidence, warnings, error: 'Heard the exercise but no weight and reps.' };
+    }
   }
 
   return { ...base, ok: true, intent: 'log', exercise, exerciseConfidence: confidence, sets: parsedSets, warnings };
 }
 
 /** Human-readable one-liner for a parsed set, used in the confirm sheet and lists. */
-export function describeSet({ weight, unit, reps }) {
-  const w = Number(weight) === 0 ? 'bodyweight' : `${formatNumber(weight)} ${unit}`;
-  return `${w} × ${reps}`;
+export function describeSet(entry) {
+  if (entry.holdSeconds != null) {
+    const text = `${formatNumber(entry.holdSeconds)}s hold`;
+    return entry.side ? `${text} (${entry.side})` : text;
+  }
+  const w = Number(entry.weight) === 0 ? 'bodyweight' : `${formatNumber(entry.weight)} ${entry.unit}`;
+  return `${w} × ${entry.reps}`;
 }
 
 export function formatNumber(n) {

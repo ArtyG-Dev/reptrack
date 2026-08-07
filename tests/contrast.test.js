@@ -58,7 +58,7 @@ const PAIRS = [
   ['on-accent', 'accent'], ['on-danger', 'danger']
 ];
 
-for (const [themeName, selector] of [['light', ':root {'], ['dark', '[data-theme="dark"] {']]) {
+for (const [themeName, selector] of [['light', ':root {'], ['neon', '[data-theme="neon"] {']]) {
   test(`${themeName} theme meets 4.5:1 on every text pair`, () => {
     const palette = tokens(selector);
     const failures = [];
@@ -87,4 +87,20 @@ test('reduced motion is respected and focus is always visible', () => {
 test('tap targets are at least 48px', () => {
   const tap = block(':root {').match(/--tap:\s*(\d+)px/);
   assert.ok(tap && Number(tap[1]) >= 48, 'tap target token must be >= 48px');
+});
+
+test('the neon theme has no flashing, strobing, or animated glow effects', () => {
+  const neon = block('[data-theme="neon"] {');
+  assert.doesNotMatch(neon, /animation/, 'the neon palette block must not declare animation');
+  assert.doesNotMatch(neon, /@keyframes/);
+
+  // Exactly one @keyframes exists anywhere in the file — the pre-existing mic
+  // recording pulse (theme-independent, already gated by prefers-reduced-motion
+  // above). Nothing new — no neon glow/flash effect — was introduced.
+  const keyframeCount = (css.match(/@keyframes/g) || []).length;
+  assert.equal(keyframeCount, 1, 'no @keyframes beyond the existing mic pulse should exist');
+});
+
+test('disclosure panels are hidden with the hidden attribute, not just CSS', () => {
+  assert.match(css, /\.disclosure-panel\[hidden\]/);
 });

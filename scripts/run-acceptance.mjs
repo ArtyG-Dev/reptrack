@@ -43,11 +43,13 @@ const footprint = read('.reports/footprint.json');
 const lighthouse = read('.reports/lighthouse.json');
 
 /* 4. Write the measured block into ACCEPTANCE.md */
-const scores = lighthouse?.scores ?? {};
+const scores = lighthouse?.scores ?? {};                                    // default (light) run
+const neonAccessibility = lighthouse?.themes?.neon?.scores?.accessibility;
 const rows = [
   ['Automated tests', `${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ''}`, fail === 0],
   ['Lighthouse — PWA', scores.pwa ?? 'n/a', (scores.pwa ?? 0) >= 90],
-  ['Lighthouse — Accessibility', scores.accessibility ?? 'n/a', (scores.accessibility ?? 0) >= 90],
+  ['Lighthouse — Accessibility (Light theme)', scores.accessibility ?? 'n/a', (scores.accessibility ?? 0) >= 90],
+  ['Lighthouse — Accessibility (Neon theme)', neonAccessibility ?? 'n/a', (neonAccessibility ?? 0) >= 90],
   ['Lighthouse — Performance', scores.performance ?? 'n/a', true],
   ['Lighthouse — Best practices', scores['best-practices'] ?? 'n/a', true],
   ['Lighthouse — SEO', scores.seo ?? 'n/a', true],
@@ -86,9 +88,9 @@ writeFileSync(join(ROOT, '.reports/acceptance.json'), `${JSON.stringify({
   measuredAt: new Date().toISOString(),
   tests: { pass, fail, skipped },
   footprint,
-  lighthouse: { scores, version: lighthouse?.lighthouseVersion }
+  lighthouse: { scores, themes: lighthouse?.themes, version: lighthouse?.lighthouseVersion }
 }, null, 2)}\n`);
 
-const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90 && (scores.accessibility ?? 0) >= 90;
+const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90 && (scores.accessibility ?? 0) >= 90 && (neonAccessibility ?? 0) >= 90;
 console.log(`\n${green ? '✅ All headless acceptance criteria pass.' : '❌ Acceptance criteria not met.'}`);
 process.exit(green ? 0 : 1);

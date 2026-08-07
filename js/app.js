@@ -74,11 +74,12 @@ function wireStatus() {
   paint();
 }
 
+/** `?theme=light|neon` previews a scheme without changing the saved setting —
+ * used by scripts/run-lighthouse.mjs to score both themes. */
 function wireTheme() {
-  settingsView.applyTheme(state.getState().settings.theme);
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (state.getState().settings.theme === 'auto') settingsView.applyTheme('auto');
-  });
+  const override = new URLSearchParams(location.search).get('theme');
+  const theme = override === 'light' || override === 'neon' ? override : state.getState().settings.theme;
+  settingsView.applyTheme(theme);
 }
 
 async function registerServiceWorker() {

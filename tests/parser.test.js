@@ -161,4 +161,74 @@ test('numbers-only input needs an exercise in focus', () => {
 test('set descriptions read the way people speak', () => {
   assert.equal(describeSet({ weight: 62.5, unit: 'kg', reps: 8 }), '62.5 kg × 8');
   assert.equal(describeSet({ weight: 0, unit: 'kg', reps: 12 }), 'bodyweight × 12');
+  assert.equal(describeSet({ holdSeconds: 60, side: null }), '60s hold');
+  assert.equal(describeSet({ holdSeconds: 30, side: 'left' }), '30s hold (left)');
+});
+
+/* ---------- hold mode: yoga, pilates, timed calisthenics ---------- */
+
+test('"plank for 60 seconds" logs a single 60s hold', () => {
+  const r = parseTranscript('plank for 60 seconds', ctx());
+  assert.equal(r.ok, true);
+  assert.equal(r.exercise.name, 'Plank');
+  assert.deepEqual(r.sets, [{ holdSeconds: 60, side: null, rpe: null }]);
+});
+
+test('"downward dog 30 seconds each side" logs two holds, one per side', () => {
+  const r = parseTranscript('downward dog 30 seconds each side', ctx());
+  assert.equal(r.ok, true);
+  assert.equal(r.exercise.name, 'Downward Dog');
+  assert.deepEqual(r.sets, [
+    { holdSeconds: 30, side: 'left', rpe: null },
+    { holdSeconds: 30, side: 'right', rpe: null }
+  ]);
+});
+
+test('"child\'s pose for a minute" understands the indefinite article as one', () => {
+  const r = parseTranscript("child's pose for a minute", ctx());
+  assert.equal(r.ok, true);
+  assert.equal(r.exercise.name, "Child's Pose");
+  assert.deepEqual(r.sets, [{ holdSeconds: 60, side: null, rpe: null }]);
+});
+
+test('a rounds count expands into that many holds, same shape as rep-mode sets', () => {
+  const r = parseTranscript('plank 30 seconds 3 rounds', ctx());
+  assert.equal(r.ok, true);
+  assert.equal(r.sets.length, 3);
+  for (const s of r.sets) assert.deepEqual(s, { holdSeconds: 30, side: null, rpe: null });
+});
+
+test('"per side" and "both sides" are understood the same as "each side"', () => {
+  assert.equal(parseTranscript('warrior two 20 seconds per side', ctx()).sets.length, 2);
+  assert.equal(parseTranscript('warrior two 20 seconds both sides', ctx()).sets.length, 2);
+});
+
+test('a hold exercise with no duration fails with a clear reason, not a silent zero', () => {
+  const r = parseTranscript('plank', ctx());
+  assert.equal(r.ok, false);
+  assert.match(r.error, /no hold duration/);
+});
+
+test('the exercise dictionary decides the grammar, not the phrase — a reps exercise never becomes a hold', () => {
+  const r = parseTranscript('bench press for 60 seconds', ctx());
+  // "Bench Press" is reps-mode: this reads as weight=60 with an implicit unit,
+  // reps missing — the reps-mode error path, not the hold-mode one.
+  assert.equal(r.ok, false);
+  assert.match(r.error, /no weight and reps/);
+});
+
+test('"add another set" repeats a hold correctly, including its side', () => {
+  const lastSet = { holdSeconds: 45, side: 'left', weight: 0, unit: 'kg', reps: 0, rpe: null, exercise: byName('Plank') };
+  const r = parseTranscript('add another set', ctx({ lastSet }));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.sets, [{ weight: 0, unit: 'kg', reps: 0, rpe: null, holdSeconds: 45, side: 'left' }]);
+});
+
+test('"same as last time" replays previous holds', () => {
+  const plank = byName('Plank');
+  const previous = [{ weight: 0, unit: 'kg', reps: 0, rpe: null, holdSeconds: 60, side: null }];
+  const r = parseTranscript('plank same as last time', ctx({ lastSetsFor: () => previous }));
+  assert.equal(r.ok, true);
+  assert.equal(r.exercise.id, plank.id);
+  assert.deepEqual(r.sets, previous);
 });

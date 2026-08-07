@@ -379,6 +379,118 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await context.close();
   });
 
+  test('a hold-mode exercise logs a duration, not weight/reps, and shows it as a hold', async () => {
+    const { context, page } = await freshPage();
+    await page.click('#start-session');
+    await page.click('#mic-button');
+    await page.waitForSelector('#prompt-input', { state: 'visible' });
+    await page.fill('#prompt-input', 'plank for 60 seconds');
+    await page.click('#prompt-sheet button[type="submit"]');
+    await page.waitForSelector('#confirm-sheet button[type="submit"]', { state: 'visible' });
+
+    // The sheet shows a hold-duration field, not weight/reps.
+    assert.equal(await page.inputValue('#row-hold-0'), '60');
+    assert.equal(await page.locator('#row-weight-0').count(), 0);
+
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForSelector('text=60s hold');
+
+    const stored = await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => {
+        const tx = req.result.transaction('sets', 'readonly');
+        tx.objectStore('sets').getAll().onsuccess = (e) => resolve(e.target.result);
+      };
+    }));
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].holdSeconds, 60);
+    assert.equal(stored[0].weight, 0);
+    assert.equal(stored[0].reps, 0);
+
+    await context.close();
+  });
+
+  test('a mixed strength + yoga session groups into collapsible category sections', async () => {
+    const { context, page } = await freshPage();
+    await page.click('#start-session');
+    await logSet(page, 'bench press 60 kilos for 10');
+    await page.waitForSelector('text=60 kg × 10');
+
+    await page.click('#mic-button');
+    await page.waitForSelector('#prompt-input', { state: 'visible' });
+    await page.fill('#prompt-input', 'downward dog for 30 seconds');
+    await page.click('#prompt-sheet button[type="submit"]');
+    await page.waitForSelector('#confirm-sheet button[type="submit"]', { state: 'visible' });
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForSelector('text=30s hold');
+
+    // Two categories now appear in the session — Strength and Yoga sections.
+    const triggers = page.locator('#view-today .disclosure-trigger');
+    await triggers.first().waitFor();
+    assert.equal(await triggers.count(), 2);
+    assert.match(await triggers.nth(0).textContent(), /Strength/);
+    assert.match(await triggers.nth(1).textContent(), /Yoga/);
+
+    // The most recently used category (Yoga) starts expanded; the other collapsed.
+    assert.equal(await triggers.nth(1).getAttribute('aria-expanded'), 'true');
+    assert.equal(await triggers.nth(0).getAttribute('aria-expanded'), 'false');
+
+    await context.close();
+  });
+
+  test('collapsible sections are keyboard-operable and remember their state', async () => {
+    const { context, page } = await freshPage();
+    await page.click('#tab-exercises');
+    await page.waitForSelector('.disclosure-trigger');
+
+    const strength = page.locator('.disclosure-trigger', { hasText: 'Strength' });
+    const before = await strength.getAttribute('aria-expanded');
+
+    // Real disclosure semantics: hidden via the `hidden` attribute, aria-expanded in sync.
+    const panelId = await strength.getAttribute('aria-controls');
+    const panel = page.locator(`#${panelId}`);
+    if (before === 'true') assert.equal(await panel.getAttribute('hidden'), null);
+    else assert.notEqual(await panel.getAttribute('hidden'), null);
+
+    // Space toggles it — a real <button>, no custom key handling needed. The
+    // toggle persists to IndexedDB (then re-renders) asynchronously, so wait
+    // for the attribute to actually flip rather than reading it immediately.
+    await strength.focus();
+    await page.keyboard.press(' ');
+    await page.waitForFunction(
+      (prev) => [...document.querySelectorAll('.disclosure-trigger')]
+        .find((el) => el.textContent.includes('Strength'))?.getAttribute('aria-expanded') !== prev,
+      before,
+      { timeout: 3000 }
+    );
+    const after = await strength.getAttribute('aria-expanded');
+    assert.notEqual(after, before);
+
+    // The choice survives a reload (persisted in settings, not just in memory).
+    await page.reload({ waitUntil: 'load' });
+    await page.click('#tab-exercises');
+    await page.waitForSelector('.disclosure-trigger');
+    const reloaded = page.locator('.disclosure-trigger', { hasText: 'Strength' });
+    assert.equal(await reloaded.getAttribute('aria-expanded'), after);
+
+    await context.close();
+  });
+
+  test('the theme toggle applies immediately and survives a reload', async () => {
+    const { context, page } = await freshPage();
+    assert.equal(await page.getAttribute('html', 'data-theme'), 'light');
+
+    await page.click('#tab-settings');
+    await page.selectOption('#set-theme', 'neon');
+    await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'neon', null, { timeout: 3000 });
+    assert.equal(await page.getAttribute('html', 'data-theme'), 'neon', 'applies without a reload');
+
+    await page.reload({ waitUntil: 'load' });
+    assert.equal(await page.getAttribute('html', 'data-theme'), 'neon', 'the choice persists');
+
+    await context.close();
+  });
+
   test('every interactive control is reachable and labelled', async () => {
     const { context, page } = await freshPage();
     const unlabelled = await page.evaluate(() => {

@@ -200,6 +200,48 @@ test('lastModified moves forward on every write — the hook a future sync needs
   assert.ok(second > first, `${second} should be later than ${first}`);
 });
 
+test('exercises default to strength/reps but accept any category and a hold mode', async () => {
+  const plain = await db.addExercise({ name: 'Bench Press' });
+  assert.equal(plain.category, 'strength');
+  assert.equal(plain.mode, 'reps');
+
+  const plank = await db.addExercise({ name: 'Plank', category: 'calisthenics', mode: 'hold' });
+  assert.equal(plank.category, 'calisthenics');
+  assert.equal(plank.mode, 'hold');
+
+  const custom = await db.addExercise({ name: 'Kettlebell Swing', category: 'Crossfit ' });
+  assert.equal(custom.category, 'crossfit', 'category is freeform, not limited to a fixed enum');
+
+  const junkMode = await db.addExercise({ name: 'Something', mode: 'nonsense' });
+  assert.equal(junkMode.mode, 'reps', 'an invalid mode falls back to reps');
+});
+
+test('a hold-mode set carries holdSeconds and an optional side; a reps set leaves them null', async () => {
+  const plank = await db.addExercise({ name: 'Plank', category: 'calisthenics', mode: 'hold' });
+  const session = await db.startSession({ dateISO: '2026-08-10' });
+
+  const holdEntry = await db.addSet({ sessionId: session.id, exerciseId: plank.id, dateISO: '2026-08-10', holdSeconds: 45, side: 'left' });
+  assert.equal(holdEntry.holdSeconds, 45);
+  assert.equal(holdEntry.side, 'left');
+
+  const bench = await db.addExercise({ name: 'Bench Press' });
+  const repsEntry = await db.addSet({ sessionId: session.id, exerciseId: bench.id, dateISO: '2026-08-10', weight: 60, reps: 10 });
+  assert.equal(repsEntry.holdSeconds, null);
+  assert.equal(repsEntry.side, null);
+});
+
+test('category and mode round-trip through a backup export/import', async () => {
+  await db.addExercise({ name: 'Downward Dog', category: 'yoga', mode: 'hold' });
+  const backup = JSON.parse(JSON.stringify(await db.exportAll()));
+
+  await db.wipeAll();
+  await db.importAll(backup, { mode: 'replace' });
+
+  const restored = (await db.listExercises())[0];
+  assert.equal(restored.category, 'yoga');
+  assert.equal(restored.mode, 'hold');
+});
+
 test('ids are unique and dates format as YYYY-MM-DD', () => {
   const ids = new Set(Array.from({ length: 500 }, () => db.uid('set')));
   assert.equal(ids.size, 500);

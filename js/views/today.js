@@ -1,7 +1,7 @@
 /* Today / Active Session — the screen you actually use in the gym. */
 
 import * as state from '../state.js';
-import { el, clear, toast, openSheet, promptSheet, confirmSheet, clockTime } from '../ui.js';
+import { el, clear, toast, openSheet, promptSheet, confirmSheet, clockTime, disclosure, titleCase } from '../ui.js';
 import { parseTranscript, describeSet, formatNumber } from '../parser.js';
 import { listenOnce, isSupported as voiceSupported, VoiceInputError } from '../voice.js';
 import { formatDuration, suggestProgression, totalVolume } from '../progression.js';
@@ -36,9 +36,16 @@ export function startTicker() {
 
 /* ---------- set editor sheet ---------- */
 
+function modeOf(exerciseId) {
+  return state.exerciseById(exerciseId)?.mode === 'hold' ? 'hold' : 'reps';
+}
+
 /**
  * Confirm/edit step. Every voice log and every manual add goes through this —
- * nothing is ever written to storage without the user seeing it first.
+ * nothing is ever written to storage without the user seeing it first. The
+ * fields shown depend on the selected exercise's mode: weight/reps/unit for a
+ * `reps` exercise, hold duration/side for a `hold` one (yoga, pilates, a timed
+ * calisthenics hold) — switching the exercise mid-sheet switches the fields.
  * @returns {Promise<{exerciseId: string, sets: Array}|null>}
  */
 function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = [] }) {
@@ -46,54 +53,101 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
   const titleId = 'confirm-sheet-title';
 
   return openSheet('confirm-sheet', (ctx) => {
-    const rows = sets.length ? sets.map((x) => ({ ...x })) : [{ weight: '', unit: s.settings.unit, reps: '', rpe: null }];
+    let selectedId = exerciseId;
+    let mode = modeOf(selectedId);
 
-    const exerciseSelect = el('select', { id: 'sheet-exercise', 'aria-label': 'Exercise' },
-      ...s.exercises.map((ex) => el('option', { value: ex.id, selected: ex.id === exerciseId }, ex.name))
-    );
+    const makeRepsRow = (r = {}) => ({ weight: r.weight ?? '', unit: r.unit || s.settings.unit, reps: r.reps ?? '', rpe: r.rpe ?? null });
+    const makeHoldRow = (r = {}) => ({ holdSeconds: r.holdSeconds ?? '', side: r.side ?? '' });
+    const makeRow = (r = {}) => (mode === 'hold' ? makeHoldRow(r) : makeRepsRow(r));
+
+    let rows = sets.length ? sets.map((x) => makeRow(x)) : [makeRow()];
 
     const rowsWrap = el('div', { class: 'stack' });
 
     const renderRows = () => {
       clear(rowsWrap);
       rows.forEach((row, index) => {
-        const weightInput = el('input', {
-          type: 'number', step: '0.5', min: '0', inputmode: 'decimal',
-          id: `row-weight-${index}`, value: row.weight === '' ? '' : formatNumber(row.weight),
-          oninput: (e) => { row.weight = e.target.value === '' ? '' : Number(e.target.value); }
-        });
-        const repsInput = el('input', {
-          type: 'number', step: '1', min: '1', inputmode: 'numeric',
-          id: `row-reps-${index}`, value: row.reps === '' ? '' : String(row.reps),
-          oninput: (e) => { row.reps = e.target.value === '' ? '' : Number(e.target.value); }
-        });
-        const unitSelect = el('select', { id: `row-unit-${index}`, 'aria-label': `Unit for set ${index + 1}`, onchange: (e) => { row.unit = e.target.value; } },
-          el('option', { value: 'kg', selected: row.unit !== 'lb' }, 'kg'),
-          el('option', { value: 'lb', selected: row.unit === 'lb' }, 'lb')
-        );
+        if (mode === 'hold') {
+          const durationInput = el('input', {
+            type: 'number', step: '1', min: '1', inputmode: 'numeric',
+            id: `row-hold-${index}`, value: row.holdSeconds === '' ? '' : String(row.holdSeconds),
+            oninput: (e) => { row.holdSeconds = e.target.value === '' ? '' : Number(e.target.value); }
+          });
+          const sideSelect = el('select', {
+            id: `row-side-${index}`, 'aria-label': `Side for hold ${index + 1}`,
+            onchange: (e) => { row.side = e.target.value || null; }
+          },
+            el('option', { value: '', selected: !row.side }, 'Both / n/a'),
+            el('option', { value: 'left', selected: row.side === 'left' }, 'Left'),
+            el('option', { value: 'right', selected: row.side === 'right' }, 'Right')
+          );
 
-        rowsWrap.append(el('div', { class: 'field-row' },
-          el('div', {}, el('label', { for: `row-weight-${index}`, text: `Set ${index + 1} weight` }), weightInput),
-          el('div', {}, el('label', { for: `row-unit-${index}`, text: 'Unit' }), unitSelect),
-          el('div', {}, el('label', { for: `row-reps-${index}`, text: 'Reps' }), repsInput),
-          el('div', { class: 'row', style: 'align-items:flex-end' },
-            el('button', {
-              class: 'btn btn-sm btn-ghost', type: 'button',
-              'aria-label': `Remove set ${index + 1}`,
-              onclick: () => { rows.splice(index, 1); if (!rows.length) rows.push({ weight: '', unit: s.settings.unit, reps: '' }); renderRows(); }
-            }, 'Remove')
-          )
-        ));
+          rowsWrap.append(el('div', { class: 'field-row' },
+            el('div', {}, el('label', { for: `row-hold-${index}`, text: `Hold ${index + 1} — seconds` }), durationInput),
+            el('div', {}, el('label', { for: `row-side-${index}`, text: 'Side' }), sideSelect),
+            el('div', { class: 'row', style: 'align-items:flex-end;grid-column:1 / -1' },
+              el('button', {
+                class: 'btn btn-sm btn-ghost', type: 'button',
+                'aria-label': `Remove hold ${index + 1}`,
+                onclick: () => { rows.splice(index, 1); if (!rows.length) rows.push(makeHoldRow()); renderRows(); }
+              }, 'Remove')
+            )
+          ));
+        } else {
+          const weightInput = el('input', {
+            type: 'number', step: '0.5', min: '0', inputmode: 'decimal',
+            id: `row-weight-${index}`, value: row.weight === '' ? '' : formatNumber(row.weight),
+            oninput: (e) => { row.weight = e.target.value === '' ? '' : Number(e.target.value); }
+          });
+          const repsInput = el('input', {
+            type: 'number', step: '1', min: '1', inputmode: 'numeric',
+            id: `row-reps-${index}`, value: row.reps === '' ? '' : String(row.reps),
+            oninput: (e) => { row.reps = e.target.value === '' ? '' : Number(e.target.value); }
+          });
+          const unitSelect = el('select', { id: `row-unit-${index}`, 'aria-label': `Unit for set ${index + 1}`, onchange: (e) => { row.unit = e.target.value; } },
+            el('option', { value: 'kg', selected: row.unit !== 'lb' }, 'kg'),
+            el('option', { value: 'lb', selected: row.unit === 'lb' }, 'lb')
+          );
+
+          rowsWrap.append(el('div', { class: 'field-row' },
+            el('div', {}, el('label', { for: `row-weight-${index}`, text: `Set ${index + 1} weight` }), weightInput),
+            el('div', {}, el('label', { for: `row-unit-${index}`, text: 'Unit' }), unitSelect),
+            el('div', {}, el('label', { for: `row-reps-${index}`, text: 'Reps' }), repsInput),
+            el('div', { class: 'row', style: 'align-items:flex-end' },
+              el('button', {
+                class: 'btn btn-sm btn-ghost', type: 'button',
+                'aria-label': `Remove set ${index + 1}`,
+                onclick: () => { rows.splice(index, 1); if (!rows.length) rows.push(makeRepsRow()); renderRows(); }
+              }, 'Remove')
+            )
+          ));
+        }
       });
     };
+
+    const exerciseSelect = el('select', {
+      id: 'sheet-exercise', 'aria-label': 'Exercise',
+      onchange: (e) => { selectedId = e.target.value; mode = modeOf(selectedId); rows = [makeRow()]; renderRows(); }
+    },
+      ...s.exercises.map((ex) => el('option', { value: ex.id, selected: ex.id === exerciseId }, ex.name))
+    );
+
     renderRows();
 
     const submit = () => {
-      const cleaned = rows
-        .map((r) => ({ weight: Number(r.weight) || 0, unit: r.unit || s.settings.unit, reps: Math.round(Number(r.reps) || 0), rpe: r.rpe ?? null }))
-        .filter((r) => r.reps > 0);
-      if (!cleaned.length) { toast('Add at least one set with reps.'); return; }
-      ctx.close({ exerciseId: exerciseSelect.value, sets: cleaned });
+      let cleaned;
+      if (mode === 'hold') {
+        cleaned = rows
+          .map((r) => ({ holdSeconds: Math.round(Number(r.holdSeconds) || 0), side: r.side || null }))
+          .filter((r) => r.holdSeconds > 0);
+        if (!cleaned.length) { toast('Add at least one hold with a duration.'); return; }
+      } else {
+        cleaned = rows
+          .map((r) => ({ weight: Number(r.weight) || 0, unit: r.unit || s.settings.unit, reps: Math.round(Number(r.reps) || 0), rpe: r.rpe ?? null }))
+          .filter((r) => r.reps > 0);
+        if (!cleaned.length) { toast('Add at least one set with reps.'); return; }
+      }
+      ctx.close({ exerciseId: selectedId, sets: cleaned });
     };
 
     return el('form', { method: 'dialog', onsubmit: (e) => { e.preventDefault(); submit(); } },
@@ -104,8 +158,8 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
       rowsWrap,
       el('button', {
         class: 'btn btn-sm', type: 'button',
-        onclick: () => { const last = rows.at(-1) || {}; rows.push({ weight: last.weight ?? '', unit: last.unit || s.settings.unit, reps: last.reps ?? '' }); renderRows(); }
-      }, '+ Another set'),
+        onclick: () => { rows.push(makeRow(rows.at(-1) || {})); renderRows(); }
+      }, mode === 'hold' ? '+ Another hold' : '+ Another set'),
       el('div', { class: 'sheet-actions' },
         el('button', { class: 'btn', type: 'button', onclick: () => ctx.close(null) }, 'Cancel'),
         el('button', { class: 'btn btn-primary', type: 'submit', 'data-autofocus': '' }, 'Save')
@@ -148,7 +202,7 @@ async function handleParsed(parsed) {
 async function typeSet(initial = '') {
   const text = await promptSheet({
     title: 'Type a set',
-    label: 'Say it the way you would out loud — “bench press 60 kilos for 10”',
+    label: 'Say it the way you would out loud — “bench press 60 kilos for 10” or “plank for 60 seconds”',
     value: initial,
     placeholder: 'bench press 60 kilos for 10',
     confirmLabel: 'Parse'
@@ -190,11 +244,10 @@ async function manualAdd() {
   const exerciseId = s.currentExerciseId || s.exercises[0]?.id;
   if (!exerciseId) { toast('Add an exercise first.'); return; }
   const last = s.lastSet;
-  const result = await editSetsSheet({
-    title: 'Add set',
-    exerciseId,
-    sets: last && last.exerciseId === exerciseId ? [{ weight: last.weight, unit: last.unit, reps: last.reps }] : []
-  });
+  const prefill = last && last.exerciseId === exerciseId
+    ? [{ weight: last.weight, unit: last.unit, reps: last.reps, holdSeconds: last.holdSeconds ?? null, side: last.side ?? null }]
+    : [];
+  const result = await editSetsSheet({ title: 'Add set', exerciseId, sets: prefill });
   await commit(result);
 }
 
@@ -318,6 +371,45 @@ function activeCard(s) {
   );
 }
 
+/** One exercise's sets — a heading, a nudge if there is one, and the list. */
+function exerciseGroup(group, s) {
+  const exercise = state.exerciseById(group.exerciseId);
+  const nudge = suggestProgression(state.setsForExerciseSync(group.exerciseId), {
+    unit: s.settings.unit,
+    stepKg: s.settings.progressionStepKg,
+    stepLb: s.settings.progressionStepLb
+  });
+  return el('div', {},
+    el('div', { class: 'row-between' },
+      el('h3', { class: 'truncate', text: exercise?.name || 'Unknown exercise' }),
+      el('button', {
+        class: 'btn btn-sm btn-ghost', type: 'button',
+        onclick: () => { state.setCurrentExercise(group.exerciseId); manualAdd(); }
+      }, '+ Set')
+    ),
+    el('ul', { class: 'list' }, ...group.sets.map((entry, i) => el('li', {},
+      el('span', { class: 'set-index', text: String(i + 1) }),
+      el('span', { class: 'grow mono', text: describeSet(entry) }),
+      entry.isPR ? el('span', { class: 'badge badge-pr', text: 'PR' }) : null,
+      el('button', {
+        class: 'btn btn-sm btn-ghost',
+        type: 'button',
+        'aria-label': `Delete set ${i + 1} of ${exercise?.name || 'exercise'}`,
+        onclick: async () => {
+          const yes = await confirmSheet({
+            title: 'Delete set?',
+            message: `${exercise?.name || 'Set'} — ${describeSet(entry)}. This cannot be undone.`,
+            confirmLabel: 'Delete',
+            danger: true
+          });
+          if (yes) { await state.removeSet(entry.id); toast('Set deleted.'); }
+        }
+      }, '✕')
+    ))),
+    nudge ? el('p', { class: 'small' }, el('span', { class: 'badge badge-warn', text: 'Nudge' }), ` ${nudge.message}`) : null
+  );
+}
+
 function setsCard(s) {
   const groups = setsGroupedByExercise(s.sessionSets);
   if (!groups.length) {
@@ -327,48 +419,32 @@ function setsCard(s) {
   }
 
   const volume = totalVolume(s.sessionSets, s.settings.unit);
+
+  // A mixed strength+yoga (etc.) session groups by category so it doesn't
+  // become one long flat list. A single-category session stays flat, as before.
+  const categoryOf = (group) => state.exerciseById(group.exerciseId)?.category || 'strength';
+  const categories = [...new Set(groups.map(categoryOf))];
+
+  const body = categories.length > 1
+    ? categories.map((cat) => {
+      const catGroups = groups.filter((g) => categoryOf(g) === cat);
+      const expanded = state.isPanelExpanded('session', cat);
+      return disclosure({
+        id: `session-cat-${cat}`,
+        summary: `${titleCase(cat)} (${catGroups.length})`,
+        expanded,
+        onToggle: async (next) => { await state.setPanelExpanded('session', cat, next); render(containerRef); },
+        content: el('div', { class: 'stack' }, ...catGroups.map((g) => exerciseGroup(g, s)))
+      });
+    })
+    : groups.map((g) => exerciseGroup(g, s));
+
   return el('div', { class: 'card stack' },
     el('div', { class: 'row-between' },
       el('h2', { text: 'This session' }),
       el('p', { class: 'small muted mono', text: `${s.sessionSets.length} sets · ${Math.round(volume)} ${s.settings.unit} volume` })
     ),
-    ...groups.map((group) => {
-      const exercise = state.exerciseById(group.exerciseId);
-      const nudge = suggestProgression(state.setsForExerciseSync(group.exerciseId), {
-        unit: s.settings.unit,
-        stepKg: s.settings.progressionStepKg,
-        stepLb: s.settings.progressionStepLb
-      });
-      return el('div', {},
-        el('div', { class: 'row-between' },
-          el('h3', { class: 'truncate', text: exercise?.name || 'Unknown exercise' }),
-          el('button', {
-            class: 'btn btn-sm btn-ghost', type: 'button',
-            onclick: () => { state.setCurrentExercise(group.exerciseId); manualAdd(); }
-          }, '+ Set')
-        ),
-        el('ul', { class: 'list' }, ...group.sets.map((entry, i) => el('li', {},
-          el('span', { class: 'set-index', text: String(i + 1) }),
-          el('span', { class: 'grow mono', text: describeSet(entry) }),
-          entry.isPR ? el('span', { class: 'badge badge-pr', text: 'PR' }) : null,
-          el('button', {
-            class: 'btn btn-sm btn-ghost',
-            type: 'button',
-            'aria-label': `Delete set ${i + 1} of ${exercise?.name || 'exercise'}`,
-            onclick: async () => {
-              const yes = await confirmSheet({
-                title: 'Delete set?',
-                message: `${exercise?.name || 'Set'} — ${describeSet(entry)}. This cannot be undone.`,
-                confirmLabel: 'Delete',
-                danger: true
-              });
-              if (yes) { await state.removeSet(entry.id); toast('Set deleted.'); }
-            }
-          }, '✕')
-        ))),
-        nudge ? el('p', { class: 'small' }, el('span', { class: 'badge badge-warn', text: 'Nudge' }), ` ${nudge.message}`) : null
-      );
-    })
+    ...body
   );
 }
 

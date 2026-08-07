@@ -130,27 +130,42 @@ export function buildWeeklySummary({ sessions = [], sets = [], runs = [], exerci
     lines.push('RUNS       none');
   }
 
-  /* --- per-exercise breakdown --- */
+  /* --- per-exercise breakdown ---
+   * A hold-mode set (holdSeconds set — yoga, pilates, a timed calisthenics
+   * hold) tracks total/longest hold time instead of weight × reps volume;
+   * everything else about the row is the same. */
   if (weekSets.length) {
     const byExercise = new Map();
     for (const set of weekSets) {
-      const acc = byExercise.get(set.exerciseId) || { sets: 0, volumeKg: 0, topKg: 0, topReps: 0, best: 0 };
+      const isHold = set.holdSeconds != null;
+      const acc = byExercise.get(set.exerciseId) || { sets: 0, volumeKg: 0, topKg: 0, topReps: 0, best: 0, isHold, totalHoldSec: 0, longestHoldSec: 0 };
       acc.sets += 1;
-      acc.volumeKg += toKg(set.weight, set.unit) * (Number(set.reps) || 0);
-      const kg = toKg(set.weight, set.unit);
-      const score = estimate1RM(set.weight, set.reps, set.unit);
-      if (score > acc.best) { acc.best = score; acc.topKg = kg; acc.topReps = Number(set.reps) || 0; }
+      if (isHold) {
+        acc.isHold = true;
+        const holdSec = Number(set.holdSeconds) || 0;
+        acc.totalHoldSec += holdSec;
+        if (holdSec > acc.longestHoldSec) acc.longestHoldSec = holdSec;
+      } else {
+        acc.volumeKg += toKg(set.weight, set.unit) * (Number(set.reps) || 0);
+        const kg = toKg(set.weight, set.unit);
+        const score = estimate1RM(set.weight, set.reps, set.unit);
+        if (score > acc.best) { acc.best = score; acc.topKg = kg; acc.topReps = Number(set.reps) || 0; }
+      }
       byExercise.set(set.exerciseId, acc);
     }
 
     const rows = [...byExercise.entries()]
       .map(([id, acc]) => ({ name: nameOf(id), ...acc }))
-      .sort((a, b) => b.volumeKg - a.volumeKg);
+      .sort((a, b) => (b.volumeKg + b.totalHoldSec) - (a.volumeKg + a.totalHoldSec));
     const width = Math.min(24, Math.max(...rows.map((r) => r.name.length)));
 
     lines.push('');
     lines.push('LIFTS');
     for (const row of rows) {
+      if (row.isHold) {
+        lines.push(`  ${pad(row.name, width)}  ${String(row.sets).padStart(2)} holds · longest ${formatDuration(row.longestHoldSec)} · total ${formatDuration(row.totalHoldSec)}`);
+        continue;
+      }
       const top = row.topKg > 0
         ? `top ${formatWeight(Math.round(fromKg(row.topKg, unit) * 100) / 100)} ${unit} × ${row.topReps}`
         : `top ${row.topReps} reps bodyweight`;
@@ -165,10 +180,15 @@ export function buildWeeklySummary({ sessions = [], sets = [], runs = [], exerci
     lines.push(`PERSONAL RECORDS (${prs.length})`);
     const width = Math.min(24, Math.max(...prs.map((s) => nameOf(s.exerciseId).length)));
     for (const set of prs) {
-      const weight = Number(set.weight) > 0
-        ? `${formatWeight(Math.round(fromKg(toKg(set.weight, set.unit), unit) * 100) / 100)} ${unit} × ${set.reps}`
-        : `bodyweight × ${set.reps}`;
-      lines.push(`  ${pad(nameOf(set.exerciseId), width)}  ${weight}  (${shortDate(set.dateISO)})`);
+      let value;
+      if (set.holdSeconds != null) {
+        value = `${formatDuration(set.holdSeconds)} hold${set.side ? ` (${set.side})` : ''}`;
+      } else if (Number(set.weight) > 0) {
+        value = `${formatWeight(Math.round(fromKg(toKg(set.weight, set.unit), unit) * 100) / 100)} ${unit} × ${set.reps}`;
+      } else {
+        value = `bodyweight × ${set.reps}`;
+      }
+      lines.push(`  ${pad(nameOf(set.exerciseId), width)}  ${value}  (${shortDate(set.dateISO)})`);
     }
   } else {
     lines.push('PERSONAL RECORDS');

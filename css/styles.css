@@ -1,8 +1,15 @@
 /* RepTrack — single stylesheet, semantic custom properties.
- * Light palette lives on :root, dark overrides on [data-theme="dark"].
- * The theme attribute is set by js/app.js from the saved setting (auto|light|dark);
- * "auto" mirrors prefers-color-scheme. Every foreground/background pair used in
- * the UI is contrast-checked by tests/contrast.test.js (>= 4.5:1).
+ * Two colour schemes: Light (default) on :root, High-Contrast Neon overrides on
+ * [data-theme="neon"]. Settings sets the attribute and it applies immediately,
+ * no reload. Every foreground/background pair used in the UI is contrast-checked
+ * by tests/contrast.test.js (>= 4.5:1) in BOTH schemes — "neon" is bold and
+ * saturated, but never at the cost of readability.
+ *
+ * Neon is deliberately static: no glow, pulse, or animated accent anywhere in
+ * this block. The one pre-existing animation in the app (.mic-btn.is-listening's
+ * gentle brightness pulse, further down) is a recording-state indicator present
+ * in every theme, not a neon effect, and already backs off under
+ * prefers-reduced-motion below.
  */
 
 :root {
@@ -29,20 +36,20 @@
   --speed: 180ms;
 }
 
-[data-theme="dark"] {
-  --bg: #0f1115;
-  --surface: #181b22;
-  --surface-2: #232833;
-  --text: #f2f4f8;
-  --muted: #a9b2c1;
-  --border: #333b48;
-  --accent: #5cb4ff;
-  --on-accent: #06121f;
-  --danger: #ff8a8a;
-  --on-danger: #2a0405;
-  --ok: #7ee2a8;
-  --warn: #f2c14e;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .35);
+[data-theme="neon"] {
+  --bg: #05070a;
+  --surface: #0c1016;
+  --surface-2: #141b24;
+  --text: #eafffa;
+  --muted: #9fd9d0;
+  --border: #263341;
+  --accent: #00e5ff;
+  --on-accent: #001318;
+  --danger: #ff5c7a;
+  --on-danger: #2a0009;
+  --ok: #2dffb0;
+  --warn: #ffd60a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .6), 0 8px 24px rgba(0, 0, 0, .45);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -375,6 +382,31 @@ textarea { min-height: 84px; resize: vertical; }
   text-align: center;
 }
 .toast[hidden] { display: none; }
+
+/* ---------- disclosure (collapsible sections) ---------- */
+
+.disclosure { border-bottom: 1px solid var(--border); }
+.disclosure:last-child { border-bottom: 0; }
+.disclosure-trigger {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  cursor: pointer;
+  min-height: var(--tap);
+  padding: 6px 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.disclosure-chevron { font-size: .8rem; color: var(--muted); width: 1em; text-align: center; }
+.disclosure-summary { flex: 1 1 auto; }
+.disclosure-panel { padding: 0 4px 12px; }
+.disclosure-panel[hidden] { display: none; }
 
 .noscript { padding: 24px; }
 

@@ -189,6 +189,8 @@ export async function logSets(exerciseId, entries) {
       unit: entry.unit || state.settings.unit,
       reps: Math.round(Number(entry.reps) || 0),
       rpe: entry.rpe ?? null,
+      holdSeconds: entry.holdSeconds ?? null,
+      side: entry.side ?? null,
       isPR
     });
     created.push(stored);
@@ -301,4 +303,32 @@ export async function updateSettings(patch) {
   state.settings = await store.saveSettings(patch);
   emit();
   return state.settings;
+}
+
+/* ---------- collapsible panel state ----------
+ * Persisted in settings so a section's expand/collapse choice survives a
+ * revisit. Two independent scopes: 'exercises' (the Exercises list) and
+ * 'session' (category grouping on the active session). Within a scope, a
+ * category defaults to expanded only if it's the one most recently logged
+ * against — everything else starts collapsed — until the user explicitly
+ * toggles it, at which point their choice is remembered.
+ */
+
+/** The category of the most recently logged set, across all history. */
+export function mostRecentCategory() {
+  if (!state.allSets.length) return null;
+  const latest = state.allSets.reduce((a, b) => ((a.lastModified || 0) >= (b.lastModified || 0) ? a : b));
+  return exerciseById(latest.exerciseId)?.category || null;
+}
+
+export function isPanelExpanded(scope, category) {
+  const explicit = state.settings.panelState?.[scope]?.[category];
+  if (typeof explicit === 'boolean') return explicit;
+  return category === mostRecentCategory();
+}
+
+export async function setPanelExpanded(scope, category, expanded) {
+  const panelState = { ...(state.settings.panelState || {}) };
+  panelState[scope] = { ...(panelState[scope] || {}), [category]: expanded };
+  await updateSettings({ panelState });
 }

@@ -145,3 +145,40 @@ test('pace and digit grouping behave at the edges', () => {
 test('the filename is stable and week-stamped', () => {
   assert.equal(summaryFilename('2026-08-03'), 'reptrack-week-2026-08-03.txt');
 });
+
+/* ---------- hold-mode rows: yoga, pilates, timed calisthenics ---------- */
+
+test('a hold-mode exercise reports total/longest hold time instead of weight volume', () => {
+  const plank = { id: 'ex3', name: 'Plank', mode: 'hold' };
+  const text = buildWeeklySummary({
+    sessions: [{ id: 's3', dateISO: '2026-08-04', durationSec: 600 }],
+    sets: [
+      { id: 'h1', sessionId: 's3', exerciseId: 'ex3', dateISO: '2026-08-04', order: 0, holdSeconds: 45, side: 'left', isPR: true },
+      { id: 'h2', sessionId: 's3', exerciseId: 'ex3', dateISO: '2026-08-04', order: 1, holdSeconds: 60, side: 'right', isPR: false }
+    ],
+    runs: [],
+    exercises: [...exercises, plank],
+    weekStartISO: '2026-08-03'
+  });
+  assert.match(text, /LIFTS\n {2}Plank\s+2 holds · longest 01:00 · total 01:45/);
+  assert.match(text, /PERSONAL RECORDS \(1\)/);
+  assert.match(text, /Plank\s+00:45 hold \(left\)\s+\(Tue 4 Aug\)/);
+  assert.doesNotMatch(text, /Plank[^\n]*0 kg/);
+});
+
+test('a mixed week reports weighted lifts and holds side by side, each in its own units', () => {
+  const plank = { id: 'ex3', name: 'Plank', mode: 'hold' };
+  const text = buildWeeklySummary({
+    sessions: [{ id: 's4', dateISO: '2026-08-05', durationSec: 1200 }],
+    sets: [
+      { id: 'w1', sessionId: 's4', exerciseId: 'ex1', dateISO: '2026-08-05', order: 0, weight: 60, unit: 'kg', reps: 10, isPR: false },
+      { id: 'h1', sessionId: 's4', exerciseId: 'ex3', dateISO: '2026-08-05', order: 1, holdSeconds: 30, isPR: false }
+    ],
+    runs: [],
+    exercises: [...exercises, plank],
+    weekStartISO: '2026-08-03'
+  });
+  assert.match(text, /Bench Press\s+1 sets · top 60 kg × 10 · 600 kg/);
+  assert.match(text, /Plank\s+1 holds · longest 00:30 · total 00:30/);
+  assert.match(text, /VOLUME {5}600 kg/, 'a hold contributes nothing to the weight volume total');
+});

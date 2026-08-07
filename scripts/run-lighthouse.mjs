@@ -1,5 +1,8 @@
 /* Runs Lighthouse against a locally served build and records the scores.
- * Gates on Accessibility >= 90 and PWA >= 90 (the acceptance criteria).
+ * Runs twice — once per colour scheme (?theme=light, ?theme=neon), via the
+ * preview override app.js reads from the URL — because "High-Contrast Neon"
+ * must be exactly as accessible as the default, not just bold-looking.
+ * Gates on Accessibility >= 90 for BOTH themes and PWA >= 90 for the default.
  *
  * Run: npm run lighthouse
  */
@@ -17,9 +20,9 @@ import { findChromium } from '../tests/helpers/browser.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = { accessibility: 90, pwa: 90 };
 const CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo', 'pwa'];
+const THEMES = ['light', 'neon'];
 
 const { server, port } = await listen(0);
-const url = `http://127.0.0.1:${port}/index.html`;
 
 const chromePath = findChromium();
 const chrome = await chromeLauncher.launch({
@@ -27,8 +30,8 @@ const chrome = await chromeLauncher.launch({
   chromeFlags: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
 });
 
-let report;
-try {
+async function runOne(theme) {
+  const url = `http://127.0.0.1:${port}/index.html?theme=${theme}`;
   const runnerResult = await lighthouse(url, {
     port: chrome.port,
     output: 'json',
@@ -42,32 +45,46 @@ try {
     const category = lhr.categories[key];
     if (category && category.score !== null) scores[key] = Math.round(category.score * 100);
   }
-
   const failedAudits = Object.values(lhr.audits)
     .filter((a) => a.score !== null && a.score < 1 && a.scoreDisplayMode !== 'informative')
     .map((a) => ({ id: a.id, title: a.title, score: a.score }));
 
+  return { theme, lighthouseVersion: lhr.lighthouseVersion, url: lhr.finalDisplayedUrl, formFactor: lhr.configSettings.formFactor, scores, failedAudits: failedAudits.slice(0, 25) };
+}
+
+let report;
+try {
+  const runs = {};
+  for (const theme of THEMES) runs[theme] = await runOne(theme);
+
+  const light = runs.light;
+  const accessibilityPasses = THEMES.every((theme) => (runs[theme].scores.accessibility ?? 0) >= GATES.accessibility);
+  const pwaPasses = (light.scores.pwa ?? 0) >= GATES.pwa;
+
   report = {
     measuredAt: new Date().toISOString(),
-    lighthouseVersion: lhr.lighthouseVersion,
-    url: lhr.finalDisplayedUrl,
-    formFactor: lhr.configSettings.formFactor,
-    scores,
+    lighthouseVersion: light.lighthouseVersion,
+    url: light.url,
+    formFactor: light.formFactor,
+    scores: light.scores,          // backward-compat: the default/light run
     gates: GATES,
-    passes: Object.entries(GATES).every(([key, min]) => scores[key] === undefined || scores[key] >= min),
-    failedAudits: failedAudits.slice(0, 25)
+    themes: Object.fromEntries(THEMES.map((t) => [t, { scores: runs[t].scores }])),
+    passes: accessibilityPasses && pwaPasses,
+    failedAudits: light.failedAudits
   };
 
   mkdirSync(join(ROOT, '.reports'), { recursive: true });
   writeFileSync(join(ROOT, '.reports/lighthouse.json'), `${JSON.stringify(report, null, 2)}\n`);
 
-  console.log(`Lighthouse ${lhr.lighthouseVersion} (${lhr.configSettings.formFactor})`);
-  for (const [key, value] of Object.entries(scores)) {
-    const gate = GATES[key];
-    console.log(`  ${key.padEnd(16)} ${String(value).padStart(3)}${gate ? `  (gate ${gate}) ${value >= gate ? 'PASS' : 'FAIL'}` : ''}`);
-  }
-  for (const key of CATEGORIES) {
-    if (scores[key] === undefined) console.log(`  ${key.padEnd(16)}  n/a  (category not provided by this Lighthouse version)`);
+  console.log(`Lighthouse ${light.lighthouseVersion} (${light.formFactor})`);
+  for (const theme of THEMES) {
+    console.log(`\n  Theme: ${theme}`);
+    for (const key of CATEGORIES) {
+      const value = runs[theme].scores[key];
+      const gate = key === 'pwa' && theme !== 'light' ? undefined : GATES[key];
+      if (value === undefined) { console.log(`    ${key.padEnd(16)}  n/a`); continue; }
+      console.log(`    ${key.padEnd(16)} ${String(value).padStart(3)}${gate ? `  (gate ${gate}) ${value >= gate ? 'PASS' : 'FAIL'}` : ''}`);
+    }
   }
 } finally {
   await chrome.kill();

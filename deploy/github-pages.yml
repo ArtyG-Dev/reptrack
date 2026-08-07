@@ -1,0 +1,72 @@
+# GitHub Pages deployment for RepTrack.
+#
+# NOT ACTIVE where it sits. Copy it to `.github/workflows/pages.yml` in whichever
+# repository will host the site, set PROJECT_DIR below, and switch
+# Settings → Pages → Source to "GitHub Actions".
+#
+# Pages on a free plan requires a PUBLIC repository. See DEPLOYMENT.md.
+
+name: Deploy RepTrack to GitHub Pages
+
+on:
+  push:
+    branches: [Reptracker, main]
+    paths: ['reptrack/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # Directory holding index.html. Use "reptrack" inside GridAIcon, or "." in a
+  # standalone reptrack repository.
+  PROJECT_DIR: reptrack
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install test tooling
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm ci || npm install
+
+      - name: Run the test suite
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm test
+
+      - name: Measure footprint
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm run footprint
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # The app is static and has no build step — the source directory *is* the site.
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.PROJECT_DIR }}
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

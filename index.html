@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RepTrack — offline gym tracker</title>
+<meta name="description" content="Voice-first, offline gym tracker. No account, no cloud, no audio stored.">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="app-bar">
+  <h1 class="app-title">RepTrack</h1>
+  <p class="app-status" id="app-status" aria-live="polite">Offline ready</p>
+</header>
+
+<main id="main" tabindex="-1">
+  <section class="view" id="view-today"    role="tabpanel" aria-labelledby="tab-today"></section>
+  <section class="view" id="view-diary"    role="tabpanel" aria-labelledby="tab-diary"    hidden></section>
+  <section class="view" id="view-progress" role="tabpanel" aria-labelledby="tab-progress" hidden></section>
+  <section class="view" id="view-exercises" role="tabpanel" aria-labelledby="tab-exercises" hidden></section>
+  <section class="view" id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden></section>
+</main>
+
+<nav class="tabbar" aria-label="Primary">
+  <div role="tablist" aria-label="Sections" class="tablist">
+    <button class="tab" role="tab" id="tab-today"     data-view="today"     aria-controls="view-today"     aria-selected="true"  tabindex="0">
+      <span class="tab-icon" aria-hidden="true">▶</span><span class="tab-label">Today</span>
+    </button>
+    <button class="tab" role="tab" id="tab-diary"     data-view="diary"     aria-controls="view-diary"     aria-selected="false" tabindex="-1">
+      <span class="tab-icon" aria-hidden="true">▦</span><span class="tab-label">Diary</span>
+    </button>
+    <button class="tab" role="tab" id="tab-progress"  data-view="progress"  aria-controls="view-progress"  aria-selected="false" tabindex="-1">
+      <span class="tab-icon" aria-hidden="true">◤</span><span class="tab-label">Progress</span>
+    </button>
+    <button class="tab" role="tab" id="tab-exercises" data-view="exercises" aria-controls="view-exercises" aria-selected="false" tabindex="-1">
+      <span class="tab-icon" aria-hidden="true">≡</span><span class="tab-label">Exercises</span>
+    </button>
+    <button class="tab" role="tab" id="tab-settings"  data-view="settings"  aria-controls="view-settings"  aria-selected="false" tabindex="-1">
+      <span class="tab-icon" aria-hidden="true">⚙</span><span class="tab-label">Settings</span>
+    </button>
+  </div>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<dialog class="sheet" id="confirm-sheet" aria-labelledby="confirm-sheet-title"></dialog>
+<dialog class="sheet" id="prompt-sheet"  aria-labelledby="prompt-sheet-title"></dialog>
+
+<noscript>
+  <p class="noscript">RepTrack needs JavaScript. It runs entirely on your device — nothing is sent anywhere.</p>
+</noscript>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

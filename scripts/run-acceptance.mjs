@@ -1,0 +1,94 @@
+/* The self-test loop in one command: runs the test suite, measures the
+ * footprint, runs Lighthouse, and writes the measured values back into
+ * ACCEPTANCE.md between the `measured` markers.
+ *
+ * Run: npm run acceptance
+ */
+
+import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const START = '<!-- measured:start -->';
+const END = '<!-- measured:end -->';
+
+function run(label, args) {
+  process.stdout.write(`\n▶ ${label}\n`);
+  const result = spawnSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const output = `${result.stdout || ''}${result.stderr || ''}`;
+  return { code: result.status, output };
+}
+
+/* 1. Test suite */
+const tests = run('Test suite', ['--test', 'tests/browser.test.js', 'tests/chart.test.js', 'tests/contrast.test.js',
+  'tests/db.test.js', 'tests/parser.test.js', 'tests/progression.test.js', 'tests/pwa-static.test.js', 'tests/summary.test.js']);
+const pass = Number(tests.output.match(/^# pass (\d+)$/m)?.[1] ?? 0);
+const fail = Number(tests.output.match(/^# fail (\d+)$/m)?.[1] ?? 0);
+const skipped = Number(tests.output.match(/^# skipped (\d+)$/m)?.[1] ?? 0);
+console.log(`  ${pass} passed, ${fail} failed, ${skipped} skipped`);
+if (fail) console.log(tests.output.split('\n').filter((l) => l.trim().startsWith('not ok')).join('\n'));
+
+/* 2. Footprint */
+const footprintRun = run('Footprint', ['scripts/measure-footprint.mjs']);
+console.log(footprintRun.output.trim());
+
+/* 3. Lighthouse */
+const lighthouseRun = run('Lighthouse', ['scripts/run-lighthouse.mjs']);
+console.log(lighthouseRun.output.trim());
+
+const read = (file) => (existsSync(join(ROOT, file)) ? JSON.parse(readFileSync(join(ROOT, file), 'utf8')) : null);
+const footprint = read('.reports/footprint.json');
+const lighthouse = read('.reports/lighthouse.json');
+
+/* 4. Write the measured block into ACCEPTANCE.md */
+const scores = lighthouse?.scores ?? {};
+const rows = [
+  ['Automated tests', `${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ''}`, fail === 0],
+  ['Lighthouse — PWA', scores.pwa ?? 'n/a', (scores.pwa ?? 0) >= 90],
+  ['Lighthouse — Accessibility', scores.accessibility ?? 'n/a', (scores.accessibility ?? 0) >= 90],
+  ['Lighthouse — Performance', scores.performance ?? 'n/a', true],
+  ['Lighthouse — Best practices', scores['best-practices'] ?? 'n/a', true],
+  ['Lighthouse — SEO', scores.seo ?? 'n/a', true],
+  ['App shell size', `${footprint?.shell.mb ?? '?'} MB`, true],
+  ['A year of data (156 sessions, 3120 sets, 52 runs)', `${footprint?.yearOfData.estimatedStoredMB ?? '?'} MB stored`, true],
+  ['Total installed footprint', `${footprint?.totalMB ?? '?'} MB of a 50 MB budget`, Boolean(footprint?.withinBudget)]
+];
+
+const block = [
+  START,
+  '',
+  `_Measured ${new Date().toISOString().slice(0, 10)} — regenerate with \`npm run acceptance\`._`,
+  '',
+  '| Measurement | Value | Result |',
+  '|---|---|---|',
+  ...rows.map(([label, value, ok]) => `| ${label} | ${value} | ${ok ? '✅' : '❌'} |`),
+  '',
+  END
+].join('\n');
+
+const acceptancePath = join(ROOT, 'ACCEPTANCE.md');
+if (existsSync(acceptancePath)) {
+  const current = readFileSync(acceptancePath, 'utf8');
+  const startIdx = current.indexOf(START);
+  const endIdx = current.indexOf(END);
+  if (startIdx !== -1 && endIdx !== -1) {
+    writeFileSync(acceptancePath, current.slice(0, startIdx) + block + current.slice(endIdx + END.length));
+    console.log('\n✔ ACCEPTANCE.md measured block updated.');
+  } else {
+    console.log('\n! ACCEPTANCE.md has no measured markers — left untouched.');
+  }
+}
+
+mkdirSync(join(ROOT, '.reports'), { recursive: true });
+writeFileSync(join(ROOT, '.reports/acceptance.json'), `${JSON.stringify({
+  measuredAt: new Date().toISOString(),
+  tests: { pass, fail, skipped },
+  footprint,
+  lighthouse: { scores, version: lighthouse?.lighthouseVersion }
+}, null, 2)}\n`);
+
+const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90 && (scores.accessibility ?? 0) >= 90;
+console.log(`\n${green ? '✅ All headless acceptance criteria pass.' : '❌ Acceptance criteria not met.'}`);
+process.exit(green ? 0 : 1);

@@ -1,0 +1,119 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  estimate1RM, toKg, fromKg, bestSet, buildSeries, isPersonalRecord,
+  markPRs, suggestProgression, totalVolume, formatDuration, roundToIncrement
+} from '../js/progression.js';
+
+const set = (dateISO, weight, reps, unit = 'kg', order = 0) => ({ dateISO, weight, reps, unit, order });
+
+test('unit conversion round-trips', () => {
+  assert.ok(Math.abs(toKg(100, 'lb') - 45.359) < 0.01);
+  assert.ok(Math.abs(fromKg(toKg(225, 'lb'), 'lb') - 225) < 1e-9);
+  assert.equal(toKg(100, 'kg'), 100);
+});
+
+test('Epley 1RM: a single is its own max, higher reps estimate higher', () => {
+  assert.equal(estimate1RM(100, 1), 100);
+  assert.ok(Math.abs(estimate1RM(100, 5) - 116.667) < 0.01);
+  assert.ok(estimate1RM(100, 10) > estimate1RM(100, 5));
+  assert.equal(estimate1RM(0, 5), 0);
+  assert.equal(estimate1RM(100, 0), 0);
+});
+
+test('best set is the hardest by estimated 1RM, not merely the heaviest', () => {
+  const best = bestSet([set('2026-01-01', 100, 1), set('2026-01-01', 90, 8)]);
+  assert.equal(best.weight, 90);   // 90x8 estimates ~114 kg vs 100
+});
+
+test('series collapses to one point per session date, oldest first', () => {
+  const series = buildSeries([
+    set('2026-01-08', 105, 5),
+    set('2026-01-01', 100, 5),
+    set('2026-01-01', 95, 5)
+  ]);
+  assert.deepEqual(series.map((p) => p.dateISO), ['2026-01-01', '2026-01-08']);
+  assert.equal(series[0].topWeight, 100);
+  assert.equal(series[0].sets, 2);
+});
+
+test('PRs are flagged on the first session that beats the running best', () => {
+  const series = buildSeries([
+    set('2026-01-01', 100, 5),
+    set('2026-01-08', 100, 5),
+    set('2026-01-15', 105, 5)
+  ]);
+  assert.deepEqual(series.map((p) => p.isPR), [true, false, true]);
+});
+
+test('mixed-unit histories compare on a common scale', () => {
+  // 225 lb = 102.06 kg, so the second session beats 100 kg despite the unit change.
+  const series = buildSeries([set('2026-01-01', 100, 5, 'kg'), set('2026-01-08', 225, 5, 'lb')]);
+  assert.deepEqual(series.map((p) => p.isPR), [true, true]);
+  assert.ok(series[1].e1rmKg > series[0].e1rmKg);
+
+  // 215 lb = 97.5 kg — not a record.
+  const flat = buildSeries([set('2026-01-01', 100, 5, 'kg'), set('2026-01-08', 215, 5, 'lb')]);
+  assert.deepEqual(flat.map((p) => p.isPR), [true, false]);
+});
+
+test('isPersonalRecord compares against history only', () => {
+  const history = [set('2026-01-01', 100, 5)];
+  assert.equal(isPersonalRecord({ weight: 105, reps: 5, unit: 'kg' }, history), true);
+  assert.equal(isPersonalRecord({ weight: 100, reps: 5, unit: 'kg' }, history), false);
+  assert.equal(isPersonalRecord({ weight: 100, reps: 5, unit: 'kg' }, []), true);
+});
+
+test('markPRs recomputes flags chronologically after an edit or import', () => {
+  const marked = markPRs([
+    set('2026-01-15', 105, 5),
+    set('2026-01-01', 100, 5),
+    set('2026-01-08', 90, 5)
+  ]);
+  assert.deepEqual(marked.map((s) => [s.dateISO, s.isPR]), [
+    ['2026-01-01', true],
+    ['2026-01-08', false],
+    ['2026-01-15', true]
+  ]);
+});
+
+test('the nudge fires only after the same top set is repeated', () => {
+  const once = suggestProgression([set('2026-01-01', 100, 5), set('2026-01-08', 95, 5)]);
+  assert.equal(once, null);
+
+  const twice = suggestProgression([set('2026-01-01', 100, 5), set('2026-01-08', 100, 5)]);
+  assert.ok(twice);
+  assert.equal(twice.suggestedWeight, 102.5);
+  assert.match(twice.message, /100 kg × 5 twice — try 102\.5 kg/);
+});
+
+test('the nudge stays quiet with a single session', () => {
+  assert.equal(suggestProgression([set('2026-01-01', 100, 5)]), null);
+  assert.equal(suggestProgression([]), null);
+});
+
+test('the nudge uses pound increments when the user works in pounds', () => {
+  const s = suggestProgression(
+    [set('2026-01-01', 225, 5, 'lb'), set('2026-01-08', 225, 5, 'lb')],
+    { unit: 'lb' }
+  );
+  assert.ok(s);
+  assert.equal(s.unit, 'lb');
+  assert.equal(s.suggestedWeight, 230);
+});
+
+test('increments round to real plate jumps', () => {
+  assert.equal(roundToIncrement(101.3, 'kg'), 101.25);
+  assert.equal(roundToIncrement(228.7, 'lb'), 230);
+});
+
+test('volume totals in the display unit', () => {
+  assert.equal(totalVolume([set('2026-01-01', 100, 5), set('2026-01-01', 50, 10)]), 1000);
+});
+
+test('durations format as mm:ss and h:mm:ss', () => {
+  assert.equal(formatDuration(0), '00:00');
+  assert.equal(formatDuration(65), '01:05');
+  assert.equal(formatDuration(3725), '1:02:05');
+});

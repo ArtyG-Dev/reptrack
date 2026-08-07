@@ -63,7 +63,7 @@ Per `docs/FOLLOWUP_PROMPT_EXERCISES_THEMES.md`.
 | 21 | Collapsed/expanded state persists | Stored in `settings.panelState` (via `store.js`, not a parallel mechanism); `browser.test.js` reloads the page and confirms the same section is still expanded | ✅ |
 | 22 | Light and High-Contrast Neon themes both selectable, both persist, both pass Lighthouse a11y ≥ 90 and 4.5:1 contrast checks, no flashing/strobing | `contrast.test.js` checks all 17 pairs for **both** `:root` and `[data-theme="neon"]`, plus asserts no `@keyframes`/`animation` in the neon block; `npm run lighthouse` now runs twice (`?theme=light`, `?theme=neon`) and gates on both; `browser.test.js` → "the theme toggle applies immediately and survives a reload" | ✅ see measured block (both themes) |
 | 23 | Footprint still reported < 50 MB after these additions | `npm run footprint` — unchanged methodology, now seeding exercises that include `category`/`mode` | ✅ see measured block |
-| 24 | Pages deployment re-verified live after merge | See `DEPLOYMENT.md` — re-run after this push | ⏳ verify after push, see below |
+| 24 | Pages deployment re-verified live after merge | GitHub Actions run [`c4f0f1a`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31201628051) completed with conclusion `success` — live at https://artyg-dev.github.io/reptrack/ | ✅ |
 
 ## Build constraints
 

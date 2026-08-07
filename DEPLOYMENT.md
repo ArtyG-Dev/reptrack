@@ -4,29 +4,31 @@ RepTrack is a static site with no build step, so deployment is "copy `reptrack/`
 web root". GitHub Pages is the shortest path to an HTTPS URL, and HTTPS is what an
 Android PWA install needs.
 
-> **Blocked on one decision.** GitHub Pages on the **free** plan only publishes from
-> **public** repositories. `ArtyG-Dev/GridAIcon` is private, so deploying means either
-> making that repo public or moving RepTrack to its own public repo. Nothing has been
-> published and nothing has been made public — say which way you want to go.
+**Chosen route: Option A** — RepTrack moves to its own public repo, `artyg-dev/reptrack`.
+GridAIcon stays private. Nothing has been made public yet.
 
 ---
 
-## Option A — move RepTrack to its own public repo (recommended)
+## Option A — RepTrack in its own public repo (chosen)
 
-Keeps GridAIcon private and gives RepTrack the repo it was meant to have.
+`.github/workflows/pages.yml` is already committed and is inert where it currently sits
+(GitHub only runs workflows from the repository root). After the subtree split it lands at
+the root and takes effect.
+
+**Step 1 — you:** create an empty **public** repo named `reptrack` under `ArtyG-Dev` on
+github.com. No README, no .gitignore, no licence — an empty repo.
+
+**Step 2 — the push** (one command, from a clone of GridAIcon on the `Reptracker` branch):
 
 ```bash
-# from a clone of GridAIcon, on the Reptracker branch
 git subtree split --prefix=reptrack -b reptrack-only
-
-# create a new PUBLIC repo artyg-dev/reptrack on github.com, then:
-git push git@github.com:ArtyG-Dev/reptrack.git reptrack-only:main
+git push https://github.com/ArtyG-Dev/reptrack.git reptrack-only:main
 ```
 
-Then in the new repo: **Settings → Pages → Source: GitHub Actions**, and commit
-`deploy/github-pages.yml` to `.github/workflows/pages.yml` with `PROJECT_DIR: .`.
+**Step 3 — you:** in the new repo, **Settings → Pages → Source: GitHub Actions**.
 
-Published at `https://artyg-dev.github.io/reptrack/`.
+The workflow then runs the full test suite and the footprint check on every push, and
+publishes to `https://artyg-dev.github.io/reptrack/` only if they pass.
 
 ## Option B — publish from GridAIcon
 

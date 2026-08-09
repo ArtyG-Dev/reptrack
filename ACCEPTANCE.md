@@ -82,6 +82,7 @@ Per `docs/FOLLOWUP_PROMPT_BLOCK_INDEXING.md`.
 | 26 | Every HTML page's rendered `<head>` contains the noindex meta tag — checked programmatically, not just on `index.html` | `pwa-static.test.js` → "every HTML page carries the noindex meta tag…" globs every `.html` file in the repo (currently one, `index.html`, but the check scales to more); `browser.test.js` reads the tag back out of the live rendered DOM, not just the source | ✅ |
 | 27 | `DEPLOY.md` states the X-Robots-Tag limitation | `DEPLOYMENT.md` → "Search indexing" section states GitHub Pages does not support custom response headers, so `X-Robots-Tag` is not applied at this host, and names it as the thing to add if the site ever moves to a host that does | ✅ |
 | 28 | The live URL is not a crawlable hyperlink anywhere in the repo's own docs | Checked by hand: every mention of `artyg-dev.github.io/reptrack` in `README.md`/`CLAUDE.md`/`ACCEPTANCE.md`/`DECISIONS.md`/`DEPLOYMENT.md`/`docs/` is inside backtick code spans, which GitHub renders as `<code>`, never `<a>` — none is a markdown link. `README.md` doesn't mention the live URL at all | ✅ |
+| 29 | Pages deployment re-verified live after this merge | GitHub Actions run [`46eeb8d`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31287089210) completed with conclusion `success` — robots.txt and the noindex meta tag are live at https://artyg-dev.github.io/reptrack/ | ✅ |
 
 ## Build constraints
 

@@ -61,6 +61,26 @@ test('a 192px and a 512px icon are present, plus a maskable one', () => {
   assert.ok(manifest.icons.some((i) => String(i.purpose).includes('maskable')));
 });
 
+test('robots.txt exists at the site root and disallows everything', () => {
+  const path = join(ROOT, 'robots.txt');
+  assert.ok(existsSync(path), 'robots.txt is missing from the repo root');
+  const body = readFileSync(path, 'utf8').trim();
+  assert.equal(body, 'User-agent: *\nDisallow: /');
+});
+
+test('every HTML page carries the noindex meta tag, not just index.html', () => {
+  const htmlFiles = walk(ROOT).filter((f) => f.endsWith('.html'));
+  assert.ok(htmlFiles.length > 0, 'expected at least one HTML page to check');
+  for (const file of htmlFiles) {
+    const source = readFileSync(file, 'utf8');
+    assert.match(
+      source,
+      /<meta name="robots" content="noindex, ?nofollow, ?noarchive, ?nosnippet">/,
+      `${relative(ROOT, file)} is missing the noindex robots meta tag`
+    );
+  }
+});
+
 test('index.html links the manifest, sets viewport and theme colour', () => {
   assert.match(indexHtml, /<link rel="manifest" href="manifest\.webmanifest">/);
   assert.match(indexHtml, /name="viewport"/);

@@ -78,3 +78,29 @@ Expect the same scores as the local run recorded in `ACCEPTANCE.md`.
 `sw.js` uses a versioned cache (`reptrack-shell-v1`) and deletes older caches on activate.
 **Bump that version string whenever you change a shipped file**, or returning visitors will
 keep the old shell until their cache is evicted.
+
+---
+
+## Search indexing
+
+GitHub Pages sites are public by default and **are** crawled/indexed unless told not to.
+RepTrack asks not to be, on both channels available to a static site:
+
+- **`robots.txt`** at the site root (`Disallow: /` for all user agents).
+- **`<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">`** in every
+  served HTML page's `<head>` — checked programmatically in
+  `tests/pwa-static.test.js` so a future page can't ship without it.
+
+robots.txt + noindex meta added; GitHub Pages does not support custom response headers, so
+`X-Robots-Tag` is not applied at this host. If the site ever moves to a host that does
+support custom headers, add `X-Robots-Tag: noindex, nofollow` there too.
+
+**These are requests, not access control.** Compliant crawlers (Google, Bing) honour them.
+They do not make the app private: the URL still works for anyone with the link, and since
+the repo is public (required for free-tier Pages), the source and the exact URL are
+discoverable by anyone browsing GitHub regardless of indexing rules. The live URL is
+mentioned in this repo's own docs only in plain/code-formatted text, never as a markdown
+hyperlink, so GitHub's own (indexed) repo page isn't itself a discovery path — but that is
+a minor mitigation, not a barrier. If you want the app to be unreachable by an
+unauthenticated visitor, that's a separate feature (auth/access control), not something
+robots.txt or a meta tag can provide.

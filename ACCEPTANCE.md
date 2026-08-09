@@ -5,22 +5,29 @@ Regenerate the measured block with `npm run acceptance`.
 
 <!-- measured:start -->
 
-_Measured 2026-08-07 — regenerate with `npm run acceptance`._
+_Measured 2026-08-09 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 127 passed, 0 failed | ✅ |
+| Automated tests | 130 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light theme) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon theme) | 100 | ✅ |
 | Lighthouse — Performance | 96 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
-| Lighthouse — SEO | 100 | ✅ |
+| Lighthouse — SEO | 92 | ✅ |
 | App shell size | 0.166 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
 | Total installed footprint | 3.29 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
+
+**Lighthouse SEO dropped from 100 to 92 in this measurement, and that's correct, not a
+regression:** Lighthouse's `is-crawlable` audit ("Page is blocked from indexing") scores 0
+against a page with a noindex meta tag — which is exactly the intent of the search-indexing
+update below. SEO isn't a gated score (`scripts/run-lighthouse.mjs` only gates
+`accessibility` and `pwa`), so this doesn't fail the build; it's the expected cost of
+telling search engines not to index the app.
 
 ---
 
@@ -64,6 +71,17 @@ Per `docs/FOLLOWUP_PROMPT_EXERCISES_THEMES.md`.
 | 22 | Light and High-Contrast Neon themes both selectable, both persist, both pass Lighthouse a11y ≥ 90 and 4.5:1 contrast checks, no flashing/strobing | `contrast.test.js` checks all 17 pairs for **both** `:root` and `[data-theme="neon"]`, plus asserts no `@keyframes`/`animation` in the neon block; `npm run lighthouse` now runs twice (`?theme=light`, `?theme=neon`) and gates on both; `browser.test.js` → "the theme toggle applies immediately and survives a reload" | ✅ see measured block (both themes) |
 | 23 | Footprint still reported < 50 MB after these additions | `npm run footprint` — unchanged methodology, now seeding exercises that include `category`/`mode` | ✅ see measured block |
 | 24 | Pages deployment re-verified live after merge | GitHub Actions run [`c4f0f1a`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31201628051) completed with conclusion `success` — live at https://artyg-dev.github.io/reptrack/ | ✅ |
+
+## Added after the search-indexing update
+
+Per `docs/FOLLOWUP_PROMPT_BLOCK_INDEXING.md`.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 25 | `robots.txt` returns 200 with the disallow-all rule when fetched directly | `pwa-static.test.js` → "robots.txt exists at the site root and disallows everything" checks the file content; `browser.test.js` → "robots.txt serves a plain-text disallow-all…" fetches it over real HTTP from the local server and checks status 200, `text/plain` content-type, and body | ✅ |
+| 26 | Every HTML page's rendered `<head>` contains the noindex meta tag — checked programmatically, not just on `index.html` | `pwa-static.test.js` → "every HTML page carries the noindex meta tag…" globs every `.html` file in the repo (currently one, `index.html`, but the check scales to more); `browser.test.js` reads the tag back out of the live rendered DOM, not just the source | ✅ |
+| 27 | `DEPLOY.md` states the X-Robots-Tag limitation | `DEPLOYMENT.md` → "Search indexing" section states GitHub Pages does not support custom response headers, so `X-Robots-Tag` is not applied at this host, and names it as the thing to add if the site ever moves to a host that does | ✅ |
+| 28 | The live URL is not a crawlable hyperlink anywhere in the repo's own docs | Checked by hand: every mention of `artyg-dev.github.io/reptrack` in `README.md`/`CLAUDE.md`/`ACCEPTANCE.md`/`DECISIONS.md`/`DEPLOYMENT.md`/`docs/` is inside backtick code spans, which GitHub renders as `<code>`, never `<a>` — none is a markdown link. `README.md` doesn't mention the live URL at all | ✅ |
 
 ## Build constraints
 

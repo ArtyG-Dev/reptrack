@@ -119,6 +119,20 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await context.close();
   });
 
+  test('robots.txt serves a plain-text disallow-all, and the rendered page carries noindex', async () => {
+    const { context, page } = await freshPage();
+
+    const response = await page.request.get(`http://127.0.0.1:${new URL(baseURL).port}/robots.txt`);
+    assert.equal(response.status(), 200);
+    assert.match(response.headers()['content-type'] || '', /text\/plain/);
+    assert.equal((await response.text()).trim(), 'User-agent: *\nDisallow: /');
+
+    const robotsMeta = await page.evaluate(() => document.querySelector('meta[name="robots"]')?.content || null);
+    assert.equal(robotsMeta, 'noindex, nofollow, noarchive, nosnippet');
+
+    await context.close();
+  });
+
   test('registers a service worker and survives a fully offline reload', async () => {
     const { context, page } = await freshPage();
 

@@ -195,3 +195,46 @@ theme; no glow/pulse/flash was added for neon, and a test enforces that no new
 `app.js` reads an optional `?theme=light|neon` URL param at boot to preview a scheme
 without touching the saved setting — built for `scripts/run-lighthouse.mjs` to score both,
 but harmless (and mildly useful) as a general preview hook.
+
+---
+
+## Search indexing (follow-up)
+
+### 27. `robots.txt` disallows everything; the noindex meta tag is the belt to that braces
+
+Exactly the two mechanisms the follow-up asked for, no more: `Disallow: /` for every user
+agent, and `<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">` in
+`index.html`'s `<head>`, checked programmatically against every `.html` file in the repo
+(currently just the one) so a future page can't ship without it.
+
+I did **not** add an `X-Robots-Tag` HTTP header — GitHub Pages doesn't let you set custom
+response headers on static content, so there's nowhere to put it. `DEPLOYMENT.md` states
+this explicitly (the follow-up's exact wording) rather than silently omitting it, so the
+gap is documented, not hidden.
+
+### 28. `robots.txt` gets a real `text/plain` content-type from the dev server
+
+`scripts/serve.mjs` had no `.txt` entry in its content-type map, so `robots.txt` would have
+served as `application/octet-stream` locally (GitHub Pages serves it correctly on its own).
+Added `.txt → text/plain; charset=utf-8` so the local server — used for the Lighthouse run
+and the browser tests — matches real-world behaviour, and so a test can actually assert the
+content-type is right rather than working around a local-only quirk.
+
+### 29. This does not make the app private, and the docs say so plainly
+
+robots.txt and a noindex meta tag are requests compliant crawlers honour — they are not
+access control. The URL still works for anyone who has it; the repo being public (required
+for free Pages) means the source and the exact URL are discoverable by anyone browsing
+GitHub regardless of indexing rules; and non-compliant bots/scrapers ignore both mechanisms
+entirely. `DEPLOYMENT.md`'s new section says this in the same terms the follow-up used,
+rather than letting "we blocked search engines" read as "we made it private" by omission.
+If you want the app unreachable by an unauthenticated visitor, that's authentication — a
+different feature, not something this update attempts.
+
+### 30. Lighthouse SEO dropping from 100 to 92 is the correct outcome, not a regression to fix
+
+Lighthouse's `is-crawlable` audit scores 0 for any page carrying a noindex meta tag —
+"blocked from indexing" is a failure by SEO's definition, and a success by this update's.
+`scripts/run-lighthouse.mjs`/`run-acceptance.mjs` only gate `accessibility` and `pwa`, never
+`seo`, so this doesn't fail the build; `ACCEPTANCE.md` explains it next to the measured
+numbers rather than leaving a 92 unexplained.

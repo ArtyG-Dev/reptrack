@@ -58,7 +58,14 @@ const PAIRS = [
   ['on-accent', 'accent'], ['on-danger', 'danger']
 ];
 
-for (const [themeName, selector] of [['light', ':root {'], ['neon', '[data-theme="neon"] {']]) {
+const FLAT_THEMES = [['light', ':root {'], ['neon', '[data-theme="neon"] {']];
+const GLASS_THEMES = [
+  ['terminal', '[data-theme="terminal"] {'],
+  ['fractal', '[data-theme="fractal"] {'],
+  ['forge', '[data-theme="forge"] {']
+];
+
+for (const [themeName, selector] of [...FLAT_THEMES, ...GLASS_THEMES]) {
   test(`${themeName} theme meets 4.5:1 on every text pair`, () => {
     const palette = tokens(selector);
     const failures = [];
@@ -71,6 +78,107 @@ for (const [themeName, selector] of [['light', ':root {'], ['neon', '[data-theme
     assert.deepEqual(failures, [], `${themeName} theme contrast failures`);
   });
 }
+
+/* ---------- glass skins: contrast across the whole animation range ----------
+ * A frosted panel is a translucent scrim over a *moving* backdrop, so a single
+ * static check proves nothing. These composite the scrim over the darkest and
+ * the lightest colour the backdrop is allowed to draw and require 4.5:1 at
+ * both ends — which, combined with the range check below, covers every frame
+ * the canvas can possibly produce.
+ */
+
+function rgbOf(hex) {
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = [...h].map((c) => c + c).join('');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function compositeOver(scrimTriplet, alpha, behindHex) {
+  const behind = rgbOf(behindHex);
+  const out = scrimTriplet.map((v, i) => Math.round(alpha * v + (1 - alpha) * behind[i]));
+  return `#${out.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** `--glass: 8 13 20` — space-separated for rgb(... / alpha) */
+function tripletOf(block_, name) {
+  const match = block_.match(new RegExp(`--${name}:\\s*([\\d]+)\\s+([\\d]+)\\s+([\\d]+)\\s*;`));
+  assert.ok(match, `--${name} triplet missing`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+const GLASS_PAIRS = [
+  ['text', 'surface'], ['muted', 'surface'], ['accent', 'surface'],
+  ['danger', 'surface'], ['ok', 'surface'], ['warn', 'surface'],
+  ['text', 'surface-2'], ['muted', 'surface-2'], ['accent', 'surface-2'],
+  ['danger', 'surface-2'], ['ok', 'surface-2'], ['warn', 'surface-2']
+];
+
+for (const [themeName, selector] of GLASS_THEMES) {
+  test(`${themeName}: text over frosted glass holds 4.5:1 at both extremes of the backdrop animation`, () => {
+    const raw = block(selector);
+    const palette = tokens(selector);
+    const alphaMatch = raw.match(/--glass-alpha:\s*([\d.]+)\s*;/);
+    assert.ok(alphaMatch, '--glass-alpha missing');
+    const alpha = Number(alphaMatch[1]);
+
+    const glass = tripletOf(raw, 'glass');
+    const glass2 = tripletOf(raw, 'glass-2');
+    const darkest = palette['backdrop-base'];
+    const lightest = palette['backdrop-ink'];
+    assert.ok(darkest && lightest, 'both backdrop extremes must be declared');
+
+    const surfaces = {
+      surface: { darkest: compositeOver(glass, alpha, darkest), lightest: compositeOver(glass, alpha, lightest) },
+      'surface-2': { darkest: compositeOver(glass2, alpha, darkest), lightest: compositeOver(glass2, alpha, lightest) }
+    };
+
+    const failures = [];
+    for (const [fg, surfaceName] of GLASS_PAIRS) {
+      for (const [extreme, bg] of Object.entries(surfaces[surfaceName])) {
+        const ratio = contrast(palette[fg], bg);
+        if (ratio < 4.5) failures.push(`${fg} on ${surfaceName} over ${extreme} backdrop (${bg}): ${ratio.toFixed(2)}:1`);
+      }
+    }
+    assert.deepEqual(failures, [], `${themeName} glass contrast failures`);
+  });
+
+  test(`${themeName}: every colour the canvas may draw sits inside the declared backdrop range`, () => {
+    // js/backdrop.js only ever draws --backdrop-* tokens. If they all fall
+    // between base and ink, the two contrast checks above bracket every frame.
+    const palette = tokens(selector);
+    const lo = luminance(palette['backdrop-base']);
+    const hi = luminance(palette['backdrop-ink']);
+    assert.ok(hi > lo, 'ink must be lighter than base');
+
+    const backdropTokens = Object.entries(palette).filter(([name]) => name.startsWith('backdrop-'));
+    assert.ok(backdropTokens.length >= 3, 'expected the skin to declare backdrop colours');
+
+    const outside = backdropTokens
+      .filter(([, hex]) => luminance(hex) < lo - 1e-9 || luminance(hex) > hi + 1e-9)
+      .map(([name, hex]) => `--${name} (${hex})`);
+    assert.deepEqual(outside, [], 'a backdrop colour escapes the range the contrast check assumes');
+  });
+}
+
+test('the glass skins declare an opaque fallback for browsers without backdrop-filter', () => {
+  // Without a blur, a translucent panel over moving content is exactly the
+  // contrast failure the scheme exists to avoid — so the glass is applied only
+  // inside @supports, and --surface stays an opaque colour underneath it.
+  assert.match(css, /@supports \(\(backdrop-filter: blur\(2px\)\) or \(-webkit-backdrop-filter: blur\(2px\)\)\)/);
+  for (const [themeName, selector] of GLASS_THEMES) {
+    const palette = tokens(selector);
+    assert.match(palette.surface, /^#[0-9a-f]{6}$/i, `${themeName} --surface must be an opaque hex fallback`);
+  }
+});
+
+test('frost changes only the edge — never a background or text colour', () => {
+  // Which is why it cannot move any contrast ratio, in any theme.
+  const rule = css.slice(css.indexOf('.cal-day.is-frosted'));
+  const body = rule.slice(rule.indexOf('{') + 1, rule.indexOf('}'));
+  assert.doesNotMatch(body, /(^|[\s;])background\s*:/, 'frost must not repaint the cell');
+  assert.doesNotMatch(body, /(^|[\s;])color\s*:/, 'frost must not restyle the text');
+  assert.match(body, /border-color|box-shadow/, 'frost should be an edge treatment');
+});
 
 test('the contrast maths matches the WCAG reference values', () => {
   assert.ok(Math.abs(contrast('#000000', '#ffffff') - 21) < 0.01);
@@ -89,15 +197,23 @@ test('tap targets are at least 48px', () => {
   assert.ok(tap && Number(tap[1]) >= 48, 'tap target token must be >= 48px');
 });
 
-test('the neon theme has no flashing, strobing, or animated glow effects', () => {
-  const neon = block('[data-theme="neon"] {');
-  assert.doesNotMatch(neon, /animation/, 'the neon palette block must not declare animation');
-  assert.doesNotMatch(neon, /@keyframes/);
+/** The stylesheet with /* … *​/ comments stripped — these checks are about the
+ *  rules the browser applies, not the prose explaining them. */
+const cssRules = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-  // Exactly one @keyframes exists anywhere in the file — the pre-existing mic
-  // recording pulse (theme-independent, already gated by prefers-reduced-motion
-  // above). Nothing new — no neon glow/flash effect — was introduced.
-  const keyframeCount = (css.match(/@keyframes/g) || []).length;
+test('no theme flashes, strobes, or animates a glow', () => {
+  for (const [, selector] of [...FLAT_THEMES.slice(1), ...GLASS_THEMES]) {
+    const paletteBlock = block(selector);
+    assert.doesNotMatch(paletteBlock, /animation/, `${selector} must not declare animation`);
+    assert.doesNotMatch(paletteBlock, /@keyframes/);
+  }
+
+  // Exactly one @keyframes exists in the whole stylesheet — the pre-existing mic
+  // recording pulse, which is theme-independent and already gated by
+  // prefers-reduced-motion above. The five skins add none: every pixel of skin
+  // motion is drawn by js/backdrop.js, precisely so it can be *stopped* when the
+  // tab hides or the mic opens. A CSS animation could not be.
+  const keyframeCount = (cssRules.match(/@keyframes/g) || []).length;
   assert.equal(keyframeCount, 1, 'no @keyframes beyond the existing mic pulse should exist');
 });
 

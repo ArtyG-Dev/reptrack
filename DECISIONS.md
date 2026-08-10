@@ -238,3 +238,128 @@ Lighthouse's `is-crawlable` audit scores 0 for any page carrying a noindex meta 
 `scripts/run-lighthouse.mjs`/`run-acceptance.mjs` only gate `accessibility` and `pwa`, never
 `seo`, so this doesn't fail the build; `ACCEPTANCE.md` explains it next to the measured
 numbers rather than leaving a 92 unexplained.
+
+---
+
+## Animated frosted-glass skins (follow-up)
+
+### 31. The motion is a canvas, not CSS — because it has to be able to stop
+
+The brief says "prefer CSS animations and lightweight canvas", and CSS would have been the
+cheaper-looking choice. I went with canvas anyway, for one reason that outranks cost: the
+animation must pause *during voice recognition*, and CSS animation has no reliable stop.
+`animation-play-state: paused` still keeps the compositor holding animated layers, and
+anything driven by `@keyframes` cannot be single-stepped to render one static frame for
+`prefers-reduced-motion` — you can only slow it, which is exactly what the brief rules out.
+
+A rAF loop gated on one `shouldRun()` predicate gives all four behaviours for free: the
+30fps cap, `visibilitychange`, the voice pause, and reduced-motion-as-a-still-frame. It also
+gives the frame counter that makes every one of those testable — "did it stop" is an
+assertion about a number, not a guess about a compositor. Measured cost is 2.4–3.2% of one
+core, comfortably inside the budget, so the cheaper option would have bought nothing.
+
+The stylesheet still contains exactly one `@keyframes` (the pre-existing mic pulse) and a
+test enforces that, unchanged from before.
+
+### 32. Contrast over a moving background is made provable, not asserted
+
+"4.5:1 on the animated background at its lightest and darkest states" is easy to claim and
+hard to verify — you cannot check every frame. So the architecture makes the claim
+structural instead:
+
+1. Each skin declares `--backdrop-base` (darkest) and `--backdrop-ink` (lightest).
+2. `backdrop.js` may only paint colours read from `--backdrop-*` custom properties. It
+   contains no colour literals at all.
+3. A test asserts every `--backdrop-*` token's luminance falls inside `[base, ink]`.
+4. Contrast is then checked with the glass scrim alpha-composited over *those two
+   endpoints* — which, given (2) and (3), brackets every frame the canvas can produce.
+
+The load-bearing rule is (2). Hardcode one colour in the draw function and the proof
+silently stops holding while every test still passes, which is why it's called out in
+`CLAUDE.md` as well as in the file.
+
+### 33. Frost is an edge treatment, and that is a contrast decision as much as a tonal one
+
+`.cal-day.is-frosted` sets `border-color` and two inset `box-shadow`s. It changes no
+background and no text colour. That means it cannot move any contrast ratio, so frosted
+calendar cells need no separate contrast verification — there's a test asserting the rule
+holds. It also happens to be the gentlest version of the effect visually, which is the
+point.
+
+### 34. Frost is binary and extent-capped, so "never deepens" is structural
+
+The brief says frost must reach a mild state and stop, never accumulating into a scoreboard
+of shame. Rather than tuning an opacity ramp to plateau, frost is simply on or off, and
+`frostedDates()` returns at most 21 cells drawn only from the *current* gap. A 200-day
+absence renders identically to a 21-day one — there is a test asserting exactly that set
+equality — and one comeback session clears every frosted cell at once, because a closed gap
+is never frosted retroactively.
+
+This also means there is no state to get wrong: no accumulating counter, nothing that could
+drift, nothing that survives a comeback.
+
+### 35. The consistency baseline is the user's own rate, capped at ~3×/week
+
+`baselineTarget()` measures training days per fortnight over everything *before* the recent
+window, and compares recent activity to that. Two guards on it:
+
+- **Floor of 2, ceiling of 6.** Without the ceiling, a very consistent period would ratchet
+  the bar upward until the glow could only ever fall — success would make the effect
+  punishing, which inverts the whole design principle.
+- **Fewer than 14 days of prior history → a fixed target of 3.** A new user has no baseline
+  to be measured against, and borrowing someone else's would be meaningless. They get a
+  modest target and, therefore, visible early progress.
+
+The 28-day window blended in at 40% is what makes a single dropped session move the glow by
+under 0.15 — the constraint the brief states most explicitly. It has a test named after it,
+because it is precisely the sort of thing a later "simplify this formula" pass would remove
+without noticing.
+
+### 36. "Pause activity effects" freezes the clock, it does not edit the data
+
+Pausing stamps `activityPausedAt` and every consistency calculation is then evaluated as of
+that date rather than today. One settings key; zero writes to sessions, sets or runs. This
+was the only implementation I'd trust against the brief's "without erasing history" — an
+approach that inserted placeholder days, or excluded a range from the window, would be
+mutating training data to serve a cosmetic effect, and would be visible in an export.
+
+Un-pausing needs no repair step: it just resumes from the real clock.
+
+### 37. The activity visuals produce no copy at all
+
+The brief asks for no text that scolds or quantifies a lapse. The strongest form of that is
+not careful wording — it is having nothing to word. Nothing reads `consistency.js` except
+the canvas draw functions and one CSS class on a calendar cell. There is no streak count, no
+"days since", no `aria-live` announcement of frost, and no nudge derived from consistency
+anywhere.
+
+A browser test walks the full rendered text of every tab plus every `aria-label`, `title`
+and live region under a lapsed-veteran profile and fails on scold-shaped phrasing. It should
+never be able to fire; it exists so that a future feature can't quietly reintroduce the
+thing the brief ruled out.
+
+Deliberately *not* announced to screen readers, despite frost being a visual-only signal:
+announcing it would be the exact "you have missed N days" message the brief forbids, just
+delivered to the people least able to ignore it. It carries no information the calendar
+doesn't already show.
+
+### 38. The skin CPU number is reported as an increment, and called a proxy
+
+`scripts/measure-skins.mjs` samples CDP `TaskDuration` in headless Chromium — a desktop CPU,
+main thread only, blind to GPU compositing of the blur. It is not a mid-range Android and I
+have not pretended otherwise: it reports each skin's cost *over a no-canvas baseline*, which
+is the part that transfers between machines, and `ACCEPTANCE.md` states the limits next to
+the number rather than in a footnote. The device check is in `MANUAL_TEST.md`, which now has
+two checks rather than one.
+
+The static-mode run is the useful companion measurement: it records 0 frames drawn while
+sampling, which is direct evidence that reduced-effects mode costs nothing at all rather
+than merely costing less.
+
+### 39. Glass is gated behind `@supports`, with an opaque fallback
+
+A translucent panel over moving content, in a browser with no `backdrop-filter`, is exactly
+the contrast failure the whole scheme is built to avoid. So `--surface` is opaque by
+default in the three skins and only becomes translucent inside an
+`@supports (backdrop-filter: blur(1px))` block. A test asserts the fallback exists. Nobody
+gets an unreadable panel because their browser is old.

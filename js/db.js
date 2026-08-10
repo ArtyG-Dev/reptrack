@@ -51,7 +51,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   voiceEnabled: true,
   confirmBeforeLog: true,
   progressionStepKg: 2.5,
-  progressionStepLb: 5
+  progressionStepLb: 5,
+  // Skin controls. `reduceBackgroundEffects` is the manual counterpart to
+  // prefers-reduced-motion; `pauseActivityEffects` freezes the Forge/Fractal
+  // activity visuals (see js/consistency.js) as of `activityPausedAt`, which is
+  // stamped when the toggle goes on and cleared when it goes off.
+  reduceBackgroundEffects: false,
+  pauseActivityEffects: false,
+  activityPausedAt: null
 });
 
 let dbPromise = null;

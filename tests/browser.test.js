@@ -147,6 +147,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await context.setOffline(true);
     await page.reload({ waitUntil: 'load' });
 
+    await page.waitForSelector('#start-session', { timeout: 10_000 });
     assert.ok(await page.isVisible('#start-session'), 'app shell must render with zero network');
     assert.equal(await page.title(), 'RepTrack — offline gym tracker');
     assert.equal(await page.textContent('.app-title'), 'RepTrack');
@@ -527,6 +528,330 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await page.click('#confirm-sheet button[type="submit"]');
     await page.waitForSelector('.disclosure-trigger:has-text("Crossfit")');
 
+    await context.close();
+  });
+
+  /* ---------- frosted-glass skins ---------- */
+
+  const GLASS_SKINS = ['terminal', 'fractal', 'forge'];
+
+  /** Writes sessions straight into IndexedDB so a profile with real history can
+   *  be simulated. Returns after the write commits; caller reloads to pick it up. */
+  async function seedSessions(page, dateISOs) {
+    await page.evaluate(async (dates) => {
+      await new Promise((resolve, reject) => {
+        const open = indexedDB.open('reptrack');
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction('sessions', 'readwrite');
+          const store = tx.objectStore('sessions');
+          dates.forEach((dateISO, i) => {
+            const startTs = new Date(`${dateISO}T18:00:00`).getTime();
+            store.put({
+              id: `seed_${i}_${dateISO}`,
+              dateISO,
+              startTs,
+              endTs: startTs + 3600_000,
+              durationSec: 3600,
+              notes: '',
+              lastModified: startTs,
+              visibility: 'private'
+            });
+          });
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        };
+        open.onerror = () => reject(open.error);
+      });
+    }, dateISOs);
+  }
+
+  /** Waits until the backdrop's frame count holds steady across two samples.
+   *  A state change legitimately repaints the held static frame once (so it
+   *  reflects current activity), so "is the loop stopped" has to be asked after
+   *  things settle rather than against a fixed delay. */
+  async function settledFrameCount(page, quietMs = 400, timeoutMs = 6000) {
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    while (Date.now() < deadline) {
+      const before = await page.evaluate(() => window.__backdrop.getDiagnostics().frames);
+      await page.waitForTimeout(quietMs);
+      const after = await page.evaluate(() => window.__backdrop.getDiagnostics().frames);
+      if (before === after) return after;
+      last = after;
+    }
+    throw new Error(`backdrop frame count never settled (last seen ${last})`);
+  }
+
+  const isoDaysAgo = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  test('all five themes are selectable, apply without reload, and persist', async () => {
+    const { context, page } = await freshPage();
+    await page.click('#tab-settings');
+
+    const options = await page.$$eval('#set-theme option', (opts) => opts.map((o) => o.value));
+    assert.deepEqual(options, ['light', 'neon', 'terminal', 'fractal', 'forge']);
+
+    for (const theme of GLASS_SKINS) {
+      await page.selectOption('#set-theme', theme);
+      await page.waitForFunction((t) => document.documentElement.getAttribute('data-theme') === t, theme, { timeout: 3000 });
+      assert.equal(await page.getAttribute('html', 'data-glass'), '1', `${theme} should turn the glass treatment on`);
+    }
+
+    await page.reload({ waitUntil: 'load' });
+    // Wait for boot to have applied a theme rather than racing it.
+    await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') !== null, null, { timeout: 5000 });
+    assert.equal(await page.getAttribute('html', 'data-theme'), 'forge', 'the choice survives a reload');
+    assert.equal(await page.getAttribute('html', 'data-glass'), '1');
+
+    // …and switching back to a flat theme takes the glass and the canvas away.
+    await page.click('#tab-settings');
+    await page.selectOption('#set-theme', 'light');
+    await page.waitForFunction(() => document.documentElement.getAttribute('data-glass') === null, null, { timeout: 3000 });
+    assert.equal(await page.evaluate(() => window.__backdrop.getDiagnostics().skin), null);
+
+    await context.close();
+  });
+
+  test('each skin animates under its 30fps cap and draws only inside its declared palette', async () => {
+    const { context, page } = await freshPage();
+    for (const theme of GLASS_SKINS) {
+      await page.goto(`${baseURL}?theme=${theme}`, { waitUntil: 'load' });
+      await page.waitForSelector('#start-session');
+      await page.waitForTimeout(200);
+
+      const before = await page.evaluate(() => window.__backdrop.getDiagnostics());
+      assert.equal(before.skin, theme);
+      assert.equal(before.running, true, `${theme} should be animating`);
+
+      await page.waitForTimeout(1200);
+      const after = await page.evaluate(() => window.__backdrop.getDiagnostics());
+      const drawn = after.frames - before.frames;
+      assert.ok(drawn > 0, `${theme} drew no frames`);
+      assert.ok(drawn <= 30 * 1.5, `${theme} drew ${drawn} frames in ~1.2s — above the 30fps cap`);
+    }
+    await context.close();
+  });
+
+  test('prefers-reduced-motion renders a static frame, not a slow one', async () => {
+    const context = await browser.newContext({ reducedMotion: 'reduce' });
+    const page = await context.newPage();
+    await page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+    await page.waitForSelector('#start-session');
+    await page.waitForTimeout(300);
+
+    const first = await page.evaluate(() => window.__backdrop.getDiagnostics());
+    assert.equal(first.static, true, 'reduced motion must put the backdrop in static mode');
+    assert.equal(first.running, false, 'no animation loop may be running');
+    assert.ok(first.frames > 0, 'a single frame should still have been drawn — the skin is visible, just still');
+
+    await page.waitForTimeout(1200);
+    const second = await page.evaluate(() => window.__backdrop.getDiagnostics());
+    assert.equal(second.frames, first.frames, 'the frame count must not advance at all');
+
+    await context.close();
+  });
+
+  test('the manual "reduce background effects" toggle holds the frame still too', async () => {
+    const { context, page } = await freshPage();
+    await page.goto(`${baseURL}?theme=terminal`, { waitUntil: 'load' });
+    await page.waitForSelector('#start-session');
+
+    await page.click('#tab-settings');
+    await page.check('#set-reduce-effects');
+    await page.waitForFunction(() => window.__backdrop.getDiagnostics().static === true, null, { timeout: 3000 });
+
+    const settled = await settledFrameCount(page);
+    await page.waitForTimeout(900);
+    const second = await page.evaluate(() => window.__backdrop.getDiagnostics());
+    assert.equal(second.frames, settled, 'frames advanced despite reduced effects');
+    assert.equal(second.running, false, 'the animation loop must not be running');
+
+    // The setting persists, and the palette is untouched — colours stay, motion goes.
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin !== null, null, { timeout: 5000 });
+    assert.equal(await page.evaluate(() => window.__backdrop.getDiagnostics().static), true);
+    assert.equal(await page.getAttribute('html', 'data-glass'), '1');
+
+    await context.close();
+  });
+
+  test('the backdrop stops while the tab is hidden', async () => {
+    const { context, page } = await freshPage();
+    await page.goto(`${baseURL}?theme=fractal`, { waitUntil: 'load' });
+    await page.waitForSelector('#start-session');
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => window.__backdrop.getDiagnostics().running), true);
+
+    // Emulating "hidden" is what a backgrounded PWA looks like to the page.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(() => window.__backdrop.getDiagnostics().running === false, null, { timeout: 3000 });
+
+    const first = await page.evaluate(() => window.__backdrop.getDiagnostics());
+    await page.waitForTimeout(700);
+    const second = await page.evaluate(() => window.__backdrop.getDiagnostics());
+    assert.equal(second.frames, first.frames, 'the backdrop kept drawing while backgrounded');
+
+    await context.close();
+  });
+
+  test('the backdrop stops while speech recognition is listening', async () => {
+    // A recogniser that stays open, so the paused state can be observed mid-listen.
+    const { context, page } = await freshPage({
+      voice: 'working',
+      init: () => {
+        window.__transcript = 'bench press 60 kilos for 10';
+        class HangingRecognition {
+          constructor() { this.continuous = true; this.interimResults = true; }
+          start() { setTimeout(() => this.onstart?.(), 10); }   // never resolves
+          abort() {}
+          stop() {}
+        }
+        window.SpeechRecognition = HangingRecognition;
+        window.webkitSpeechRecognition = HangingRecognition;
+      }
+    });
+    await page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+    await page.waitForSelector('#start-session');
+    await page.click('#start-session');
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => window.__backdrop.getDiagnostics().running), true);
+
+    await page.click('#mic-button');
+    await page.waitForFunction(() => window.__backdrop.getDiagnostics().voiceActive === true, null, { timeout: 3000 });
+
+    const diag = await page.evaluate(() => window.__backdrop.getDiagnostics());
+    assert.equal(diag.running, false, 'the backdrop must yield to the microphone');
+
+    const first = diag.frames;
+    await page.waitForTimeout(700);
+    assert.equal(await page.evaluate(() => window.__backdrop.getDiagnostics().frames), first);
+
+    await context.close();
+  });
+
+  test('a brand-new profile sees no frost, whatever the gap', async () => {
+    const { context, page } = await freshPage();
+    // Two weeks of app life, a few sessions, then nothing — but too new to frost.
+    await seedSessions(page, [isoDaysAgo(18), isoDaysAgo(16), isoDaysAgo(14)]);
+    await page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+    await page.click('#tab-diary');
+    await page.waitForSelector('.cal-grid');
+
+    assert.equal(await page.locator('.cal-day.is-frosted').count(), 0, 'a new user must never be frosted');
+    await context.close();
+  });
+
+  test('a lapsed veteran may show frost — on calendar cells only, and capped', async () => {
+    const { context, page } = await freshPage();
+    // Four months of steady training, then a long silence.
+    const days = [];
+    for (let i = 30; i <= 150; i += 2) days.push(isoDaysAgo(i));
+    await seedSessions(page, days);
+    await page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+    await page.click('#tab-diary');
+    await page.waitForSelector('.cal-grid');
+
+    const frostedCount = await page.locator('.cal-day.is-frosted').count();
+    assert.ok(frostedCount > 0, 'an established user with a long gap should see some frost');
+
+    // Never anywhere but the calendar.
+    await page.click('#tab-today');
+    await page.waitForSelector('#start-session');
+    assert.equal(await page.locator('#view-today .is-frosted').count(), 0, 'the logging UI must never frost');
+    await page.click('#tab-progress');
+    await page.waitForTimeout(150);
+    assert.equal(await page.locator('#view-progress .is-frosted').count(), 0, 'charts must never frost');
+
+    await context.close();
+  });
+
+  test('"pause activity effects" clears frost and freezes the glow, keeping the history', async () => {
+    const { context, page } = await freshPage();
+    const days = [];
+    for (let i = 30; i <= 150; i += 2) days.push(isoDaysAgo(i));
+    await seedSessions(page, days);
+    await page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+
+    await page.click('#tab-diary');
+    await page.waitForSelector('.cal-grid');
+    const before = await page.locator('.cal-day.is-frosted').count();
+    assert.ok(before > 0);
+
+    await page.click('#tab-settings');
+    await page.check('#set-pause-activity');
+    await page.waitForTimeout(250);
+
+    await page.click('#tab-diary');
+    await page.waitForSelector('.cal-grid');
+    assert.equal(await page.locator('.cal-day.is-frosted').count(), 0, 'pausing must clear frost outright');
+
+    // The sessions are all still there — pausing is cosmetic, never destructive.
+    const sessionCount = await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => {
+        const tx = req.result.transaction('sessions', 'readonly');
+        tx.objectStore('sessions').getAll().onsuccess = (e) => resolve(e.target.result.length);
+      };
+    }));
+    assert.equal(sessionCount, days.length, 'pausing must not touch training history');
+
+    // …and it is reversible.
+    await page.click('#tab-settings');
+    await page.uncheck('#set-pause-activity');
+    await page.waitForTimeout(250);
+    await page.click('#tab-diary');
+    await page.waitForSelector('.cal-grid');
+    assert.ok(await page.locator('.cal-day.is-frosted').count() > 0, 'un-pausing restores the previous state');
+
+    await context.close();
+  });
+
+  test('the theme layer never scolds or counts the days missed', async () => {
+    const { context, page } = await freshPage();
+    const days = [];
+    for (let i = 40; i <= 160; i += 2) days.push(isoDaysAgo(i));
+    await seedSessions(page, days);
+    await page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+
+    const banned = /missed|streak broken|you haven'?t|days since|lapse|slacking|failed|shame|get back on track|don'?t give up/i;
+    for (const tab of ['today', 'diary', 'progress', 'exercises', 'settings']) {
+      await page.click(`#tab-${tab}`);
+      await page.waitForTimeout(150);
+      const text = await page.textContent('body');
+      assert.doesNotMatch(text, banned, `${tab} contains language that quantifies or judges a gap`);
+    }
+
+    // The frosted cells carry no announcement either — they are decoration.
+    await page.click('#tab-diary');
+    await page.waitForSelector('.cal-grid');
+    const labels = await page.$$eval('.cal-day.is-frosted', (cells) => cells.map((c) => c.getAttribute('aria-label') || ''));
+    for (const label of labels) assert.doesNotMatch(label, /frost|cold|missed|inactive/i);
+
+    await context.close();
+  });
+
+  test('axe-core finds no violations in any of the glass skins', async () => {
+    const { context, page } = await freshPage();
+    for (const theme of GLASS_SKINS) {
+      await page.goto(`${baseURL}?theme=${theme}`, { waitUntil: 'load' });
+      await page.waitForSelector('#start-session');
+      await page.addScriptTag({ content: AXE_SOURCE });
+      const violations = await page.evaluate(async () => {
+        const result = await window.axe.run(document, { resultTypes: ['violations'] });
+        return result.violations
+          .filter((v) => ['moderate', 'serious', 'critical'].includes(v.impact))
+          .map((v) => `${v.id} (${v.impact})`);
+      });
+      assert.deepEqual(violations, [], `${theme} has accessibility violations`);
+    }
     await context.close();
   });
 

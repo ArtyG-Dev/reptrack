@@ -37,7 +37,7 @@ progression, weekly summary. Phases 2–4 (nutrition, multi-user, auth/social) a
 index.html              shell: app bar, five view sections, tab bar, two <dialog> sheets
 manifest.webmanifest    PWA manifest
 sw.js                   service worker — precache the shell, cache-first, offline navigations
-css/styles.css          one stylesheet; semantic custom properties, light + dark palettes
+css/styles.css          one stylesheet; semantic custom properties, five palettes
 
 js/
   app.js                boot, tab router (hash + ARIA tablist), SW registration, theme
@@ -48,6 +48,8 @@ js/
   voice.js              one-shot SpeechRecognition wrapper (transcript only)
   progression.js        1RM/hold-duration scoring, PR detection, progression nudge (pure)
   summary.js            weekly plain-text summary, reps- and hold-mode rows (pure)
+  consistency.js        consistency score, glow curve, frost gating (pure — see below)
+  backdrop.js           the animated-skin canvas: 30fps cap, auto-pause, static mode
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
   ui.js                 element builder, toasts, <dialog> sheets, disclosure, share/download
   exercises-seed.js     starter exercise dictionary + CATEGORIES suggestion list
@@ -58,12 +60,14 @@ js/
     exercises.js        exercise dictionary CRUD, grouped into collapsible categories
     settings.js         preferences incl. theme, export/import, wipe, storage estimate
 
-scripts/                serve, icon generation, footprint, Lighthouse (both themes), acceptance loop
+scripts/                serve, icons, footprint, Lighthouse (all themes), skin CPU, acceptance loop
 tests/                  node:test — unit, IndexedDB (fake-indexeddb) and Playwright browser
 ```
 
 **Dependency direction:** `views/* → state.js → store.js → db.js`. Pure helpers
-(`parser`, `progression`, `summary`, `chart`) depend on nothing but each other.
+(`parser`, `progression`, `summary`, `chart`, `consistency`) depend on nothing but each
+other. `backdrop.js` is a leaf: `app.js` and `views/settings.js` push into it, and it reads
+nothing back out of the app — every colour it draws comes from CSS custom properties.
 
 ---
 
@@ -75,7 +79,7 @@ Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visib
 SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
             holdSeconds, side, isPR, lastModified, visibility }
 Run       { id, dateISO, distance, distanceUnit, durationSec, notes, lastModified, visibility }
-Settings  { key, value }   // includes theme ('light'|'neon') and panelState (see below)
+Settings  { key, value }   // includes theme, panelState and the skin controls (see below)
 ```
 
 Indexes: `sessions.by_date`, `sets.by_session`, `sets.by_exercise`, `runs.by_date`,
@@ -107,6 +111,85 @@ Details that look redundant and are not:
   `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
   `state.setPanelExpanded()`, which also supply the "most recently used category starts
   expanded" default when no explicit choice is stored yet.
+- **`settings.theme`** — `'light' | 'neon' | 'terminal' | 'fractal' | 'forge'`. The last
+  three are the animated frosted-glass skins. `normaliseTheme()` in `views/settings.js`
+  maps anything unrecognised (including a `'dark'`/`'auto'` value saved by a much older
+  build) back to `'light'`, so no stored value can leave someone on a broken theme.
+- **`settings.reduceBackgroundEffects`** (default `false`) — the manual counterpart to
+  `prefers-reduced-motion`. Either one renders the backdrop as a single static frame.
+  It is a motion control only: it never changes the palette, so it cannot move a contrast
+  ratio.
+- **`settings.pauseActivityEffects`** / **`settings.activityPausedAt`** (default `false` /
+  `null`) — "Pause activity effects". Switching it on stamps today's date into
+  `activityPausedAt`; every consistency calculation is then evaluated *as of* that date
+  instead of today. **This writes one settings key and mutates no training data at all** —
+  un-pausing just resumes from the real clock, and nothing was lost in between.
+
+---
+
+## Consistency score
+
+`js/consistency.js` — pure, clock-free (the caller passes `todayISO`), fully covered by
+`tests/consistency.test.js`. It is the model behind the Forge glow, the Fractal brightness,
+and calendar frost. Nothing else in the app reads it; no feature behaviour depends on it.
+
+**A "training day"** is any date with a session or a run on it — distinct dates, so two
+sessions in one day count once. Doing something is what matters, not doing a lot.
+
+**The score** compares a recent rate to the user's *own* prior rate:
+
+```
+recent   = training days in the last 14 days
+long     = training days in the last 28 days
+blended  = 0.6 × recent  +  0.4 × (long / 2)      // long/2 puts it on a 14-day footing
+score    = clamp(blended / target, 0, 1)
+glow     = score ** 0.7
+```
+
+`target` is `baselineTarget()`: the user's training days per 14, measured over everything
+*before* the recent window, clamped to 2–6. Below 14 days of prior history there is no
+personal baseline yet, so it falls back to 3 (~1.5×/week) — a new user is measured against
+a modest fixed target, never against a stranger.
+
+Three deliberate softenings, all of them load-bearing rather than incidental:
+
+- **Blending the 28-day window in** is what makes a single dropped session barely visible.
+  At a 3-day target, going 3→2 sessions in the recent window moves `glow` by well under
+  0.15. There's a test named for exactly that, because it is the constraint most easily
+  lost to a "simplification".
+- **`glow = score ** 0.7`** compresses the top of the range, so falling off from a hot
+  state cools slowly at first rather than dropping off a cliff.
+- **The target is capped at 6.** However consistent someone has been, the bar it holds them
+  to stops at ~3×/week. Consistency can't ratchet itself into something unreachable.
+
+### Frost
+
+Frost is a cool edge treatment on **calendar day cells only** — never the logging UI, never
+a chart, never anything on the way to recording a comeback session. It is binary (present
+or absent, no depth ramp) and extent-capped. `frostState()` gates it in this order, and
+each gate is a kindness rather than an optimisation:
+
+| Gate | Meaning |
+|---|---|
+| `paused` | "Pause activity effects" is on. Never any frost, full stop. |
+| `no-history` | Nothing logged yet. |
+| `new-user` | Less than 21 days between the first logged day and today. |
+| `no-established-run` | No 14-day window has ever held 3+ training days. |
+| `recent-activity` | Eligible, but the current gap is under 10 days. |
+| `lapsed` | Frost shows. |
+
+`frostedDates()` returns at most **21 cells**, always within the *current* gap only. A
+200-day absence therefore looks exactly like a 21-day one — the "does not deepen
+indefinitely" rule is structural, not a tuning value — and a single comeback session clears
+every frosted cell at once, because old gaps are never re-litigated on the calendar.
+
+`activityVisualState()` bundles it up for the skins and adds `frostHint` (0..1, capped),
+which cools the Forge glow slightly during a lapse. `backdrop.js` applies it as
+`heat = glow × (1 − 0.35 × frostHint)`, so the forge retains at least 65% of its warmth at
+maximum frost: it cools, it never goes out.
+
+**Nothing in this system produces copy.** No count of missed days, no streak number, no
+message. It is ambient and it says nothing — see `DECISIONS.md` for why.
 
 ---
 
@@ -147,14 +230,41 @@ Views are re-rendered wholesale on every state change — keep them cheap and st
 feature module, needs to change.
 
 ### Adding a colour scheme
-Two schemes exist: Light (`:root`, default) and High-Contrast Neon (`[data-theme="neon"]`).
-Add a third the same way — a new `[data-theme="..."]` block in `css/styles.css` overriding
-only the colour custom properties (never introduce a hardcoded colour in component CSS),
-an option in `views/settings.js`'s theme `<select>`, and a case in `applyTheme()`. Whatever
-you add: run `tests/contrast.test.js` (which checks every pair in every `[data-theme]`
-block it finds — extend `PAIRS`/the theme list there) and `npm run lighthouse` (loops
-`THEMES` in `scripts/run-lighthouse.mjs`) before committing. No scheme may introduce an
-`animation`/`@keyframes` — `contrast.test.js` enforces that too.
+Five exist: Light (`:root`, default), High-Contrast Neon, and the three animated skins
+(Terminal, Fractal, Forge). Add another the same way — a new `[data-theme="..."]` block in
+`css/styles.css` overriding only the colour custom properties (never introduce a hardcoded
+colour in component CSS), an entry in `THEMES` in `views/settings.js`, and it flows through
+`applyTheme()`, `run-lighthouse.mjs` and `run-acceptance.mjs` automatically. Then run
+`tests/contrast.test.js` (which checks every pair in every `[data-theme]` block it finds)
+and `npm run lighthouse` before committing.
+
+**No scheme may introduce an `animation`/`@keyframes`.** `contrast.test.js` asserts the
+whole stylesheet still contains exactly one — the pre-existing mic-recording pulse. Skin
+motion goes on the canvas instead, and the reason is not stylistic: CSS animation cannot be
+reliably *stopped*, and skin motion must stop dead during voice recognition.
+
+### Adding an animated skin
+Three exist. A fourth needs, in this order:
+
+1. A `[data-theme="..."]` block declaring the normal semantic tokens **plus** the backdrop
+   contract: `--backdrop-base` (the darkest colour the canvas will ever paint),
+   `--backdrop-ink` (the lightest), and any skin-specific `--backdrop-*` colours in
+   between. Set `--glass`/`--glass-2`/`--glass-alpha` for the frosted panels.
+2. A draw function in `js/backdrop.js` that reads **only** `--backdrop-*` properties via
+   `getComputedStyle`. Never hardcode a colour there — the stylesheet is the single source
+   of truth, and that is the entire mechanism by which contrast stays provable.
+3. An entry in `SCALE` in `backdrop.js` (the backing-store resolution divisor) and in
+   `THEMES` in `views/settings.js`.
+
+The contrast guarantee works like this: because the canvas can only paint colours declared
+as `--backdrop-*` tokens, and `contrast.test.js` proves every such token's luminance sits
+inside `[--backdrop-base, --backdrop-ink]`, checking text contrast against the glass scrim
+composited over just those two endpoints brackets *every frame the animation can produce*.
+Paint a colour that isn't a token and that proof silently stops being true.
+
+Everything else is already handled centrally and needs no per-skin work: the 30fps cap,
+`visibilitychange`, the voice-recognition pause, `prefers-reduced-motion`, and the manual
+reduce-effects toggle all live in `backdrop.js`'s `shouldRun()`.
 
 ---
 
@@ -162,20 +272,35 @@ block it finds — extend `PAIRS`/the theme list there) and `npm run lighthouse`
 
 ```bash
 npm test           # everything
-npm run acceptance # tests + footprint + Lighthouse, rewrites ACCEPTANCE.md
+npm run skins      # CPU cost of each skin vs a no-canvas baseline
+npm run palettes   # design aid: contrast of a candidate skin palette, before writing CSS
+npm run acceptance # tests + footprint + Lighthouse + skin cost, rewrites ACCEPTANCE.md
 ```
 
 - `parser`, `progression`, `summary`, `chart` — pure logic, fast. Covers both reps-mode and
   hold-mode paths.
+- `consistency` — the score, the glow curve and every frost gate, including the ones that
+  are about tone rather than correctness: a dropped session is barely perceptible, a new
+  user is never frosted, frost caps, a comeback clears it, pause freezes without erasing.
 - `db` — real IndexedDB semantics via `fake-indexeddb`, including category/mode/holdSeconds.
-- `contrast` — parses `css/styles.css` and checks every text pair ≥ 4.5:1 in both themes,
-  plus that the neon theme introduces no animation.
+- `contrast` — parses `css/styles.css` and checks every text pair ≥ 4.5:1 in all five
+  themes; for the glass skins it composites the panel scrim over both extremes of the
+  backdrop range and checks the result, asserts every `--backdrop-*` token sits inside that
+  range, checks the opaque `@supports` fallback, and asserts frost is edge-only (it may not
+  touch a background or text colour, so it cannot move any ratio).
 - `pwa-static` — manifest, icon dimensions, service-worker precache completeness, and the
   architectural rules listed under "Hard constraints".
 - `browser` — real Chromium via Playwright: offline reload, voice (stubbed recogniser),
   the tap-to-text fallback, hold-mode logging, collapsible-panel keyboard operation and
   persistence, the theme toggle, runs, weekly summary download *and* Web Share, JSON
-  export, and an axe-core scan of every tab. Skips cleanly if no Chromium is present.
+  export, the skins (pause on background/voice/static, seeded new-user and lapsed-veteran
+  profiles for frost), and an axe-core scan of every tab. Skips cleanly if no Chromium.
+
+`npm run skins` is honest about being a proxy: it samples main-thread `TaskDuration` in
+headless Chromium on a desktop CPU, which is not a mid-range Android, and it cannot see GPU
+compositing of the `backdrop-filter` blur. It gates the *increment over a no-canvas
+baseline*, which is the number that answers "what did the skin cost". The real-device check
+stays in `MANUAL_TEST.md`.
 
 **When you add a shipped file, add it to `PRECACHE` in `sw.js`** — the static test fails
 otherwise, because a missed entry means a blank screen when offline.
@@ -190,4 +315,8 @@ otherwise, because a missed entry means a blank screen when offline.
 - `el()` from `ui.js` sets text with `textContent` — never build DOM from string
   concatenation of user data.
 - Every interactive control needs a label or `aria-label`; the browser test enforces it.
-- Respect `prefers-reduced-motion`; it is already handled globally in the stylesheet.
+- Respect `prefers-reduced-motion`; it is already handled globally in the stylesheet, and
+  `backdrop.js` honours it by holding a single static frame rather than slowing down.
+- **The activity visuals never speak.** No streak counts, no missed-day totals, no nudges
+  derived from consistency, no `aria-live` announcement of frost. If you find yourself
+  writing copy that quantifies a gap, the answer is not to word it more kindly.

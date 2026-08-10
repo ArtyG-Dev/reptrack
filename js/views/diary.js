@@ -119,6 +119,15 @@ function monthView(rerender) {
   const dates = trainedDates();
   const todayIso = todayISO(new Date());
 
+  // Frost is a Forge-skin easter egg, and it lives on calendar day cells only —
+  // never on the logging UI, never on the charts. js/consistency.js decides
+  // whether any of it is earned; most of the time this Set is empty. It is
+  // purely decorative, so it carries no aria-label text: the calendar must not
+  // announce a lapse.
+  const frosted = document.documentElement.getAttribute('data-theme') === 'forge'
+    ? state.frostedCalendarDates()
+    : new Set();
+
   const grid = el('div', { class: 'cal-grid' });
   for (const d of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
     grid.append(el('div', { class: 'cal-dow', 'aria-hidden': 'true', text: d }));
@@ -129,7 +138,7 @@ function monthView(rerender) {
     const dateISO = iso(view.year, view.month, day);
     const has = dates.has(dateISO);
     grid.append(el('button', {
-      class: `cal-day ${has ? 'has-session' : ''} ${dateISO === todayIso ? 'is-today' : ''}`,
+      class: `cal-day ${has ? 'has-session' : ''} ${dateISO === todayIso ? 'is-today' : ''} ${frosted.has(dateISO) ? 'is-frosted' : ''}`,
       type: 'button',
       'aria-pressed': dateISO === view.dateISO ? 'true' : 'false',
       'aria-label': `${humanDate(dateISO)}${has ? ', has a session' : ', no session'}`,

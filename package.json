@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Voice-first, offline gym tracker. Vanilla HTML/CSS/JS PWA — the app itself has zero runtime dependencies and no build step. Everything here is test/QA tooling only.",
+  "description": "Voice-first, offline gym tracker. Vanilla HTML/CSS/JS PWA \u2014 the app itself has zero runtime dependencies and no build step. Everything here is test/QA tooling only.",
   "scripts": {
     "serve": "node scripts/serve.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "test": "node --test \"tests/*.test.js\"",
     "footprint": "node scripts/measure-footprint.mjs",
     "lighthouse": "node scripts/run-lighthouse.mjs",
-    "acceptance": "node scripts/run-acceptance.mjs"
+    "acceptance": "node scripts/run-acceptance.mjs",
+    "skins": "node scripts/measure-skins.mjs",
+    "palettes": "node scripts/check-skin-palettes.mjs"
   },
   "devDependencies": {
     "axe-core": "^4.13.0",

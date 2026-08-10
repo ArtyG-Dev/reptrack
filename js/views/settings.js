@@ -2,6 +2,8 @@
 
 import * as state from '../state.js';
 import * as store from '../store.js';
+import * as backdrop from '../backdrop.js';
+import { isGlassSkin } from '../backdrop.js';
 import { el, clear, toast, confirmSheet } from '../ui.js';
 
 let containerRef = null;
@@ -39,10 +41,32 @@ async function doImport(file, mode) {
   }
 }
 
-/** Only 'light' and 'neon' are real schemes — anything else (including an old
- * saved 'auto'/'dark' from before this toggle existed) falls back to light. */
+export const THEMES = [
+  ['light', 'Light'],
+  ['neon', 'High-Contrast Neon'],
+  ['terminal', 'Terminal (frosted glass)'],
+  ['fractal', 'Fractal (frosted glass)'],
+  ['forge', 'Forge (frosted glass)']
+];
+
+const THEME_IDS = new Set(THEMES.map(([id]) => id));
+
+/** Anything unrecognised — including an old saved 'auto'/'dark' from before the
+ *  picker changed — falls back to light rather than leaving a broken theme. */
+export function normaliseTheme(theme) {
+  return THEME_IDS.has(theme) ? theme : 'light';
+}
+
+/** Sets the palette, and flags whether panels should use the glass treatment.
+ *  `data-glass` is what css/styles.css keys the frosted panels and the backdrop
+ *  canvas off, so the two never disagree about which mode we are in. */
 export function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme === 'neon' ? 'neon' : 'light');
+  const resolved = normaliseTheme(theme);
+  const root = document.documentElement;
+  root.setAttribute('data-theme', resolved);
+  if (isGlassSkin(resolved)) root.setAttribute('data-glass', '1');
+  else root.removeAttribute('data-glass');
+  backdrop.setSkin(isGlassSkin(resolved) ? resolved : null);
 }
 
 export function render(container) {
@@ -67,17 +91,60 @@ export function render(container) {
     onchange: async (e) => { await state.updateSettings({ defaultRestSec: Number(e.target.value) || 0 }); toast('Rest timer updated.'); }
   });
 
+  const currentTheme = normaliseTheme(s.settings.theme);
   const themeSelect = el('select', {
     id: 'set-theme',
-    onchange: async (e) => { await state.updateSettings({ theme: e.target.value }); applyTheme(e.target.value); }
-  }, ...[['light', 'Light'], ['neon', 'High-Contrast Neon']]
-    .map(([value, label]) => el('option', { value, selected: (s.settings.theme === 'neon' ? 'neon' : 'light') === value }, label)));
+    onchange: async (e) => { await state.updateSettings({ theme: e.target.value }); applyTheme(e.target.value); render(containerRef); }
+  }, ...THEMES.map(([value, label]) => el('option', { value, selected: currentTheme === value }, label)));
 
   containerRef.append(el('div', { class: 'card stack' },
     el('h3', { text: 'Preferences' }),
     el('div', { class: 'field' }, el('label', { for: 'set-unit', text: 'Default unit' }), unitSelect),
     el('div', { class: 'field' }, el('label', { for: 'set-rest', text: 'Rest timer (seconds)' }), restInput),
-    el('div', { class: 'field' }, el('label', { for: 'set-theme', text: 'Theme' }), themeSelect)
+    el('div', { class: 'field' },
+      el('label', { for: 'set-theme', text: 'Theme' }), themeSelect,
+      isGlassSkin(currentTheme)
+        ? el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'Frosted glass over a slow background animation. It pauses when the app is in the background and while the mic is listening.' })
+        : null
+    )
+  ));
+
+  /* --- appearance + activity effects --- */
+  const reduceToggle = el('input', {
+    type: 'checkbox', id: 'set-reduce-effects', style: 'width:auto;min-height:auto',
+    checked: Boolean(s.settings.reduceBackgroundEffects),
+    onchange: async (e) => {
+      await state.updateSettings({ reduceBackgroundEffects: e.target.checked });
+      backdrop.setReduceEffects(e.target.checked);
+      toast(e.target.checked ? 'Background animation off.' : 'Background animation on.');
+    }
+  });
+
+  const pauseToggle = el('input', {
+    type: 'checkbox', id: 'set-pause-activity', style: 'width:auto;min-height:auto',
+    checked: Boolean(s.settings.pauseActivityEffects),
+    onchange: async (e) => {
+      // Stamp the pause date so the visuals freeze exactly where they are;
+      // clearing it resumes from the real clock. Training history is untouched
+      // either way — this only affects what the skin draws.
+      await state.updateSettings({
+        pauseActivityEffects: e.target.checked,
+        activityPausedAt: e.target.checked ? store.todayISO() : null
+      });
+      toast(e.target.checked ? 'Activity effects paused.' : 'Activity effects resumed.');
+      render(containerRef);
+    }
+  });
+
+  containerRef.append(el('div', { class: 'card stack' },
+    el('h3', { text: 'Background effects' }),
+    el('div', { class: 'field row' }, reduceToggle,
+      el('label', { for: 'set-reduce-effects', style: 'margin:0', text: 'Reduce background effects — keep the colours, hold the animation still' })),
+    el('p', { class: 'small muted', style: 'margin:0', text: 'Also applied automatically if your device asks for reduced motion.' }),
+
+    el('div', { class: 'field row', style: 'margin-top:14px' }, pauseToggle,
+      el('label', { for: 'set-pause-activity', style: 'margin:0', text: 'Pause activity effects' })),
+    el('p', { class: 'small muted', style: 'margin:0', text: 'Holds the Forge and Fractal skins where they are — for illness, injury, holidays, or a planned deload. Your training history is kept exactly as it is, and you can switch this back off whenever you like.' })
   ));
 
   /* --- data --- */

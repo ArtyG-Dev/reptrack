@@ -1,13 +1,14 @@
-# MANUAL_TEST.md — the one device check
+# MANUAL_TEST.md — the device checks
 
-Everything else is verified automatically. This one cannot be: no headless browser can
-tell you whether Android's audio focus ducked your music.
+Everything else is verified automatically. These two cannot be: no headless browser can
+tell you whether Android's audio focus ducked your music, and no desktop CPU can tell you
+what a background animation costs a mid-range phone.
 
-**Time needed: about two minutes.**
+**Time needed: about two minutes for the first, five for the second.**
 
 ---
 
-## The check: voice logging must not interrupt music
+## Check 1: voice logging must not interrupt music
 
 1. Serve RepTrack over HTTPS (or `http://localhost` via USB port-forwarding) and open it
    in **Chrome on your Android phone**. Install it: menu → *Add to Home screen*. Launch it
@@ -30,6 +31,38 @@ Then confirm the parsed set appears (60 kg × 10) and tap **Save**.
 
 ---
 
+## Check 2: the animated skins on a real phone
+
+`npm run skins` measures each skin at 2–3% of one core — but that is headless Chromium on a
+desktop CPU, and it only counts main-thread work. It cannot see the GPU cost of the frosted
+glass blur, which on a phone is plausibly the bigger half. So the budget in the brief
+(~5% CPU on a mid-range Android, no meaningful battery hit over a session) is only really
+answerable here.
+
+1. On the phone, **Settings → Theme → Forge**. Then **Terminal**, then **Fractal**.
+2. For each: leave it on the Today tab for ~30 seconds and just watch.
+3. Then do one real thing — start a session and log a set by voice.
+
+### What to watch for
+
+| Observation | Meaning |
+|---|---|
+| Scrolling and tapping stay as smooth as they are on Light | ✅ Pass |
+| The background is a slow drift/glow — no flicker, no strobe, nothing sharp | ✅ Pass — it should be barely noticeable |
+| The background visibly freezes the instant the mic starts listening, and resumes after | ✅ Pass — this is the auto-pause working |
+| The phone feels warm, or the battery drops noticeably faster than usual during a session | ❌ Over budget — tell me which skin and I'll simplify it (fewer particles, lower backing-store resolution, or drop the blur to a plain scrim on small screens) |
+| Any stutter while scrolling, or the keyboard/mic feeling laggy | ❌ Same — tell me which skin |
+
+Also worth a quick look while you're in there:
+
+- **Settings → Background effects → Reduce background effects.** The background should go
+  completely still — a frozen frame, not a slow one — and stay a still frame after a reload.
+- **Text stays easy to read** over the moving background on all three, in daylight and in a
+  dark room. The contrast is verified mathematically at both extremes of the animation, but
+  a phone screen at low brightness in the sun is the real test.
+
+---
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.
@@ -43,8 +76,18 @@ Then confirm the parsed set appears (60 kg × 10) and tap **Save**.
 
 ## What I do with the result
 
+**Check 1 — music:**
+
 - **Pass** → criterion #3 in `ACCEPTANCE.md` flips from ⚠️ to ✅. Nothing to change.
 - **Ducks** → acceptable per the spec (“degrades gracefully”), recorded as such.
 - **Pauses** → I change the mic button's default to tap-to-text and keep voice behind an
   opt-in in Settings. Roughly a ten-minute change; the fallback path is already built and
   tested.
+
+**Check 2 — skins:**
+
+- **Pass** → the device half of criterion #34 is recorded against the headless numbers.
+- **Warm or stuttering** → I simplify the offending skin rather than shipping it as-is,
+  which is what the brief asks for. In order of what I'd try: halve the particle count,
+  drop the canvas backing store another step, then replace `backdrop-filter` with an opaque
+  scrim below a screen-width threshold. The skin stays; the cost comes down.

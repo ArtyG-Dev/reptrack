@@ -1,6 +1,7 @@
 /* App shell: boots state, wires the tab router, registers the service worker. */
 
 import * as state from './state.js';
+import * as backdrop from './backdrop.js';
 import { toast } from './ui.js';
 import * as todayView from './views/today.js';
 import * as diaryView from './views/diary.js';
@@ -18,6 +19,11 @@ const VIEWS = {
 
 const ORDER = Object.keys(VIEWS);
 let active = 'today';
+
+// Read-only diagnostics hook for tests and scripts/measure-skins.mjs. Assigned
+// at module scope rather than inside boot() so it exists even if the database
+// fails to open — otherwise a diagnostic tool races the thing it inspects.
+window.__backdrop = backdrop;
 
 async function renderActive() {
   const entry = VIEWS[active];
@@ -74,12 +80,28 @@ function wireStatus() {
   paint();
 }
 
-/** `?theme=light|neon` previews a scheme without changing the saved setting —
- * used by scripts/run-lighthouse.mjs to score both themes. */
+/** `?theme=<id>` previews a scheme without changing the saved setting — used by
+ * scripts/run-lighthouse.mjs and scripts/measure-skins.mjs to exercise each one.
+ * `?static=1` forces the reduced-effects path so the static render can be
+ * verified without needing to fake a media query. */
 function wireTheme() {
-  const override = new URLSearchParams(location.search).get('theme');
-  const theme = override === 'light' || override === 'neon' ? override : state.getState().settings.theme;
-  settingsView.applyTheme(theme);
+  const params = new URLSearchParams(location.search);
+  const settings = state.getState().settings;
+
+  backdrop.mount(document.getElementById('backdrop'));
+  backdrop.setReduceEffects(Boolean(settings.reduceBackgroundEffects) || params.get('static') === '1');
+
+  const override = params.get('theme');
+  const themes = new Set(settingsView.THEMES.map(([id]) => id));
+  settingsView.applyTheme(themes.has(override) ? override : settings.theme);
+  pushActivity();
+}
+
+/** Feed the consistency-driven glow to the backdrop. Cheap, and only the two
+ * activity-responsive skins read it. */
+function pushActivity() {
+  const { glow, frostHint } = state.activityVisual();
+  backdrop.setActivity({ glow, frostHint });
 }
 
 async function registerServiceWorker() {
@@ -107,7 +129,7 @@ async function boot() {
   wireTheme();
   todayView.startTicker();
 
-  state.subscribe(() => { renderActive(); });
+  state.subscribe(() => { pushActivity(); renderActive(); });
 
   const initial = location.hash.slice(1);
   await activate(VIEWS[initial] ? initial : 'today');

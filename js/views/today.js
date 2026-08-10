@@ -1,6 +1,7 @@
 /* Today / Active Session — the screen you actually use in the gym. */
 
 import * as state from '../state.js';
+import * as backdrop from '../backdrop.js';
 import { el, clear, toast, openSheet, promptSheet, confirmSheet, clockTime, disclosure, titleCase } from '../ui.js';
 import { parseTranscript, describeSet, formatNumber } from '../parser.js';
 import { listenOnce, isSupported as voiceSupported, VoiceInputError } from '../voice.js';
@@ -219,14 +220,19 @@ async function voiceLog() {
     return;
   }
   listening = true;
+  // Nothing may compete with speech recognition — the animated backdrop stops
+  // for the duration, and resumes on either exit path below.
+  backdrop.setVoiceActive(true);
   render(containerRef);
   try {
     const { transcript } = await listenOnce({});
     listening = false;
+    backdrop.setVoiceActive(false);
     render(containerRef);
     await handleParsed(parseTranscript(transcript, state.parserContext()));
   } catch (error) {
     listening = false;
+    backdrop.setVoiceActive(false);
     render(containerRef);
     const message = error instanceof VoiceInputError ? error.message : 'Voice input failed — type the set instead.';
     const fallback = await confirmSheet({

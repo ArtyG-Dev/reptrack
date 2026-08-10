@@ -19,7 +19,8 @@ Vanilla HTML/CSS/JS. No framework, no build step, no runtime dependencies.
 - **Exercises** — your own dictionary, grouped into collapsible categories (Strength,
   Calisthenics, Yoga, Pilates, or anything you type — it's not a fixed list). Add lifts,
   poses or holds and the aliases you actually say out loud.
-- **Settings** — units, rest timer, **Light or High-Contrast Neon theme**, JSON export/import, wipe.
+- **Settings** — units, rest timer, **five themes** (two flat, three animated), background
+  effect controls, JSON export/import, wipe.
 - **Weekly summary** — one tap turns the week into a plain-text file (sessions, lifts, PRs,
   volume, runs) that you can share or save. Generated on-device, works offline.
 
@@ -111,20 +112,59 @@ runs with pace, and a day-by-day line. Plain text, no network, no formatting to 
 
 ---
 
-## Colour schemes
+## Themes
 
-**Settings → Theme.** Light is the default — clean, minimal, soft neutrals. High-Contrast
-Neon is a dark, saturated alternative (electric cyan/green/pink accents) built for the same
-accessibility bar: every colour pair still meets 4.5:1 contrast, and nothing flashes,
-strobes or glows — the boldness is in the colours, not in motion. The choice applies
-instantly and is remembered next time you open the app.
+**Settings → Theme.** Five of them. The choice applies instantly and is remembered.
+
+| | |
+|---|---|
+| **Light** | The default — clean, minimal, soft neutrals. |
+| **High-Contrast Neon** | Dark and saturated, electric cyan/green/pink. Bold in colour, not in motion. |
+| **Terminal** | Frosted glass over slow drifting data streams. Cool, dark, muted; the background is texture, not content. |
+| **Fractal** | Frosted glass over a slowly morphing pattern that brightens as your training gets more consistent. A full cycle takes about a minute. |
+| **Forge** | Frosted glass over a huge, faint dumbbell with warm sparks. The glow rises with consistency and cools slowly when you ease off. |
+
+All five meet the same accessibility bar: every colour pair clears 4.5:1 contrast — for the
+animated ones, checked against the background at both its lightest and its darkest, so it
+holds for every frame. Nothing flashes or strobes.
+
+### The animated ones
+
+They are drawn on a small canvas, capped at 30 fps, and measured: each costs about
+2–3% of one CPU core on a desktop, and stops entirely when it isn't earning it. It pauses
+when you switch apps, and it pauses while the mic is listening — speech recognition never
+competes with a background effect.
+
+**Settings → Background effects** has two switches:
+
+- **Reduce background effects** — keep the theme, drop the motion. The background renders as
+  a single still frame. If your device is set to reduce motion system-wide, this happens
+  automatically, and it's still a still frame rather than a slow one.
+- **Pause activity effects** — freezes the Forge/Fractal response where it is. For illness,
+  injury, a holiday, or a deliberate deload. Nothing is erased; turn it off and it picks up
+  from the real date again.
+
+### About the Forge glow
+
+The glow tracks how consistently you've been training lately, measured against *your own*
+recent baseline rather than a fixed target — so it means the same thing whether you train
+twice a week or five times. It moves slowly and deliberately: missing one session is
+essentially invisible, and easing off cools it gently rather than dropping it.
+
+After a long gap, and only if you'd built a real habit first, calendar days can pick up a
+faint frosted edge. It's capped — a very long gap looks the same as a moderate one — it's
+only ever on the calendar, never on anything you use to log a session, and one session
+clears all of it. There is no counter, no streak, and no message anywhere: nothing in the
+app tells you how long you were away. It's meant to make showing up feel good, not to make
+coming back feel bad.
 
 ## Development
 
 ```bash
-npm test               # 125+ unit, integration and browser tests
+npm test               # unit, integration and browser tests
 npm run footprint      # app shell + a simulated year of data, in MB
-npm run lighthouse     # PWA + accessibility scores, for both colour schemes
+npm run lighthouse     # PWA + accessibility scores, for all five themes
+npm run skins          # CPU cost of each animated skin
 npm run acceptance     # all of the above, and rewrites ACCEPTANCE.md
 npm run icons          # regenerate the PWA icons
 ```

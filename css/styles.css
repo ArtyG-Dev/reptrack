@@ -1,15 +1,22 @@
 /* RepTrack — single stylesheet, semantic custom properties.
- * Two colour schemes: Light (default) on :root, High-Contrast Neon overrides on
- * [data-theme="neon"]. Settings sets the attribute and it applies immediately,
- * no reload. Every foreground/background pair used in the UI is contrast-checked
- * by tests/contrast.test.js (>= 4.5:1) in BOTH schemes — "neon" is bold and
- * saturated, but never at the cost of readability.
  *
- * Neon is deliberately static: no glow, pulse, or animated accent anywhere in
- * this block. The one pre-existing animation in the app (.mic-btn.is-listening's
- * gentle brightness pulse, further down) is a recording-state indicator present
- * in every theme, not a neon effect, and already backs off under
- * prefers-reduced-motion below.
+ * Five colour schemes. Settings sets `data-theme` on <html> and it applies
+ * immediately, no reload:
+ *   light     (default, on :root)   flat, opaque
+ *   neon                            flat, opaque, high-contrast
+ *   terminal | fractal | forge      frosted glass over an animated backdrop
+ *
+ * Every foreground/background pair is contrast-checked at >= 4.5:1 by
+ * tests/contrast.test.js in EVERY scheme. For the three glass schemes that check
+ * is run twice — compositing the glass scrim over `--backdrop-base` (the darkest
+ * the animated layer ever draws) and over `--backdrop-ink` (the lightest) — so
+ * the floor holds across the whole animation range, not just one frame.
+ *
+ * No scheme animates in CSS. The only @keyframes in this file is the
+ * pre-existing mic recording pulse, and a test enforces that it stays the only
+ * one: all skin motion lives on a canvas in js/backdrop.js, which can be paused
+ * on tab-hide, during voice recognition, and for prefers-reduced-motion.
+ * A CSS animation could not be paused for any of those.
  */
 
 :root {
@@ -50,6 +57,102 @@
   --ok: #2dffb0;
   --warn: #ffd60a;
   --shadow: 0 1px 2px rgba(0, 0, 0, .6), 0 8px 24px rgba(0, 0, 0, .45);
+}
+
+/* ---------- glass skins ----------
+ * Each declares, on top of the usual semantic set:
+ *   --backdrop-base   the fill, and the darkest colour the canvas may draw
+ *   --backdrop-ink    the lightest colour the canvas may draw
+ *   --backdrop-*      every other colour the canvas uses; all must sit inside
+ *                     [base, ink] luminance — enforced by tests/contrast.test.js
+ *   --glass / --glass-2 / --glass-alpha   the panel scrim, composited over the
+ *                     backdrop extremes for the contrast check
+ *   --surface / --surface-2   the OPAQUE fallback, used where backdrop-filter is
+ *                     unsupported; equal to the scrim over --backdrop-base
+ * js/backdrop.js reads the --backdrop-* values off the computed style, so the
+ * stylesheet is the single source of truth for what can appear on screen.
+ */
+
+[data-theme="terminal"] {
+  --bg: #04070b;
+  --surface: #080c13;
+  --surface-2: #12171d;
+  --text: #e2edf3;
+  --muted: #9db4c2;
+  --border: #223240;
+  --accent: #63d0e6;
+  --on-accent: #04141a;
+  --danger: #ff8a9c;
+  --on-danger: #2a0008;
+  --ok: #6ee7a8;
+  --warn: #f0c552;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .65), 0 10px 30px rgba(0, 0, 0, .5);
+
+  --glass: 8 13 20;
+  --glass-2: 20 25 32;
+  --glass-alpha: .88;
+  --backdrop-base: #04070b;
+  --backdrop-ink: #2f5567;
+  --backdrop-grid: #12222c;
+  --backdrop-stream: #24485a;
+
+  --frost-edge: #7fb9cf;
+  --frost-sheen: rgba(190, 226, 240, .22);
+}
+
+[data-theme="fractal"] {
+  --bg: #070510;
+  --surface: #0c0917;
+  --surface-2: #171422;
+  --text: #ece7fa;
+  --muted: #b3a9d0;
+  --border: #2b2440;
+  --accent: #b39cf5;
+  --on-accent: #100726;
+  --danger: #ff8fa8;
+  --on-danger: #2c0210;
+  --ok: #7fe3c0;
+  --warn: #f2c766;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .65), 0 10px 30px rgba(0, 0, 0, .5);
+
+  --glass: 13 10 24;
+  --glass-2: 25 22 36;
+  --glass-alpha: .88;
+  --backdrop-base: #070510;
+  --backdrop-ink: #4a3a7a;
+  --backdrop-bloom-a: #2c2154;
+  --backdrop-bloom-b: #1c3350;
+
+  --frost-edge: #a99bdc;
+  --frost-sheen: rgba(214, 205, 245, .2);
+}
+
+[data-theme="forge"] {
+  --bg: #0a0604;
+  --surface: #110a07;
+  --surface-2: #1c1511;
+  --text: #f6e9df;
+  --muted: #c4a894;
+  --border: #3a2a20;
+  --accent: #ff9d4d;
+  --on-accent: #2a1200;
+  --danger: #ff8a86;
+  --on-danger: #2c0604;
+  --ok: #8fe0a0;
+  --warn: #ffc861;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .7), 0 10px 30px rgba(0, 0, 0, .55);
+
+  --glass: 18 11 7;
+  --glass-2: 30 23 19;
+  --glass-alpha: .88;
+  --backdrop-base: #0a0604;
+  --backdrop-ink: #6b3410;
+  --backdrop-iron: #241813;
+  --backdrop-ember: #5a2a0c;
+  --backdrop-spark: #6b3410;
+
+  --frost-edge: #8fb6c8;
+  --frost-sheen: rgba(198, 226, 238, .2);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -407,6 +510,66 @@ textarea { min-height: 84px; resize: vertical; }
 .disclosure-summary { flex: 1 1 auto; }
 .disclosure-panel { padding: 0 4px 12px; }
 .disclosure-panel[hidden] { display: none; }
+
+/* ---------- frosted glass skins ---------- */
+
+/* The animated backdrop. Sits behind everything, is never interactive, and is
+ * hidden outright for the two flat themes. js/backdrop.js owns what it draws
+ * and when it runs. */
+#backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  display: none;
+  pointer-events: none;
+}
+[data-glass="1"] #backdrop { display: block; }
+[data-theme="fractal"] #backdrop { filter: blur(18px); }
+
+/* Opaque fallback first (above), glass only where the browser can actually
+ * blur — an unsupported backdrop-filter would otherwise leave text floating on
+ * a translucent panel over moving content, which is exactly the contrast
+ * failure the whole scheme is designed to avoid. */
+@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  [data-glass="1"] .card,
+  [data-glass="1"] .app-bar,
+  [data-glass="1"] .tabbar,
+  [data-glass="1"] .sheet-inner,
+  [data-glass="1"] .toast {
+    background: rgba(var(--glass) / var(--glass-alpha));
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    backdrop-filter: blur(14px) saturate(115%);
+  }
+
+  [data-glass="1"] .btn,
+  [data-glass="1"] input[type="text"],
+  [data-glass="1"] input[type="number"],
+  [data-glass="1"] input[type="search"],
+  [data-glass="1"] input[type="date"],
+  [data-glass="1"] select,
+  [data-glass="1"] textarea,
+  [data-glass="1"] .cal-day,
+  [data-glass="1"] .transcript,
+  [data-glass="1"] .set-index {
+    background: rgba(var(--glass-2) / var(--glass-alpha));
+  }
+
+  [data-glass="1"] .btn-primary { background: var(--accent); }
+  [data-glass="1"] .btn-danger { background: var(--danger); }
+  [data-glass="1"] .btn-ghost { background: transparent; }
+  [data-glass="1"] .cal-day.has-session { background: var(--accent); }
+}
+
+/* Frost — Forge skin only, calendar day cells only, and deliberately an *edge*
+ * treatment: it changes no background and no text colour, so it cannot move any
+ * contrast ratio. See js/consistency.js for when this class is applied at all;
+ * the short version is that it is heavily gated and firmly capped. */
+.cal-day.is-frosted {
+  border-color: var(--frost-edge);
+  box-shadow: inset 0 1px 0 var(--frost-sheen), inset 0 0 6px var(--frost-sheen);
+}
 
 .noscript { padding: 24px; }
 

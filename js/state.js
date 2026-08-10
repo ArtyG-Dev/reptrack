@@ -6,6 +6,7 @@ import * as store from './store.js';
 import { SEED_EXERCISES } from './exercises-seed.js';
 import { isPersonalRecord } from './progression.js';
 import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
+import { activityVisualState, frostedDates } from './consistency.js';
 
 const state = {
   ready: false,
@@ -303,6 +304,28 @@ export async function updateSettings(patch) {
   state.settings = await store.saveSettings(patch);
   emit();
   return state.settings;
+}
+
+/* ---------- activity-responsive visuals (Forge / Fractal skins) ---------- */
+
+function activityInput() {
+  return {
+    sessions: state.allSessions,
+    runs: state.runs,
+    todayISO: store.todayISO(),
+    pauseActivityEffects: Boolean(state.settings.pauseActivityEffects),
+    activityPausedAt: state.settings.activityPausedAt || null
+  };
+}
+
+/** Glow / frost state the skins render from. See js/consistency.js. */
+export function activityVisual() {
+  return activityVisualState(activityInput());
+}
+
+/** Calendar days that show frost — always a Set, empty unless genuinely earned. */
+export function frostedCalendarDates() {
+  return frostedDates(activityInput());
 }
 
 /* ---------- collapsible panel state ----------

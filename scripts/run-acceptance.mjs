@@ -22,8 +22,9 @@ function run(label, args) {
 }
 
 /* 1. Test suite */
-const tests = run('Test suite', ['--test', 'tests/browser.test.js', 'tests/chart.test.js', 'tests/contrast.test.js',
-  'tests/db.test.js', 'tests/parser.test.js', 'tests/progression.test.js', 'tests/pwa-static.test.js', 'tests/summary.test.js']);
+const tests = run('Test suite', ['--test', 'tests/browser.test.js', 'tests/chart.test.js', 'tests/consistency.test.js',
+  'tests/contrast.test.js', 'tests/db.test.js', 'tests/parser.test.js', 'tests/progression.test.js',
+  'tests/pwa-static.test.js', 'tests/summary.test.js']);
 const pass = Number(tests.output.match(/^# pass (\d+)$/m)?.[1] ?? 0);
 const fail = Number(tests.output.match(/^# fail (\d+)$/m)?.[1] ?? 0);
 const skipped = Number(tests.output.match(/^# skipped (\d+)$/m)?.[1] ?? 0);
@@ -34,25 +35,42 @@ if (fail) console.log(tests.output.split('\n').filter((l) => l.trim().startsWith
 const footprintRun = run('Footprint', ['scripts/measure-footprint.mjs']);
 console.log(footprintRun.output.trim());
 
-/* 3. Lighthouse */
+/* 3. Lighthouse (every theme) */
 const lighthouseRun = run('Lighthouse', ['scripts/run-lighthouse.mjs']);
 console.log(lighthouseRun.output.trim());
+
+/* 4. Skin CPU cost */
+const skinsRun = run('Skin cost', ['scripts/measure-skins.mjs']);
+console.log(skinsRun.output.trim());
 
 const read = (file) => (existsSync(join(ROOT, file)) ? JSON.parse(readFileSync(join(ROOT, file), 'utf8')) : null);
 const footprint = read('.reports/footprint.json');
 const lighthouse = read('.reports/lighthouse.json');
+const skins = read('.reports/skins.json');
 
-/* 4. Write the measured block into ACCEPTANCE.md */
+/* 5. Write the measured block into ACCEPTANCE.md */
 const scores = lighthouse?.scores ?? {};                                    // default (light) run
-const neonAccessibility = lighthouse?.themes?.neon?.scores?.accessibility;
+const themeScores = lighthouse?.themes ?? {};
+const THEME_LABELS = { light: 'Light', neon: 'Neon', terminal: 'Terminal', fractal: 'Fractal', forge: 'Forge' };
+const a11yOf = (theme) => themeScores?.[theme]?.scores?.accessibility;
+const everyThemeAccessible = Object.keys(THEME_LABELS).every((t) => (a11yOf(t) ?? scores.accessibility ?? 0) >= 90);
+
 const rows = [
   ['Automated tests', `${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ''}`, fail === 0],
   ['Lighthouse — PWA', scores.pwa ?? 'n/a', (scores.pwa ?? 0) >= 90],
-  ['Lighthouse — Accessibility (Light theme)', scores.accessibility ?? 'n/a', (scores.accessibility ?? 0) >= 90],
-  ['Lighthouse — Accessibility (Neon theme)', neonAccessibility ?? 'n/a', (neonAccessibility ?? 0) >= 90],
+  ...Object.entries(THEME_LABELS).map(([id, label]) => [
+    `Lighthouse — Accessibility (${label})`,
+    a11yOf(id) ?? 'n/a',
+    (a11yOf(id) ?? 0) >= 90
+  ]),
   ['Lighthouse — Performance', scores.performance ?? 'n/a', true],
   ['Lighthouse — Best practices', scores['best-practices'] ?? 'n/a', true],
   ['Lighthouse — SEO', scores.seo ?? 'n/a', true],
+  ...(skins ? ['terminal', 'fractal', 'forge'].map((skin) => [
+    `Skin CPU — ${THEME_LABELS[skin]} (main thread, over baseline)`,
+    `${skins.runs[skin].animated.cpuPercent}% total, +${skins.runs[skin].overBaselinePercent}% vs Light · ${skins.runs[skin].animated.fps} fps`,
+    skins.runs[skin].withinBudget
+  ]) : []),
   ['App shell size', `${footprint?.shell.mb ?? '?'} MB`, true],
   ['A year of data (156 sessions, 3120 sets, 52 runs)', `${footprint?.yearOfData.estimatedStoredMB ?? '?'} MB stored`, true],
   ['Total installed footprint', `${footprint?.totalMB ?? '?'} MB of a 50 MB budget`, Boolean(footprint?.withinBudget)]
@@ -88,9 +106,12 @@ writeFileSync(join(ROOT, '.reports/acceptance.json'), `${JSON.stringify({
   measuredAt: new Date().toISOString(),
   tests: { pass, fail, skipped },
   footprint,
-  lighthouse: { scores, themes: lighthouse?.themes, version: lighthouse?.lighthouseVersion }
+  lighthouse: { scores, themes: lighthouse?.themes, version: lighthouse?.lighthouseVersion },
+  skins
 }, null, 2)}\n`);
 
-const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90 && (scores.accessibility ?? 0) >= 90 && (neonAccessibility ?? 0) >= 90;
+const skinsWithinBudget = !skins || ['terminal', 'fractal', 'forge'].every((s) => skins.runs[s].withinBudget);
+const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90
+  && everyThemeAccessible && skinsWithinBudget;
 console.log(`\n${green ? '✅ All headless acceptance criteria pass.' : '❌ Acceptance criteria not met.'}`);
 process.exit(green ? 0 : 1);

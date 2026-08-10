@@ -5,20 +5,26 @@ Regenerate the measured block with `npm run acceptance`.
 
 <!-- measured:start -->
 
-_Measured 2026-08-09 — regenerate with `npm run acceptance`._
+_Measured 2026-08-10 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 130 passed, 0 failed | ✅ |
+| Automated tests | 173 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
-| Lighthouse — Accessibility (Light theme) | 100 | ✅ |
-| Lighthouse — Accessibility (Neon theme) | 100 | ✅ |
-| Lighthouse — Performance | 96 | ✅ |
+| Lighthouse — Accessibility (Light) | 100 | ✅ |
+| Lighthouse — Accessibility (Neon) | 100 | ✅ |
+| Lighthouse — Accessibility (Terminal) | 100 | ✅ |
+| Lighthouse — Accessibility (Fractal) | 100 | ✅ |
+| Lighthouse — Accessibility (Forge) | 100 | ✅ |
+| Lighthouse — Performance | 94 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| App shell size | 0.166 MB | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2.4% total, +2.4% vs Light · 22 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 2.3% total, +2.3% vs Light · 22.5 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 3.5% total, +3.5% vs Light · 22.3 fps | ✅ |
+| App shell size | 0.197 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.29 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.321 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -44,7 +50,7 @@ telling search engines not to index the app.
 | 7 | Progress charts render per-exercise weight & rep history with PR flags | `chart.test.js` covers the geometry; `progression.test.js` covers PR detection; `browser.test.js` asserts a labelled `svg.chart` renders | ✅ |
 | 8 | Total installed footprint stays well under 50 MB; report the measured number | `npm run footprint` — app shell on disk plus a simulated year (3 sessions/week, 20 sets each, 1 run/week) written to IndexedDB, with a pessimistic ×3 store-overhead factor | ✅ see measured block |
 | 9 | Data export/import as JSON works | `db.test.js` round-trips export → wipe → import including a JSON serialise cycle, covers merge mode and rejects malformed backups; `browser.test.js` downloads the real file from the UI | ✅ |
-| 10 | Accessible: keyboard-navigable, ARIA labels, ≥ 4.5:1 contrast, respects reduced-motion | `contrast.test.js` checks 17 colour pairs per theme against the real stylesheet; `browser.test.js` runs axe-core on all five tabs and asserts every visible control is labelled and the tablist supports arrow keys; reduced-motion handled globally in `css/styles.css` | ✅ |
+| 10 | Accessible: keyboard-navigable, ARIA labels, ≥ 4.5:1 contrast, respects reduced-motion | `contrast.test.js` checks 17 colour pairs against the real stylesheet for each flat theme, and 12 pairs against both extremes of the backdrop range for each glass skin (see #31); `browser.test.js` runs axe-core on all five tabs in every theme and asserts every visible control is labelled and the tablist supports arrow keys; reduced-motion handled globally in `css/styles.css` and by `backdrop.js` holding a still frame | ✅ |
 | 11 | Lighthouse PWA + Accessibility both ≥ 90 | `npm run lighthouse` (gates the run; exits non-zero below 90) | ✅ see measured block |
 
 ## Added after the roadmap update
@@ -84,6 +90,35 @@ Per `docs/FOLLOWUP_PROMPT_BLOCK_INDEXING.md`.
 | 28 | The live URL is not a crawlable hyperlink anywhere in the repo's own docs | Checked by hand: every mention of `artyg-dev.github.io/reptrack` in `README.md`/`CLAUDE.md`/`ACCEPTANCE.md`/`DECISIONS.md`/`DEPLOYMENT.md`/`docs/` is inside backtick code spans, which GitHub renders as `<code>`, never `<a>` — none is a markdown link. `README.md` doesn't mention the live URL at all | ✅ |
 | 29 | Pages deployment re-verified live after this merge | GitHub Actions run [`46eeb8d`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31287089210) completed with conclusion `success` — robots.txt and the noindex meta tag are live at https://artyg-dev.github.io/reptrack/ | ✅ |
 
+## Added after the animated skins update
+
+Per `docs/FOLLOWUP_PROMPT_SKINS.md`.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 30 | All three skins selectable in Settings, persist across sessions, apply without reload | `browser.test.js` → "all five themes are selectable, apply without reload, and persist" selects each in turn, asserts `data-theme` changes with no navigation, then reloads and asserts the stored choice survives | ✅ |
+| 31 | All three pass Lighthouse a11y ≥ 90 **and** 4.5:1 contrast at both extremes of their animation range | `contrast.test.js` — per skin, composites the glass scrim (`--glass`/`--glass-2` at `--glass-alpha`) over **both** `--backdrop-base` and `--backdrop-ink` and checks 12 text pairs against each; a companion test asserts every `--backdrop-*` token's luminance sits inside that range, which is what makes the two endpoints bracket every frame the canvas can draw. `npm run lighthouse` now loops all five themes and gates each on a11y ≥ 90; `browser.test.js` → "axe-core finds no violations in any of the glass skins" | ✅ see measured block (five a11y rows) |
+| 32 | `prefers-reduced-motion` renders a **static** background for each — verified, not assumed | `browser.test.js` → "prefers-reduced-motion renders a static frame, not a slow one" loads each skin with `colorScheme`/`reducedMotion: 'reduce'`, samples the backdrop's frame counter twice and asserts it does not advance — a slowed animation would still advance it, so the test distinguishes static from slow rather than assuming | ✅ |
+| 33 | Animation auto-pauses when backgrounded and during voice recognition | `browser.test.js` → "the backdrop stops while the tab is hidden" (real `visibilitychange` via CDP) and "the backdrop stops while speech recognition is listening" (drives the actual mic button with a stubbed recogniser and asserts the frame counter is frozen for the duration, then resumes) | ✅ |
+| 34 | Measured CPU cost of each skin recorded in `ACCEPTANCE.md`; any skin over budget is simplified, not shipped | `npm run skins` (`scripts/measure-skins.mjs`) samples CDP `Performance.getMetrics` `TaskDuration` over a 6s window per skin against a no-canvas Light baseline; `run-acceptance.mjs` writes the rows into the measured block and fails the run if any skin exceeds baseline + 5% | ✅ see measured block — **and read the caveat below** |
+| 35 | Forge consistency score documented in `CLAUDE.md`; glow scales with it | `CLAUDE.md` → "Consistency score" gives the formula, the baseline rule, the three softenings and every frost gate. `consistency.test.js` (21 cases) covers the maths; `browser.test.js` asserts the rendered glow differs between a seeded consistent profile and a seeded silent one | ✅ |
+| 36 | Frost gated behind established history — verified with a simulated new-user profile (no frost) and a simulated lapsed-veteran profile (capped frost) | `browser.test.js` → "a brand-new profile sees no frost, whatever the gap" seeds a fortnight-old first session and a long gap, and asserts zero frosted cells; "a lapsed veteran may show frost — on calendar cells only, and capped" seeds months of history plus a lapse and asserts frosted cells appear. `consistency.test.js` covers each gate separately (`new-user`, `no-established-run`, `recent-activity`, `paused`) | ✅ |
+| 37 | Frost caps at its mild state and does not deepen further with longer gaps | Structural, not tuned: frost is binary (an edge treatment, no depth ramp) and `frostedDates()` returns at most 21 cells of the *current* gap only. `consistency.test.js` → "frost caps: a 21-day gap and a 200-day gap look identical" asserts set equality between the two, and "an old gap in the middle of history is never re-litigated" / "logging one comeback session clears every frosted cell" cover the extent rule | ✅ |
+| 38 | "Pause activity effects" toggle present, prominent, and freezes cooling/frost without data loss | `views/settings.js` — its own "Background effects" card, not buried in a list. `consistency.test.js` → "pausing freezes the glow at the moment it was switched on, without touching history" (evaluation shifts to `activityPausedAt`; the session arrays are untouched); `browser.test.js` → "'pause activity effects' clears frost and freezes the glow, keeping the history" toggles it in the real UI and asserts the sessions are all still in IndexedDB afterwards | ✅ |
+| 39 | No scolding or lapse-quantifying copy anywhere in the theme layer | `browser.test.js` → "the theme layer never scolds or counts the days missed" loads the lapsed-veteran profile in Forge, walks the full rendered text of every tab plus every `aria-label`/`title`/`aria-live` region, and fails on any match for streak/missed/days-since/"you haven't"-style phrasing. The system produces no copy at all by construction — nothing reads `consistency.js` except the canvas and a CSS class | ✅ |
+| 40 | Footprint still < 50 MB with all skins included (no video assets, no heavy libraries) | `npm run footprint` — unchanged methodology. The skins add two JS modules and a CSS block; there is no image, video or library. `pwa-static.test.js` still fails on any runtime dependency | ✅ see measured block |
+
+**On the CPU numbers (#34) — what they are and are not:** the brief's budget is ~5% on a
+mid-range Android. `scripts/measure-skins.mjs` runs headless Chromium on a desktop-class
+CPU, so it is a *proxy* for that budget, not a measurement of it. It also counts main-thread
+work only — GPU compositing of the `backdrop-filter` blur does not appear in `TaskDuration`,
+and on a phone that blur is plausibly the larger of the two costs. That is why the reported
+figure is the *increment over a no-canvas baseline* rather than an absolute, and why a real
+device check was added to `MANUAL_TEST.md` rather than treating the headless number as
+sufficient. The static-mode row of `.reports/skins.json` records 0 frames drawn while
+sampling, which is the direct evidence that reduced-effects mode costs nothing rather than
+merely less.
+
 ## Build constraints
 
 | Constraint | Verification | Status |
@@ -104,10 +139,12 @@ npm run lighthouse     # scores, exits non-zero below the gates
 npm run acceptance     # all three + rewrites the measured block above
 ```
 
-The only criterion that cannot be verified headlessly is #3, the music behaviour.
-`MANUAL_TEST.md` is the one thing to check on a real phone.
+Two things cannot be settled headlessly, and both live in `MANUAL_TEST.md`: criterion #3,
+the music behaviour, and the real-device half of criterion #34, the skin CPU/battery cost.
 
-Lighthouse now runs against both colour schemes (`?theme=light`, `?theme=neon` — a
-preview-only URL override `app.js` reads at boot, read `js/app.js` `wireTheme()`) and gates
-on both scoring ≥ 90 for accessibility. The measured block above reports the default
-(light) run; the neon run's accessibility score has its own row.
+Lighthouse runs against all five themes (`?theme=light|neon|terminal|fractal|forge` — a
+preview-only URL override `app.js` reads at boot, see `js/app.js` `wireTheme()`) and gates
+every one of them at ≥ 90 for accessibility. The measured block above reports the default
+(light) run's other categories; each theme's accessibility score has its own row.
+`?static=1` alongside it forces the reduced-effects path, which is how the static render is
+exercised without faking a media query.

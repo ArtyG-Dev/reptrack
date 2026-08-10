@@ -81,6 +81,37 @@ test('every HTML page carries the noindex meta tag, not just index.html', () => 
   }
 });
 
+/** The app is meant to be direct-access only: robots.txt and the noindex meta
+ *  tag ask compliant crawlers not to index it, but neither stops GitHub's own
+ *  markdown renderer from turning a stray mention of the live host into a
+ *  clickable (and therefore discoverable/crawlable-by-other-means) link in
+ *  this repo's own docs. This caught a real regression: two ACCEPTANCE.md
+ *  rows had the URL as bare text, which GFM auto-links, even though a later
+ *  row in the same file claimed — by then incorrectly — that no such link
+ *  existed. See DECISIONS.md. */
+test('the live URL is never a crawlable hyperlink in the repo\'s own docs', () => {
+  const HOST = 'artyg-dev.github.io';
+  const mdFiles = walk(ROOT).filter((f) => f.endsWith('.md'));
+  assert.ok(mdFiles.length > 0, 'expected at least one markdown doc to check');
+
+  for (const file of mdFiles) {
+    const source = readFileSync(file, 'utf8');
+    const rel = relative(ROOT, file);
+
+    // A markdown link whose target is the live host is a hyperlink no matter
+    // how its label is formatted — e.g. [`text`](https://artyg-dev.github.io/x).
+    for (const link of source.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
+      assert.ok(!link[1].includes(HOST), `${rel} links directly to the live host: ${link[1]}`);
+    }
+
+    // Outside of link targets, the host may only appear inside a backtick
+    // code span or fenced block — bare text auto-links under GFM.
+    const withoutLinks = source.replace(/\[[^\]]*\]\([^)]+\)/g, '');
+    const withoutCode = withoutLinks.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '');
+    assert.ok(!withoutCode.includes(HOST), `${rel} mentions the live host outside a code span — GitHub will auto-link it`);
+  }
+});
+
 test('index.html links the manifest, sets viewport and theme colour', () => {
   assert.match(indexHtml, /<link rel="manifest" href="manifest\.webmanifest">/);
   assert.match(indexHtml, /name="viewport"/);

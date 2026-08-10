@@ -468,3 +468,33 @@ the acceptance record overstated what the browser suite actually covered. Two re
 now exist — "forge is visibly warmer for a consistent profile than a fresh one" (pixel
 brightness, cold vs. hot) and the lightning-frequency test above — and `ACCEPTANCE.md` #35
 now cites them by name instead of a description that didn't match any test in the file.
+
+---
+
+## Crawler exclusion re-verified and hardened
+
+### 46. "Checked by hand" for #28 had already gone stale — two rows shipped with bare, auto-linkable URLs
+
+Asked to re-confirm the app stays crawler-exclusion/direct-access-only, I re-read every doc
+mention of `artyg-dev.github.io` rather than trusting the earlier "checked by hand" note.
+Two rows already in `ACCEPTANCE.md` (added when the deployment was first re-verified,
+predating the automated check) wrote the live URL as bare text — `live at
+https://artyg-dev.github.io/reptrack/` — with no surrounding backticks. GitHub's markdown
+renderer auto-links a bare URL like that under GFM, which is exactly the kind of crawlable
+hyperlink `DEPLOYMENT.md` and criterion #28 both claim doesn't exist anywhere in the repo's
+own docs. Fixed by wrapping both in backticks.
+
+`robots.txt`, the noindex meta tag, and the underlying tests covering them
+(`pwa-static.test.js`, `browser.test.js`) were all still intact and passing — the actual
+opt-out mechanism was never broken, only the doc-hygiene guarantee around it.
+
+### 47. "Checked by hand" is now a test, so it can't go stale silently again
+
+A manual check that already missed one real regression isn't a check going forward. Added
+`pwa-static.test.js` → "the live URL is never a crawlable hyperlink in the repo's own docs":
+scans every `.md` file in the repo, fails on a markdown link (`[label](url)`) whose target
+contains the live host regardless of how the label is formatted, and fails on any mention of
+the host outside a backtick code span or fenced block — the exact GFM auto-link condition
+that caused the regression. Verified the test actually catches the pre-fix text before
+trusting it (ran the regex against the two offending rows directly), rather than assuming a
+new assertion is correct because it happens to pass against already-fixed content.

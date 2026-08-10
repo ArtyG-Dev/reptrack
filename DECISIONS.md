@@ -583,3 +583,58 @@ from `backdrop.js` and sweeps heat and flameT from 0 to 1 in 0.02 steps, asserti
 resulting luminance stays inside `[base, ink]`. This is the one runtime colour computation in
 the entire backdrop system that isn't covered by "the canvas only ever paints a declared
 token" — it needed its own proof, and now has one.
+
+---
+
+## Exercise dictionary backfill (direct request, diagnosing a support question)
+
+Asked directly: "Under exercise types I'm only seeing 22 under strength as a default — where
+are the other ones such as yoga, pilates, cardio and calisthenics?"
+
+### 52. The 22 were the original Phase 1 seed list, not a bug in the current one
+
+Diagnosed before writing anything: `js/exercises-seed.js` today has 18 strength + 5
+calisthenics + 3 yoga + 3 pilates = 29 starters, not 22 under strength. But `git show` on the
+Phase 1 commit showed the *original* seed list had exactly 22 exercises, none with a
+`category` field at all (categories didn't exist yet). `views/exercises.js` groups by
+`ex.category || 'strength'` — so every exercise from before that field existed silently
+lands in the Strength bucket. That's what the user was looking at: their own dictionary,
+frozen at Phase 1, not a rendering bug.
+
+The reason it never updated: `state.init()`'s seed loop is `if (!exercises.length)` — it only
+ever writes `SEED_EXERCISES` into a genuinely empty store. An install that already had 22
+exercises from Phase 1 skipped seeding entirely when categories, and later yoga/pilates, were
+added — there was never a path that reconciled an existing dictionary against a growing seed
+list. (There's also no "cardio" category in the exercise dictionary at all, by design — see
+decision 3: runs/cardio are logged through the separate Runs feature, not the exercise list.)
+
+### 53. Backfill by name, once, additive-only — the same shape as every other migration here
+
+`state.init()` now does, when the dictionary is non-empty and `settings.seedBackfillDone` is
+still false: build a set of existing exercise names (trimmed, lower-cased), find every
+`SEED_EXERCISES` entry not in that set, add just those, then set the flag. A fresh install
+still takes the original all-empty branch and sets the same flag immediately, so it's never
+re-scanned on its next boot either.
+
+Three deliberate constraints, in order of how much they cost to get wrong:
+
+- **Never touches an existing record.** Only additions. A user's own edits, renames, and
+  custom exercises are never read, let alone written.
+- **Runs exactly once per install.** Gated on a settings key (`seedBackfillDone`, additive —
+  see decision on `category`/`mode`/`holdSeconds` in `db.js`'s header comment for the
+  pattern), not re-checked on every boot. This means a starter a user deliberately deletes
+  stays deleted — the alternative (re-scan every boot) would silently resurrect it the next
+  time the app opens, which is a worse bug than the one being fixed.
+- **Matches by name, not by identity.** Exercise records carry no seed-id, so "is this starter
+  already here" can only mean "does a record with this name already exist" (case-insensitive).
+  The known cost: a user who renamed a starter (e.g. "Bench Press" → "Bench") will see the
+  original name added back as a second entry on their first post-update boot. Adding a
+  proper seed-id to every exercise record would close this gap but is a bigger schema change
+  than a one-time dictionary top-up warrants; documented here and in `CLAUDE.md` rather than
+  solved, so a future maintainer doesn't have to rediscover it.
+
+`tests/state.test.js` (new) covers all three constraints directly: a fresh install gets every
+starter across every category; an existing dictionary gets exactly the missing starters and
+nothing already present is altered; a second boot after the flag is set does not resurrect a
+deliberately deleted starter; and a starter already present under different casing is not
+duplicated.

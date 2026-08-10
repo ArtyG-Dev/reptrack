@@ -124,6 +124,10 @@ Details that look redundant and are not:
   `activityPausedAt`; every consistency calculation is then evaluated *as of* that date
   instead of today. **This writes one settings key and mutates no training data at all** —
   un-pausing just resumes from the real clock, and nothing was lost in between.
+- **`settings.seedBackfillDone`** (default `false`) — see "Adding a starter exercise" below.
+  Flips to `true` the first time `state.init()` has reconciled this install's dictionary
+  against `exercises-seed.js`, whether that meant a full seed (brand-new install) or a
+  by-name backfill (an existing one). Never re-checked after that.
 
 ---
 
@@ -210,6 +214,24 @@ Hold-mode phrases (used when the matched exercise's `mode === 'hold'`): `parseHo
 same idea but for seconds/minutes/rounds/"each side". `parseTranscript` picks the branch
 and handles intents. Add a case to `tests/parser.test.js` first — the grammar is fully
 covered there and that is the cheapest place to see what you broke.
+
+### Adding a starter exercise
+Add it to `SEED_EXERCISES` in `js/exercises-seed.js`. That alone is enough for a brand-new
+install — `state.init()` seeds the whole list when the dictionary is empty — but **it is not
+enough for anyone already using the app**: the seed loop only ever runs on a genuinely empty
+store, so an existing install's dictionary is frozen at whatever `SEED_EXERCISES` looked like
+the day it was first created. `state.init()` also runs a one-time-per-install backfill (gated
+on `settings.seedBackfillDone`) that adds anything in the current `SEED_EXERCISES` not already
+present *by name* — this is what got yoga/pilates/calisthenics starters to installs whose
+dictionary predated them. It only ever adds, never touches an existing record, and it only
+ever runs once, so a starter a user deliberately deleted doesn't come back. Add a case to
+`tests/state.test.js`, not `tests/db.test.js` — this is `state.js`'s seeding/backfill logic,
+not a `db.js` primitive, even though both run against `fake-indexeddb`.
+
+Matching by name (case-insensitive) is a known, accepted limitation: if a user renamed a
+starter exercise, the backfill can't tell that apart from "never had it" and will add the
+original name back as a second entry. There's no seed-id on exercise records to do better
+with, and adding one is a bigger change than this warranted — see `DECISIONS.md`.
 
 ### Adding a collapsible section
 Use `disclosure()` from `js/ui.js` — pass `id`, `summary`, `expanded`, `onToggle`, `content`.
@@ -322,6 +344,10 @@ npm run acceptance # tests + footprint + Lighthouse + skin cost, rewrites ACCEPT
   are about tone rather than correctness: a dropped session is barely perceptible, a new
   user is never frosted, frost caps, a comeback clears it, pause freezes without erasing.
 - `db` — real IndexedDB semantics via `fake-indexeddb`, including category/mode/holdSeconds.
+- `state` — also against `fake-indexeddb`, but for `state.js`'s own logic: seeding a fresh
+  dictionary, backfilling a starter exercise into an existing one by name without touching
+  what's already there, running that backfill exactly once, and not duplicating a starter
+  that already exists under a different case.
 - `contrast` — parses `css/styles.css` and checks every text pair ≥ 4.5:1 in all five
   themes; for the glass skins it composites the panel scrim over both extremes of the
   backdrop range and checks the result, asserts every `--backdrop-*` token sits inside that

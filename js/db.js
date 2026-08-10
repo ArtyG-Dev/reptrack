@@ -58,7 +58,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // stamped when the toggle goes on and cleared when it goes off.
   reduceBackgroundEffects: false,
   pauseActivityEffects: false,
-  activityPausedAt: null
+  activityPausedAt: null,
+  // Set once state.init() has merged any starter exercises added to
+  // exercises-seed.js after this install's dictionary was first created —
+  // see the backfill note in state.js. Never re-checked after that, so a
+  // starter exercise a user deliberately deletes doesn't come back.
+  seedBackfillDone: false
 });
 
 let dbPromise = null;

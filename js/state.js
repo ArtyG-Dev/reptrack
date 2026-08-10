@@ -76,6 +76,20 @@ export async function init() {
   if (!exercises.length) {
     for (const seed of SEED_EXERCISES) await store.addExercise({ ...seed, isCustom: false });
     exercises = await store.listExercises();
+    state.settings = await store.saveSettings({ seedBackfillDone: true });
+  } else if (!state.settings.seedBackfillDone) {
+    // An install whose dictionary was created before a starter exercise
+    // existed in exercises-seed.js (e.g. before yoga/pilates/calisthenics
+    // were added — the seed loop above only ever runs on a genuinely empty
+    // store) never receives it. Backfill by name, once: add whatever's
+    // missing, touch nothing that's already there. Matching by name means a
+    // starter exercise a user renamed re-appears under its original name
+    // too, which is the honest cost of not tracking a separate seed id.
+    const known = new Set(exercises.map((ex) => ex.name.trim().toLowerCase()));
+    const missing = SEED_EXERCISES.filter((seed) => !known.has(seed.name.trim().toLowerCase()));
+    for (const seed of missing) await store.addExercise({ ...seed, isCustom: false });
+    if (missing.length) exercises = await store.listExercises();
+    state.settings = await store.saveSettings({ seedBackfillDone: true });
   }
   state.exercises = exercises;
 

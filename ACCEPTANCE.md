@@ -9,7 +9,7 @@ _Measured 2026-08-10 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 178 passed, 0 failed | ✅ |
+| Automated tests | 182 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -19,12 +19,12 @@ _Measured 2026-08-10 — regenerate with `npm run acceptance`._
 | Lighthouse — Performance | 94 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 2.8% total, +2.8% vs Light · 22 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 2.8% total, +2.8% vs Light · 21.7 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 3.4% total, +3.4% vs Light · 22.2 fps | ✅ |
-| App shell size | 0.208 MB | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2% total, +2% vs Light · 21.8 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 1.9% total, +1.9% vs Light · 22.2 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 2.6% total, +2.6% vs Light · 22.2 fps | ✅ |
+| App shell size | 0.209 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.332 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.333 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -153,6 +153,20 @@ first use onwards and then reward a consistent streak with greater visual embell
 | 54 | Forge's one runtime colour blend (`mix()`) is proven safe across its full parameter space, not just asserted | `contrast.test.js` → "forge's mixed colours never escape the backdrop range" reimplements the exact `hot`/`ironShape`/`edge`/`flameColor` formulas from `backdrop.js` and sweeps heat/flameT 0→1 in 0.02 steps, asserting every resulting luminance stays inside `[--backdrop-base, --backdrop-ink]`. This replaces an informal comment that turned out to overstate its own guarantee — see `DECISIONS.md` #51 | ✅ |
 | 55 | Re-measured CPU cost stays within budget after widening every range | `npm run skins`: terminal 2.8%, fractal 2.8%, forge 3.4% over baseline (budget +5%) — see measured block | ✅ see measured block |
 | 56 | Pages deployment re-verified live after this merge | GitHub Actions run [`c09f914`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31435715650) completed with conclusion `success`. Same proxy limitation as above applies to fetching the live files back from here | ✅ |
+
+## Added after the exercise dictionary backfill
+
+Direct request diagnosing a support question: "I'm only seeing 22 under strength... where
+are yoga, pilates, cardio and calisthenics?" — see `DECISIONS.md` for the root cause (the 22
+were the Phase 1 seed list, frozen because seeding only ever writes to an empty dictionary).
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 57 | An existing dictionary is backfilled with any starter exercise it's missing, exactly once, on the first boot after the update | `tests/state.test.js` → "a dictionary from before the newer starter categories existed gets backfilled once…" seeds an 18-exercise strength-only dictionary, calls `state.init()`, and asserts every category (including yoga/pilates) is now present and every pre-existing exercise is untouched | ✅ |
+| 58 | The backfill never re-adds a starter a user has deliberately deleted | `tests/state.test.js` → "the backfill never runs twice…" runs `state.init()` once (backfill fires), deletes a backfilled exercise, runs `state.init()` again, and asserts it does not reappear — gated on the new `settings.seedBackfillDone` flag, never re-checked once true | ✅ |
+| 59 | The backfill never duplicates a starter already present under different casing | `tests/state.test.js` → "…matches by name case-insensitively…" pre-seeds a lower-case `"bench press"` and asserts the starter list's `"Bench Press"` isn't added alongside it | ✅ |
+| 60 | A brand-new install still gets every starter across every category in one pass | `tests/state.test.js` → "a fresh install seeds every starter exercise…" | ✅ |
+| 61 | The known limitation (name-matching can't tell a rename from an absence) is documented, not silently accepted | `CLAUDE.md` → "Adding a starter exercise" and `DECISIONS.md` #53 both state it plainly, including why a seed-id wasn't added to close the gap | ✅ |
 
 ## Build constraints
 

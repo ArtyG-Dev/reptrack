@@ -266,6 +266,25 @@ Everything else is already handled centrally and needs no per-skin work: the 30f
 `visibilitychange`, the voice-recognition pause, `prefers-reduced-motion`, and the manual
 reduce-effects toggle all live in `backdrop.js`'s `shouldRun()`.
 
+**Two things a first pass at a skin will get wrong** (see `DECISIONS.md` #40 — a real
+regression, diagnosed the hard way):
+
+- **The glass panel's fixed 88% opacity eats most of a raw canvas alpha.** It's required by
+  the 4.5:1 contrast proof, so it isn't a lever you can pull — draw amplitudes have to be
+  tuned *knowing* only ~12% of what the canvas paints ever reaches a card. What looks fine
+  in a standalone canvas test can read as "not running" once composited. Check the rendered
+  page, not just the canvas.
+- **If any visual element scales to zero at `glow = 0`, that element is invisible on first
+  load — which is the most common state anyone will ever see it in**, since a fresh install
+  has no training history. Anything meant to always be present (a silhouette, a few ambient
+  particles) has to be drawn with an amplitude that doesn't depend on the consistency score;
+  only the "hot" elements on top of that base state should be gated.
+
+Before assuming a skin's loop is broken, check `window.__backdrop.getDiagnostics()`
+(`running`, `frames` advancing) and read the canvas pixels back with `getImageData` — "looks
+like nothing is happening" and "the loop stopped" are different bugs with different fixes,
+and the diagnostics distinguish them in seconds.
+
 ---
 
 ## Testing

@@ -526,7 +526,12 @@ textarea { min-height: 84px; resize: vertical; }
   pointer-events: none;
 }
 [data-glass="1"] #backdrop { display: block; }
-[data-theme="fractal"] #backdrop { filter: blur(18px); }
+/* Was 18px over a 0.12-scale backing store — enough blur to erase any bloom
+ * shape entirely, which was the main reason Fractal read as "not running"
+ * rather than merely subtle. The store is bigger now (see SCALE.fractal in
+ * js/backdrop.js) and needs correspondingly less blur to stay soft without
+ * washing out. See DECISIONS.md. */
+[data-theme="fractal"] #backdrop { filter: blur(11px); }
 
 /* Opaque fallback first (above), glass only where the browser can actually
  * blur — an unsupported backdrop-filter would otherwise leave text floating on

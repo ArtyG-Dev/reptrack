@@ -363,3 +363,108 @@ the contrast failure the whole scheme is built to avoid. So `--surface` is opaqu
 default in the three skins and only becomes translucent inside an
 `@supports (backdrop-filter: blur(1px))` block. A test asserts the fallback exists. Nobody
 gets an unreadable panel because their browser is old.
+
+---
+
+## Skin fixes: visibility, lightning, embers and flame (follow-up)
+
+### 40. The root cause was visibility, not wiring — and the diagnosis is worth stating precisely
+
+Live testing on the deployed site reported Terminal as barely visible and Fractal/Forge as
+not animating at all. Before touching any drawing code, I checked whether the loop was
+actually running: `window.__backdrop.getDiagnostics()` showed `running: true` and a rising
+`frames` counter for all three skins, with zero console errors, and reading the raw canvas
+pixels back out (`getImageData`) showed non-flat content in every case. **The render loop,
+the theme wiring, the pause/resume logic and the palette lookup were all working exactly as
+built.** There was no dead code path, no swallowed exception, no CSS selector mismatch.
+
+The actual defects were about amplitude and legibility, and they compounded:
+
+1. **Terminal's raw alpha values were too low.** Grid pulse at 0.05-0.08 and stream alpha at
+   0.18-0.40, composited under the frosted glass panels' fixed 88% opacity (itself required
+   by the 4.5:1 contrast proof — see decision 32 — so it wasn't a lever available to pull),
+   rendered as functionally black. Confirmed by rendering the canvas alone: average pixel
+   brightness was 4-11 out of 255.
+2. **Fractal's backing store was too small and too blurred to read as a shape.** 0.12× the
+   viewport (down to 49×108px on a phone-sized viewport) blurred by 18px CSS blur turns five
+   radial gradients into a flat, textureless wash — there is no bloom left to see, whatever
+   the alpha. This alone would read as "not running" to anyone looking for a fractal pattern.
+3. **Forge tied its entire visual to `activity.glow`, including the dumbbell silhouette
+   itself.** The common case for anyone opening the app for the first time — the exact
+   moment someone is most likely to be testing it — is zero training history, hence
+   `glow = 0`. At `glow = 0` the old code drew a 55%-alpha iron-coloured bar on a near-black
+   background with no separate contour, which is close enough to imperceptible that "no sign
+   of a flame" was a completely accurate description of what was on screen, even though the
+   flame was never meant to appear until heat rose — the *base state* (dumbbell + a few
+   embers) was supposed to be visible regardless, and it wasn't.
+
+None of this shows up as an error, a failed assertion, or a stopped loop — it only shows up
+as "doesn't look like anything's happening", which is exactly what was reported. The fix is
+therefore a set of amplitude/resolution/base-state changes, not a rewiring, and the two are
+easy to conflate — worth writing down so a future regression report gets diagnosed the same
+way (check the diagnostics and the raw pixels *before* assuming the loop is broken).
+
+### 41. Fixes stayed inside the existing contrast proof, by construction
+
+The contrast guarantee (decision 32) holds because `backdrop.js` may only paint colours
+declared as `--backdrop-*` tokens, and every such token's luminance is tested to fall inside
+`[--backdrop-base, --backdrop-ink]`. Raising the *alpha* at which a token is drawn — which is
+all the Terminal and base-state fixes below do — changes nothing about the token's own hex
+value, so it cannot move the luminance-range test. Lightning and the flame lick reuse
+existing tokens (`--backdrop-ink` for bolts, a mix of `--backdrop-ember`/`--backdrop-ink` for
+flame) rather than introducing new ones, so no new CSS was needed to keep the invariant
+intact. `tests/contrast.test.js` passed unmodified.
+
+### 42. A bounded-region gradient fill, added as a side effect of the fractal fix, paid for the rest
+
+Canvas fill cost is proportional to the pixel count of the rect actually drawn, not the
+gradient's radius — the original code filled the *entire* canvas for every radial gradient
+(five blooms, one forge glow), even though nothing past the outer colour stop is anything
+but transparent. `fillRadialBounded()` clips each fill to its own bounding box. Applying it
+everywhere a radial gradient is drawn meant Forge's new embers and flame lick, and Fractal's
+larger backing store (0.12× → 0.18×) and lightning, landed at **lower** measured CPU than
+before (terminal 2.4%→2.2%, fractal 2.3%→2.1%, forge 3.5%→2.8% over baseline) rather than
+higher. This wasn't the goal going in; it fell out of fixing fractal's resolution and turned
+out to be exactly the kind of headroom the added visuals needed.
+
+### 43. Forge's base state is now decoupled from heat; only the "hot" elements are gated
+
+Per the original brief's "base state" section (a dumbbell silhouette and faint sparks,
+present regardless of consistency) — which the first implementation didn't actually honour,
+tying opacity for *everything* including the silhouette to `heat`. Now: the dumbbell fill
+gets a fixed contour stroke (readable at any heat) and a minimum of `EMBER_MIN_ACTIVE` (5)
+embers drift regardless of consistency. Heat still governs the glow's brightness, how many
+additional embers join, how bright they burn, and — new — a flame lick above the bar that
+stays completely off below `FLAME_START_HEAT` (0.35) and ramps in gradually above it, so "no
+visible flame at low consistency, brighter sustained flame at high consistency" from the
+brief is a real gate in the code, not just a description.
+
+### 44. Lightning's flicker-hazard cap is a hard floor, checked in code and in a test
+
+Per the brief: "no more than one bolt-flash per few seconds even at max intensity". This is
+`LIGHTNING.minIntervalS = 3.5` in `js/backdrop.js`, enforced via `Math.max(minIntervalS, …)`
+in the scheduler — so it holds structurally at glow = 1, not just as an average across a
+sample. Flash duration is `LIGHTNING.durationS = 0.15` (about 4-5 frames at the 30fps cap),
+fading linearly rather than cutting off, and peak brightness itself scales with consistency
+(0.20 alpha at glow 0, up to 0.60 at glow 1) so even a flash at maximum intensity is a
+moody flicker in the theme's own ink colour, not a flash to white. `branchCount` scales 0→2
+with glow, so a quiet profile only ever sees a single unbranched line ("single-branch
+flickers" from the brief), and a consistent one sees more frequent, more branching strikes.
+
+`tests/browser.test.js` → "fractal lightning respects the flicker-hazard floor and gets more
+frequent as consistency rises" seeds a cold and a hot profile, samples `boltFlashes` (a new
+diagnostics counter) over a 16s window for each, and asserts both that the hot profile
+flashes at least as often as the cold one and that the implied average gap in the busiest
+sample never drops meaningfully below the 3.5s floor.
+
+### 45. The consistency-scaling claim in ACCEPTANCE.md #35 was corrected, not just re-verified
+
+The original skins update recorded criterion #35 ("glow scales with the consistency score")
+as verified by a browser test asserting "the rendered glow differs between a seeded
+consistent profile and a seeded silent one" — but no such test existed; only the frost tests
+(which seed *old*, not recent, activity) were in the suite. The formula itself was correct
+(unit-tested in `consistency.test.js` and confirmed by direct probing during this fix), but
+the acceptance record overstated what the browser suite actually covered. Two real tests
+now exist — "forge is visibly warmer for a consistent profile than a fresh one" (pixel
+brightness, cold vs. hot) and the lightning-frequency test above — and `ACCEPTANCE.md` #35
+now cites them by name instead of a description that didn't match any test in the file.

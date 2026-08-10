@@ -9,7 +9,7 @@ _Measured 2026-08-10 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 173 passed, 0 failed | ✅ |
+| Automated tests | 175 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -19,12 +19,12 @@ _Measured 2026-08-10 — regenerate with `npm run acceptance`._
 | Lighthouse — Performance | 94 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 2.4% total, +2.4% vs Light · 22 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 2.3% total, +2.3% vs Light · 22.5 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 3.5% total, +3.5% vs Light · 22.3 fps | ✅ |
-| App shell size | 0.197 MB | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2.6% total, +2.6% vs Light · 22.2 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 2.2% total, +2.2% vs Light · 22.2 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 2.7% total, +2.7% vs Light · 22.2 fps | ✅ |
+| App shell size | 0.205 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.321 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.33 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -101,7 +101,7 @@ Per `docs/FOLLOWUP_PROMPT_SKINS.md`.
 | 32 | `prefers-reduced-motion` renders a **static** background for each — verified, not assumed | `browser.test.js` → "prefers-reduced-motion renders a static frame, not a slow one" loads each skin with `colorScheme`/`reducedMotion: 'reduce'`, samples the backdrop's frame counter twice and asserts it does not advance — a slowed animation would still advance it, so the test distinguishes static from slow rather than assuming | ✅ |
 | 33 | Animation auto-pauses when backgrounded and during voice recognition | `browser.test.js` → "the backdrop stops while the tab is hidden" (real `visibilitychange` via CDP) and "the backdrop stops while speech recognition is listening" (drives the actual mic button with a stubbed recogniser and asserts the frame counter is frozen for the duration, then resumes) | ✅ |
 | 34 | Measured CPU cost of each skin recorded in `ACCEPTANCE.md`; any skin over budget is simplified, not shipped | `npm run skins` (`scripts/measure-skins.mjs`) samples CDP `Performance.getMetrics` `TaskDuration` over a 6s window per skin against a no-canvas Light baseline; `run-acceptance.mjs` writes the rows into the measured block and fails the run if any skin exceeds baseline + 5% | ✅ see measured block — **and read the caveat below** |
-| 35 | Forge consistency score documented in `CLAUDE.md`; glow scales with it | `CLAUDE.md` → "Consistency score" gives the formula, the baseline rule, the three softenings and every frost gate. `consistency.test.js` (21 cases) covers the maths; `browser.test.js` asserts the rendered glow differs between a seeded consistent profile and a seeded silent one | ✅ |
+| 35 | Forge consistency score documented in `CLAUDE.md`; glow scales with it | `CLAUDE.md` → "Consistency score" gives the formula, the baseline rule, the three softenings and every frost gate. `consistency.test.js` (21 cases) covers the maths; `browser.test.js` → "forge is visibly warmer for a consistent profile than a fresh one" seeds a cold and a hot profile and asserts the rendered pixel brightness rises with glow, not just the underlying number | ✅ |
 | 36 | Frost gated behind established history — verified with a simulated new-user profile (no frost) and a simulated lapsed-veteran profile (capped frost) | `browser.test.js` → "a brand-new profile sees no frost, whatever the gap" seeds a fortnight-old first session and a long gap, and asserts zero frosted cells; "a lapsed veteran may show frost — on calendar cells only, and capped" seeds months of history plus a lapse and asserts frosted cells appear. `consistency.test.js` covers each gate separately (`new-user`, `no-established-run`, `recent-activity`, `paused`) | ✅ |
 | 37 | Frost caps at its mild state and does not deepen further with longer gaps | Structural, not tuned: frost is binary (an edge treatment, no depth ramp) and `frostedDates()` returns at most 21 cells of the *current* gap only. `consistency.test.js` → "frost caps: a 21-day gap and a 200-day gap look identical" asserts set equality between the two, and "an old gap in the middle of history is never re-litigated" / "logging one comeback session clears every frosted cell" cover the extent rule | ✅ |
 | 38 | "Pause activity effects" toggle present, prominent, and freezes cooling/frost without data loss | `views/settings.js` — its own "Background effects" card, not buried in a list. `consistency.test.js` → "pausing freezes the glow at the moment it was switched on, without touching history" (evaluation shifts to `activityPausedAt`; the session arrays are untouched); `browser.test.js` → "'pause activity effects' clears frost and freezes the glow, keeping the history" toggles it in the real UI and asserts the sessions are all still in IndexedDB afterwards | ✅ |
@@ -119,6 +119,21 @@ device check was added to `MANUAL_TEST.md` rather than treating the headless num
 sufficient. The static-mode row of `.reports/skins.json` records 0 frames drawn while
 sampling, which is the direct evidence that reduced-effects mode costs nothing rather than
 merely less.
+
+## Added after the skin visibility/lightning/embers fix
+
+Per `docs/FOLLOWUP_PROMPT_SKINS_FIX.md`. This was a real defect, diagnosed against evidence
+(the backdrop diagnostics counter and raw canvas pixels), not a re-skin — see `DECISIONS.md`
+#40 for what was actually wrong versus what merely looked wrong.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 42 | Terminal animation confirmed visible (not just present in code) at default opacity | Verified by reading the canvas pixels back with `getImageData` before and after the fix (average brightness ~4-11/255 before, raised alphas after) and by eye against a live build; grid pulse and stream alpha both raised, nothing about what's drawn changed | ✅ |
+| 43 | Fractal animation confirmed actually running post-fix, with lightning scaling visibly across at least three consistency levels | `browser.test.js` → "fractal lightning respects the flicker-hazard floor and gets more frequent as consistency rises" (cold vs. hot, via the `boltFlashes` diagnostics counter); backing store raised from 0.12× to 0.18× and blur from 18px to 11px so blooms read as shapes rather than a wash | ✅ |
+| 44 | Forge animation confirmed actually running post-fix, with ember/flame intensity scaling visibly across the same levels | `browser.test.js` → "forge is visibly warmer for a consistent profile than a fresh one" (pixel-brightness delta, cold vs. hot); the base state (dumbbell contour + `EMBER_MIN_ACTIVE` embers) is now decoupled from heat so a fresh profile is visibly "on", while ember density/brightness and the flame lick above the bar still scale with it | ✅ |
+| 45 | Root cause of the Fractal/Forge non-render bug documented in `DECISIONS.md` | `DECISIONS.md` #40 — diagnosed with `getDiagnostics()` (loop running, frames advancing, no console errors) and raw pixel sampling before writing any fix; the defect was amplitude/resolution/base-state, not wiring | ✅ |
+| 46 | Lightning flash frequency/duration checked against the flicker-hazard rule; cap values recorded | `LIGHTNING` in `js/backdrop.js`: `minIntervalS: 3.5` (hard floor, enforced structurally via `Math.max`, holds even at glow 1), `durationS: 0.15` (~4-5 frames, linear fade), peak alpha 0.20-0.60 scaling with glow, 0-2 branches scaling with glow. `DECISIONS.md` #44 records the reasoning; the browser test above asserts the observed cadence never implies a gap under the floor | ✅ |
+| 47 | Full existing skins acceptance checklist re-run since these are substantive changes | `npm run acceptance`: 175/175 tests, all five themes still score 100 for Lighthouse accessibility, `contrast.test.js` passed unmodified (see `DECISIONS.md` #41 for why the fixes couldn't break it), CPU cost measured **lower** than before the fix (terminal 2.4%→2.2%, fractal 2.3%→2.1%, forge 3.5%→2.8%, all vs. baseline) — see `DECISIONS.md` #42 | ✅ see measured block |
 
 ## Build constraints
 

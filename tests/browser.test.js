@@ -583,6 +583,29 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     throw new Error(`backdrop frame count never settled (last seen ${last})`);
   }
 
+  /** Brightest pixel currently on the backdrop canvas — a cheap, theme-agnostic
+   *  stand-in for "is anything visibly lit up", used to check that the base
+   *  state (a fresh profile, glow 0) is not literally indistinguishable from
+   *  the hot state (a consistent profile, glow 1). */
+  async function backdropMaxBrightness(page) {
+    return page.evaluate(() => {
+      const c = document.getElementById('backdrop');
+      const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let max = 0;
+      for (let i = 0; i < data.length; i += 4) max = Math.max(max, data[i] + data[i + 1] + data[i + 2]);
+      return max;
+    });
+  }
+
+  /** A prior baseline plus a fortnight of daily training — the "hot" end of
+   *  the consistency score, used to drive Forge/Fractal to glow ≈ 1. */
+  function consistentDays(dayIndexes) {
+    const days = [];
+    for (let i = 90; i >= 15; i -= 4) days.push(isoDaysAgo(i));
+    for (const i of dayIndexes) days.push(isoDaysAgo(i));
+    return days;
+  }
+
   const isoDaysAgo = (n) => {
     const d = new Date();
     d.setDate(d.getDate() - n);
@@ -812,6 +835,66 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     assert.ok(await page.locator('.cal-day.is-frosted').count() > 0, 'un-pausing restores the previous state');
 
     await context.close();
+  });
+
+  test('forge is visibly warmer for a consistent profile than a fresh one', async () => {
+    // A fresh account (glow 0, everyone's actual first run) still needs to
+    // read as "on" — the base state is a dumbbell silhouette plus a handful
+    // of embers regardless of history — but a genuinely consistent profile
+    // must be brighter still, or the glow isn't doing anything visible.
+    const cold = await freshPage();
+    await cold.page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+    await cold.page.waitForSelector('#start-session');
+    await cold.page.waitForTimeout(400);
+    const coldGlow = (await cold.page.evaluate(() => window.__backdrop.getDiagnostics().activity)).glow;
+    const coldBright = await backdropMaxBrightness(cold.page);
+    await cold.context.close();
+
+    const hot = await freshPage();
+    await seedSessions(hot.page, consistentDays(Array.from({ length: 14 }, (_, i) => i)));
+    await hot.page.goto(`${baseURL}?theme=forge`, { waitUntil: 'load' });
+    await hot.page.waitForSelector('#start-session');
+    await hot.page.waitForTimeout(400);
+    const hotGlow = (await hot.page.evaluate(() => window.__backdrop.getDiagnostics().activity)).glow;
+    const hotBright = await backdropMaxBrightness(hot.page);
+    await hot.context.close();
+
+    assert.equal(coldGlow, 0, 'sanity check: the cold profile really is at zero consistency');
+    assert.ok(hotGlow > 0.9, 'sanity check: the seeded profile really is at high consistency');
+    assert.ok(coldBright > 20, `even at glow 0 the base state (dumbbell + embers) must not be literally invisible, got ${coldBright}`);
+    assert.ok(hotBright > coldBright + 20, `the hot profile (${hotBright}) should read visibly brighter than the cold one (${coldBright})`);
+  });
+
+  test('fractal lightning respects the flicker-hazard floor and gets more frequent as consistency rises', async () => {
+    const SAMPLE_MS = 16_000;
+    const MIN_INTERVAL_S = 3.5;   // must match LIGHTNING.minIntervalS in js/backdrop.js
+
+    async function sampleFlashes(page) {
+      const before = await page.evaluate(() => window.__backdrop.getDiagnostics().boltFlashes);
+      await page.waitForTimeout(SAMPLE_MS);
+      const after = await page.evaluate(() => window.__backdrop.getDiagnostics().boltFlashes);
+      return after - before;
+    }
+
+    const cold = await freshPage();
+    await cold.page.goto(`${baseURL}?theme=fractal`, { waitUntil: 'load' });
+    await cold.page.waitForSelector('#start-session');
+    const coldFlashes = await sampleFlashes(cold.page);
+    await cold.context.close();
+
+    const hot = await freshPage();
+    await seedSessions(hot.page, consistentDays(Array.from({ length: 14 }, (_, i) => i)));
+    await hot.page.goto(`${baseURL}?theme=fractal`, { waitUntil: 'load' });
+    await hot.page.waitForSelector('#start-session');
+    const hotFlashes = await sampleFlashes(hot.page);
+    await hot.context.close();
+
+    // The cap is structural (Math.max against the floor in the scheduler), so
+    // this is really a sanity check that the observed cadence agrees with it:
+    // even in the busiest sample, the average gap can't be under the floor.
+    const impliedMinGap = SAMPLE_MS / 1000 / Math.max(1, hotFlashes);
+    assert.ok(impliedMinGap >= MIN_INTERVAL_S - 0.25, `flashes fired faster than the flicker-hazard floor: ${hotFlashes} in ${SAMPLE_MS / 1000}s`);
+    assert.ok(hotFlashes >= coldFlashes, `a consistent profile (${hotFlashes} flashes) should flash at least as often as a quiet one (${coldFlashes})`);
   });
 
   test('the theme layer never scolds or counts the days missed', async () => {

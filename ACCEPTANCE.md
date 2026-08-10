@@ -167,6 +167,7 @@ were the Phase 1 seed list, frozen because seeding only ever writes to an empty 
 | 59 | The backfill never duplicates a starter already present under different casing | `tests/state.test.js` → "…matches by name case-insensitively…" pre-seeds a lower-case `"bench press"` and asserts the starter list's `"Bench Press"` isn't added alongside it | ✅ |
 | 60 | A brand-new install still gets every starter across every category in one pass | `tests/state.test.js` → "a fresh install seeds every starter exercise…" | ✅ |
 | 61 | The known limitation (name-matching can't tell a rename from an absence) is documented, not silently accepted | `CLAUDE.md` → "Adding a starter exercise" and `DECISIONS.md` #53 both state it plainly, including why a seed-id wasn't added to close the gap | ✅ |
+| 62 | Pages deployment re-verified live after this merge | GitHub Actions run [`1b8a8c0`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31441309041) completed with conclusion `success`. Same proxy limitation as above applies to fetching the live files back from here | ✅ |
 
 ## Build constraints
 

@@ -498,3 +498,88 @@ the host outside a backtick code span or fenced block — the exact GFM auto-lin
 that caused the regression. Verified the test actually catches the pre-fix text before
 trusting it (ran the regex against the two offending rows directly), rather than assuming a
 new assertion is correct because it happens to pass against already-fixed content.
+
+---
+
+## Widening the reward range (direct request, not a follow-up doc)
+
+Asked directly — "I'm not seeing much if any of the fractal patterns... only a few faint
+sparks [on Forge]... increase the incidence of effects from the first use onwards and then
+reward a consistent streak with greater visual embellishment... having the speed and
+brightness [of Terminal] increase with an improved streak would be good."
+
+### 48. Terminal is now consistency-responsive — a deliberate departure from the original brief
+
+The original skins brief only asked Fractal and Forge to respond to training consistency;
+Terminal was meant to be flat ambient texture. Real usage showed that reads as "the app
+doesn't react to anything I do" for the one skin where it's most visible day-to-day (Terminal
+has no separate "hot" state to notice — it either changes or it doesn't). This is a direct,
+explicit ask from actual use, not an inference, so `drawTerminal()` now scales three things
+with `activity.glow`: fall speed (×1 to ×1.85), overall brightness (×0.85 to ×1.5), and the
+odds any given stream draws in the brightest colour token rather than a dimmer one.
+
+That last point is the "colour variance" ask. Colour variety comes from literally drawing a
+different token per stream (`--backdrop-stream`, the new `--backdrop-stream-2`, or
+`--backdrop-ink`), chosen by a value seeded once per stream and never mixed — see decision
+50 for why mixing was avoided. Only the *odds* of landing in the brightest bucket shift with
+glow, so the palette itself never leaves the three literal tokens.
+
+### 49. Floors raised across all three skins, not just the ceilings
+
+"We don't want the user to feel punished or discouraged from the outset" was explicit and
+came first in the request, before "reward a consistent streak" — so every change here raises
+the zero-consistency floor at least as much as it raises the high-consistency ceiling:
+
+- **Forge**: `EMBER_MIN_ACTIVE` 5→9, ember alpha floor 0.16→0.24 (ceiling 0.30→0.48 on top of
+  that), glow gradient floor 0.16→0.22 (ceiling 0.42→0.53), `FLAME_START_HEAT` 0.35→0.22 so a
+  flame lick starts appearing sooner rather than staying invisible through most of the range.
+  A fourth flame lick joins only past `flameT > 0.6` — sustained streaks get something a
+  shorter one doesn't, which is the "greater embellishment" half of the ask.
+- **Fractal**: brightness floor (`lift`) 0.35→0.55 (ceiling 0.90→1.00), alpha multiplier
+  0.62→0.78, and a new `grow` factor (0.85→1.15) makes blooms visibly larger, not just
+  brighter, at high consistency — a second reward dimension on top of colour. Backing store
+  resolution raised again, 0.18→0.24 (CSS blur correspondingly 11px→8px), because at the
+  smaller size even the raised floor read as a formless wash rather than a bloom shape.
+  Lightning's `maxIntervalS` (how rare a flash is at zero consistency) dropped 12s→9s — still
+  rare, not absent, at rest; `minIntervalS` (the flicker-hazard floor) is untouched at 3.5s.
+- **Terminal**: base stream speed range 6-20→9-25 px/s (a flat "slightly faster" bump the ask
+  named directly), independent of the new glow multiplier on top.
+
+Measured brightness deltas (headless Chromium, cold = no history vs. hot = 14 consecutive
+days on an established baseline, `getImageData` sampling): Terminal max brightness 105→191,
+Fractal average 81→141, Forge average 27→74. All three are now clearly perceptible in a
+before/after comparison, and none is dark-to-the-point-of-invisible at zero consistency
+(`tests/browser.test.js` asserts a floor on the cold reading for Forge and Terminal, matching
+the "not punishing" half of the request as a real assertion, not just a design note).
+
+### 50. Colour variety without blending: token selection, not token mixing
+
+Terminal's colour variance is implemented by literally drawing one of three unblended tokens
+per stream (`--backdrop-stream`, `--backdrop-stream-2`, `--backdrop-ink`), never a `mix()` of
+them. This was a deliberate choice over the more obvious "blend toward a brighter hue as glow
+rises": `mix()`'s existing comment already flagged that a linear RGB blend's luminance isn't
+guaranteed to sit between its two endpoints' for two arbitrary colours (proven with a
+concrete counter-example — a red/green blend can land darker than either). Drawing a literal
+token sidesteps the question: whatever `contrast.test.js` already proves about a token
+individually is automatically true of every pixel Terminal ever draws, no new reasoning
+required. `--backdrop-stream-2` (`#1c5248`, a teal accent) was chosen and its luminance
+checked against the existing generic "every backdrop token sits inside the range" test before
+being added — no special-casing needed, that test already covers any new `--backdrop-*` name.
+
+### 51. Forge's `mix()` usage got the test it was only ever informally justified by
+
+While re-checking whether the widened Forge ranges were still safe, I re-examined the
+existing claim (mix()'s own comment, written in an earlier session) that its two endpoint
+colours were "directionally darker-or-lighter... in all three channels" — checked that
+claim numerically and it's false (iron→ember's blue channel moves the *opposite* direction
+from its red and green channels). The luminance still happens to stay in range across the
+whole heat/flame parameter space, because the weighted luminance formula is dominated by the
+green channel, which *is* monotonic for this particular colour family — but that's a fact
+about these four specific colours, not a property of "directionally ordered channels" in
+general, and the old comment overstated the guarantee. Fixed the comment to say what's
+actually true, and added `tests/contrast.test.js` → "forge's mixed colours never escape the
+backdrop range", which reimplements the exact `hot`/`ironShape`/`edge`/`flameColor` formulas
+from `backdrop.js` and sweeps heat and flameT from 0 to 1 in 0.02 steps, asserting every
+resulting luminance stays inside `[base, ink]`. This is the one runtime colour computation in
+the entire backdrop system that isn't covered by "the canvas only ever paints a declared
+token" — it needed its own proof, and now has one.

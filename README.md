@@ -120,9 +120,9 @@ runs with pace, and a day-by-day line. Plain text, no network, no formatting to 
 |---|---|
 | **Light** | The default — clean, minimal, soft neutrals. |
 | **High-Contrast Neon** | Dark and saturated, electric cyan/green/pink. Bold in colour, not in motion. |
-| **Terminal** | Frosted glass over slow drifting data streams. Cool, dark, muted; the background is texture, not content. |
-| **Fractal** | Frosted glass over a slowly morphing pattern that brightens as your training gets more consistent. A full cycle takes about a minute. |
-| **Forge** | Frosted glass over a huge, faint dumbbell with warm sparks. The glow rises with consistency and cools slowly when you ease off. |
+| **Terminal** | Frosted glass over drifting data streams. Cool and dark; streams fall a little faster and a little brighter, and more of them shift into the brightest colour, the more consistently you've been training. |
+| **Fractal** | Frosted glass over a slowly morphing pattern, with the odd flicker of lightning through it. Both brightness and how often lightning strikes rise with training consistency. A full cycle takes about a minute. |
+| **Forge** | Frosted glass over a huge dumbbell with drifting embers. The glow, ember density, and — once you've built up a real streak — a flame lick above the bar all rise with consistency, and cool slowly when you ease off. |
 
 All five meet the same accessibility bar: every colour pair clears 4.5:1 contrast — for the
 animated ones, checked against the background at both its lightest and its darkest, so it
@@ -140,16 +140,19 @@ competes with a background effect.
 - **Reduce background effects** — keep the theme, drop the motion. The background renders as
   a single still frame. If your device is set to reduce motion system-wide, this happens
   automatically, and it's still a still frame rather than a slow one.
-- **Pause activity effects** — freezes the Forge/Fractal response where it is. For illness,
-  injury, a holiday, or a deliberate deload. Nothing is erased; turn it off and it picks up
-  from the real date again.
+- **Pause activity effects** — freezes the Terminal/Forge/Fractal response where it is. For
+  illness, injury, a holiday, or a deliberate deload. Nothing is erased; turn it off and it
+  picks up from the real date again.
 
-### About the Forge glow
+### About the consistency-driven visuals
 
-The glow tracks how consistently you've been training lately, measured against *your own*
-recent baseline rather than a fixed target — so it means the same thing whether you train
-twice a week or five times. It moves slowly and deliberately: missing one session is
-essentially invisible, and easing off cools it gently rather than dropping it.
+All three animated themes brighten as you show up more consistently, measured against *your
+own* recent baseline rather than a fixed target — so it means the same thing whether you
+train twice a week or five times. It moves slowly and deliberately: missing one session is
+essentially invisible, and easing off cools it gently rather than dropping it. There's
+deliberately no floor of "nothing happens until you've proven yourself" either — even on day
+one, before there's any history to measure, the background is already doing something; it
+just gets more so as a streak builds.
 
 After a long gap, and only if you'd built a real habit first, calendar days can pick up a
 faint frosted edge. It's capped — a very long gap looks the same as a moderate one — it's

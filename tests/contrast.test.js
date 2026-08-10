@@ -160,6 +160,51 @@ for (const [themeName, selector] of GLASS_THEMES) {
   });
 }
 
+/** Mirrors js/backdrop.js's toRGB()/mix() exactly. Forge is the only skin
+ *  that blends colours at runtime rather than drawing a declared token
+ *  outright, and a linear RGB blend's luminance is not guaranteed to sit
+ *  between its two endpoints' (see the note on mix() in backdrop.js) — so
+ *  unlike every other backdrop colour, this one has to be checked by actually
+ *  running the blend, not by checking its inputs. */
+function hexToRgb(hex) {
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = [...h].map((c) => c + c).join('');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function mixRgb(a, b, t) {
+  return a.map((v, i) => Math.round(v + (b[i] - v) * t));
+}
+
+function rgbLuminance([r, g, b]) {
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+test('forge\'s mixed colours never escape the backdrop range', () => {
+  const palette = tokens('[data-theme="forge"]');
+  const lo = luminance(palette['backdrop-base']);
+  const hi = luminance(palette['backdrop-ink']);
+  const [ink, iron, ember] = ['backdrop-ink', 'backdrop-iron', 'backdrop-ember'].map((k) => hexToRgb(palette[k]));
+
+  const outside = [];
+  const STEP = 0.02;
+  for (let heat = 0; heat <= 1 + 1e-9; heat += STEP) {
+    const hot = mixRgb(ember, ink, heat);
+    const ironShape = mixRgb(iron, hot, heat * 0.45);
+    const edge = mixRgb(ironShape, ink, 0.4);
+    for (const [label, rgb] of [['hot', hot], ['ironShape', ironShape], ['edge', edge]]) {
+      const l = rgbLuminance(rgb);
+      if (l < lo - 1e-9 || l > hi + 1e-9) outside.push(`${label} at heat=${heat.toFixed(2)}: luminance ${l.toFixed(4)}`);
+    }
+  }
+  for (let flameT = 0; flameT <= 1 + 1e-9; flameT += STEP) {
+    const flameColor = mixRgb(ember, ink, 0.6 + 0.4 * flameT);
+    const l = rgbLuminance(flameColor);
+    if (l < lo - 1e-9 || l > hi + 1e-9) outside.push(`flameColor at flameT=${flameT.toFixed(2)}: luminance ${l.toFixed(4)}`);
+  }
+  assert.deepEqual(outside, [], 'a runtime blend escaped [--backdrop-base, --backdrop-ink]');
+});
+
 test('the glass skins declare an opaque fallback for browsers without backdrop-filter', () => {
   // Without a blur, a translucent panel over moving content is exactly the
   // contrast failure the scheme exists to avoid — so the glass is applied only

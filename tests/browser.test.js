@@ -865,6 +865,34 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     assert.ok(hotBright > coldBright + 20, `the hot profile (${hotBright}) should read visibly brighter than the cold one (${coldBright})`);
   });
 
+  test('terminal streams read brighter for a consistent profile than a fresh one', async () => {
+    // Terminal wasn't originally consistency-responsive at all — added after
+    // real usage asked for the reward to show up here too (see DECISIONS.md).
+    // Speed and brightness both move with glow; brightness is what's cheap to
+    // assert against a static screenshot, so that's the check here.
+    const cold = await freshPage();
+    await cold.page.goto(`${baseURL}?theme=terminal`, { waitUntil: 'load' });
+    await cold.page.waitForSelector('#start-session');
+    await cold.page.waitForTimeout(400);
+    const coldGlow = (await cold.page.evaluate(() => window.__backdrop.getDiagnostics().activity)).glow;
+    const coldBright = await backdropMaxBrightness(cold.page);
+    await cold.context.close();
+
+    const hot = await freshPage();
+    await seedSessions(hot.page, consistentDays(Array.from({ length: 14 }, (_, i) => i)));
+    await hot.page.goto(`${baseURL}?theme=terminal`, { waitUntil: 'load' });
+    await hot.page.waitForSelector('#start-session');
+    await hot.page.waitForTimeout(400);
+    const hotGlow = (await hot.page.evaluate(() => window.__backdrop.getDiagnostics().activity)).glow;
+    const hotBright = await backdropMaxBrightness(hot.page);
+    await hot.context.close();
+
+    assert.equal(coldGlow, 0, 'sanity check: the cold profile really is at zero consistency');
+    assert.ok(hotGlow > 0.9, 'sanity check: the seeded profile really is at high consistency');
+    assert.ok(coldBright > 40, `even at glow 0 the streams must not be literally invisible, got ${coldBright}`);
+    assert.ok(hotBright > coldBright + 30, `the hot profile (${hotBright}) should read visibly brighter than the cold one (${coldBright})`);
+  });
+
   test('fractal lightning respects the flicker-hazard floor and gets more frequent as consistency rises', async () => {
     const SAMPLE_MS = 16_000;
     const MIN_INTERVAL_S = 3.5;   // must match LIGHTNING.minIntervalS in js/backdrop.js

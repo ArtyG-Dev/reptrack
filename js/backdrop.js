@@ -10,8 +10,9 @@
  * Performance shape, all deliberate:
  *   - one rAF loop, throttled to 30fps; these are ambient textures, not games
  *   - the backing store renders at a fraction of CSS pixels and is scaled up by
- *     the compositor (0.5× for terminal/forge; 0.12× for fractal, which is then
- *     CSS-blurred, so it costs a few thousand pixels a frame)
+ *     the compositor (0.5× for terminal/forge; 0.24× for fractal, which is
+ *     then CSS-blurred, so it still costs only tens of thousands of pixels a
+ *     frame — see SCALE and fillRadialBounded() below for how)
  *   - device pixel ratio is ignored on purpose — nobody can see 2× detail
  *     through a 14px blur, and honouring it would quadruple the fill cost
  *   - primitives only: rects, arcs and radial gradients. No text, no images,
@@ -27,11 +28,11 @@ const FPS = 30;
 const FRAME_MS = 1000 / FPS;
 // Fractal was 0.12 — so blurred and so tiny that no bloom read as a shape,
 // which is the root cause behind "fractal doesn't appear to run" (see
-// DECISIONS.md). 0.18 plus a lighter blur keeps it legible without the CPU
+// DECISIONS.md). 0.24 plus a lighter blur keeps it legible without the CPU
 // cost scaling as badly as the resolution bump alone would suggest, because
 // every gradient fill below is now bounded to its own radius instead of the
 // full canvas — see fillRadialBounded().
-const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.18 };
+const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.24 };
 const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge']);
 
 // Lightning (Fractal) — a flicker-hazard budget, not a suggestion. The floor
@@ -41,16 +42,18 @@ const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge']);
 // documented as "checked".
 const LIGHTNING = Object.freeze({
   minIntervalS: 3.5,     // hard floor — never more than one flash per ~3.5s
-  maxIntervalS: 12,      // at zero consistency, a flash is rare
+  maxIntervalS: 9,       // at zero consistency, a flash is still rare, just not absent
   durationS: 0.15,       // ~4-5 frames at the 30fps cap: brief, not jarring
   maxBranches: 2
 });
 
-// Forge — a few embers and a hint of dumbbell are always on, even at zero
-// consistency (the brief's "base state"); only the flame lick and the denser
-// ember field are consistency-gated.
-const EMBER_MIN_ACTIVE = 5;
-const FLAME_START_HEAT = 0.35;  // no flame lick at all below this
+// Forge — a good handful of embers and a hint of dumbbell are always on,
+// even at zero consistency (the brief's "base state"); only the flame lick
+// and the denser ember field are consistency-gated. Raised from an earlier,
+// too-timid pass (5 / 0.35) after real usage showed "only a few faint
+// sparks" even after logging sessions — see DECISIONS.md.
+const EMBER_MIN_ACTIVE = 9;
+const FLAME_START_HEAT = 0.22;  // no flame lick at all below this
 
 let canvas = null;
 let ctx = null;
@@ -119,8 +122,17 @@ function fillRadialBounded(cx, cy, r, addStops) {
   if (x1 > x0 && y1 > y0) ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
 }
 
-/** Blend two colours. Both endpoints are theme tokens, so the result is always
- *  inside the declared [--backdrop-base, --backdrop-ink] luminance range. */
+/** Blend two colours. A linear RGB blend's luminance is NOT guaranteed to sit
+ *  between its two endpoints' luminance in general — two saturated colours in
+ *  different hues can blend to something darker or lighter than either (e.g.
+ *  pure red and pure green blend through a mid-tone dimmer than both). Forge
+ *  is the only skin that uses this, on its ember/iron/ink family, and
+ *  tests/contrast.test.js → "forge's mixed colours never escape the backdrop
+ *  range" checks the *actual* blends it produces (not a hand-wave about the
+ *  source colours) across the full heat/flame parameter space. Don't reach
+ *  for mix() on a new colour pair without a matching test; drawing a literal,
+ *  unblended token — as drawTerminal() does — sidesteps the question
+ *  entirely and is preferred wherever the look allows it. */
 function mix(a, b, t) {
   const k = Math.min(Math.max(t, 0), 1);
   return a.map((v, i) => Math.round(v + (b[i] - v) * k));
@@ -134,6 +146,7 @@ function readPalette() {
     ink: read('--backdrop-ink', '#334455'),
     grid: read('--backdrop-grid', '#12222c'),
     stream: read('--backdrop-stream', '#24485a'),
+    stream2: read('--backdrop-stream-2', '#1c5248'),
     bloomA: read('--backdrop-bloom-a', '#2c2154'),
     bloomB: read('--backdrop-bloom-b', '#1c3350'),
     iron: read('--backdrop-iron', '#241813'),
@@ -165,13 +178,14 @@ function seed() {
     streams.push({
       x,
       y: Math.random() * h,
-      speed: 6 + Math.random() * 14,      // px/s in backing-store space: slow
+      speed: 9 + Math.random() * 16,      // px/s in backing-store space — a live glow multiplier stacks on top
       len: 8 + Math.random() * 22,
-      alpha: 0.32 + Math.random() * 0.26
+      alpha: 0.32 + Math.random() * 0.26,
+      hueSeed: Math.random()              // which colour bucket this stream draws from — see drawTerminal()
     });
   }
 
-  embers = Array.from({ length: 26 }, () => ({
+  embers = Array.from({ length: 32 }, () => ({
     x: Math.random() * w,
     y: Math.random() * h,
     drift: (Math.random() - 0.5) * 5,
@@ -186,19 +200,33 @@ function seed() {
 
 /* ---------- skins ---------- */
 
-/** Terminal: a soft grid pulse with slow data streams drifting down it.
- *  Low contrast on purpose — it should read as texture, not content — but the
- *  first version undershot that badly: composited under the glass panel's
- *  fixed 88% opacity (needed for the contrast floor, see CLAUDE.md), the
- *  original 0.05-0.08 grid alpha and 0.18-0.40 stream alpha rendered as
- *  functionally black. These are raised to where the effect is subtly
- *  visible rather than invisible; nothing about *what* is drawn changed. */
+/** Terminal: a soft grid pulse with data streams drifting down it. Unlike
+ *  Fractal/Forge in the original brief, Terminal wasn't meant to respond to
+ *  consistency at all — but real usage showed a flat ambient texture reads
+ *  as "nothing changed" exactly when someone is looking for a reward for
+ *  showing up. So it now does too: streams fall faster and brighter, and a
+ *  larger share of them draw in the brightest colour bucket, as the streak
+ *  builds. Still texture, not content — the *range* moved, not the ceiling
+ *  into something that competes with the foreground UI. See DECISIONS.md.
+ *
+ *  Colour variety without ever mixing two tokens together (mixing risks
+ *  producing a luminance outside [--backdrop-base, --backdrop-ink] — see
+ *  the note on mix() above): each stream is permanently assigned to draw
+ *  either --backdrop-stream, --backdrop-stream-2, or --backdrop-ink outright,
+ *  via its seeded hueSeed. Only the *bucket boundary* moves with glow, never
+ *  the colour itself, so every pixel this ever paints is still one literal
+ *  declared token — the contrast proof stays exactly as airtight as before. */
 function drawTerminal(t) {
   const { w, h } = dims;
   ctx.fillStyle = rgba(palette.base, 1);
   ctx.fillRect(0, 0, w, h);
 
-  const pulse = 0.11 + 0.07 * (0.5 + 0.5 * Math.sin(t * 0.35));
+  const glow = activity.glow;
+  const brightness = 0.85 + glow * 0.65;      // consistency → how strongly everything reads
+  const speedMul = 1 + glow * 0.85;           // consistency → how fast streams fall
+  const inkShare = 0.12 + glow * 0.38;        // consistency → odds a stream draws in the brightest token
+
+  const pulse = (0.11 + 0.07 * (0.5 + 0.5 * Math.sin(t * 0.35))) * brightness;
   ctx.strokeStyle = rgba(palette.grid, pulse);
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -208,11 +236,13 @@ function drawTerminal(t) {
   ctx.stroke();
 
   for (const s of streams) {
-    const y = (s.y + t * s.speed) % (h + s.len) - s.len;
+    const y = (s.y + t * s.speed * speedMul) % (h + s.len) - s.len;
+    const colour = s.hueSeed < inkShare ? palette.ink : (s.hueSeed < inkShare + 0.44 ? palette.stream2 : palette.stream);
+    const alpha = Math.min(s.alpha * brightness, 0.92);
     const grad = ctx.createLinearGradient(0, y, 0, y + s.len);
-    grad.addColorStop(0, rgba(palette.stream, 0));
-    grad.addColorStop(0.6, rgba(palette.stream, s.alpha));
-    grad.addColorStop(1, rgba(palette.stream, 0));
+    grad.addColorStop(0, rgba(colour, 0));
+    grad.addColorStop(0.6, rgba(colour, alpha));
+    grad.addColorStop(1, rgba(colour, 0));
     ctx.fillStyle = grad;
     ctx.fillRect(s.x, y, 3, s.len);
   }
@@ -280,15 +310,18 @@ function drawBolt(t) {
 /** Fractal: slow organic blooms plus lightning. Rendered small and blurred by
  *  CSS, so the "morph" is a handful of drifting radial gradients rather than
  *  real fractal maths — same look through a blur, a fraction of the cost.
- *  Overall lightness rises with training consistency, and lightning flickers
- *  through it — rare and single-stranded when quiet, more frequent and
- *  branching when consistent (see LIGHTNING above for the flash-rate cap). */
+ *  Overall lightness *and size* rise with training consistency, and
+ *  lightning flickers through it — rare and single-stranded when quiet, more
+ *  frequent and branching when consistent (see LIGHTNING above for the
+ *  flash-rate cap). The floor here was raised after real usage showed almost
+ *  no bloom at all at rest — see DECISIONS.md. */
 function drawFractal(t) {
   const { w, h } = dims;
   ctx.fillStyle = rgba(palette.base, 1);
   ctx.fillRect(0, 0, w, h);
 
-  const lift = 0.35 + activity.glow * 0.55;   // consistency → brightness
+  const lift = 0.55 + activity.glow * 0.45;      // consistency → brightness, floor raised so it's never faint
+  const grow = 0.85 + activity.glow * 0.30;      // consistency → bloom size, a second reward dimension
   const blooms = [
     { c: palette.bloomA, fx: 0.30, fy: 0.24, sx: 0.11, sy: 0.07, r: 0.55 },
     { c: palette.bloomB, fx: 0.72, fy: 0.62, sx: 0.09, sy: 0.10, r: 0.48 },
@@ -302,9 +335,9 @@ function drawFractal(t) {
   for (const [i, b] of blooms.entries()) {
     const cx = (b.fx + Math.sin(slow + i * 1.7) * b.sx) * w;
     const cy = (b.fy + Math.cos(slow * 0.83 + i * 2.1) * b.sy) * h;
-    const radius = b.r * Math.max(w, h) * (0.85 + 0.15 * Math.sin(slow * 1.3 + i));
+    const radius = b.r * Math.max(w, h) * (0.85 + 0.15 * Math.sin(slow * 1.3 + i)) * grow;
     fillRadialBounded(cx, cy, radius, (grad) => {
-      grad.addColorStop(0, rgba(b.c, 0.62 * lift));
+      grad.addColorStop(0, rgba(b.c, 0.78 * lift));
       grad.addColorStop(1, rgba(b.c, 0));
     });
   }
@@ -360,10 +393,10 @@ function drawForge(t) {
   // Forge glow behind the bar — breathes very slowly, never pulses.
   const breathe = 0.9 + 0.1 * Math.sin(t * 0.22);
   const hot = mix(palette.ember, palette.ink, heat);
-  const glowR = Math.max(w, h) * (0.32 + heat * 0.22) * breathe;
+  const glowR = Math.max(w, h) * (0.34 + heat * 0.26) * breathe;
   fillRadialBounded(cx, cy, glowR, (grad) => {
-    grad.addColorStop(0, rgba(hot, (0.16 + heat * 0.42) * breathe));
-    grad.addColorStop(0.55, rgba(hot, (0.06 + heat * 0.18) * breathe));
+    grad.addColorStop(0, rgba(hot, (0.22 + heat * 0.53) * breathe));
+    grad.addColorStop(0.55, rgba(hot, (0.09 + heat * 0.24) * breathe));
     grad.addColorStop(1, rgba(hot, 0));
   });
 
@@ -395,7 +428,7 @@ function drawForge(t) {
     const x = s.x + Math.sin(t * 0.5 + s.phase) * s.drift;
     const fade = Math.min(y / edgeBand, (h - y) / edgeBand, 1);
     const twinkle = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 1.1 + s.phase));
-    ctx.fillStyle = rgba(palette.spark, (0.16 + heat * 0.30) * twinkle * Math.max(0, fade));
+    ctx.fillStyle = rgba(palette.spark, (0.24 + heat * 0.48) * twinkle * Math.max(0, fade));
     ctx.fillRect(x, y, s.size, s.size);
   }
 
@@ -405,13 +438,16 @@ function drawForge(t) {
   const flameT = Math.max(0, (heat - FLAME_START_HEAT) / (1 - FLAME_START_HEAT));
   if (flameT > 0) {
     const flameColor = mix(palette.ember, palette.ink, 0.6 + 0.4 * flameT);
-    for (let i = 0; i < 3; i += 1) {
+    // A fourth lick joins only once the streak is genuinely sustained
+    // (flameT > 0.6) — one more visible "this is a strong streak" step.
+    const lickCount = flameT > 0.6 ? 4 : 3;
+    for (let i = 0; i < lickCount; i += 1) {
       const flicker = 0.85 + 0.15 * Math.sin(t * 0.9 + i * 2.1);
-      const fx = cx + (i - 1) * barW * 0.10;
-      const fy = cy - barH * 0.6 - flameT * h * 0.05 * (1 + 0.3 * Math.sin(t * 0.6 + i));
-      const fr = (h * 0.05 + flameT * h * 0.05) * flicker;
+      const fx = cx + (i - (lickCount - 1) / 2) * barW * 0.09;
+      const fy = cy - barH * 0.6 - flameT * h * 0.06 * (1 + 0.3 * Math.sin(t * 0.6 + i));
+      const fr = (h * 0.05 + flameT * h * 0.06) * flicker;
       fillRadialBounded(fx, fy, fr, (grad) => {
-        grad.addColorStop(0, rgba(flameColor, 0.35 * flameT * flicker));
+        grad.addColorStop(0, rgba(flameColor, 0.5 * flameT * flicker));
         grad.addColorStop(1, rgba(flameColor, 0));
       });
     }

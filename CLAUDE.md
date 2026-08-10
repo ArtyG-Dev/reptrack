@@ -130,8 +130,17 @@ Details that look redundant and are not:
 ## Consistency score
 
 `js/consistency.js` — pure, clock-free (the caller passes `todayISO`), fully covered by
-`tests/consistency.test.js`. It is the model behind the Forge glow, the Fractal brightness,
-and calendar frost. Nothing else in the app reads it; no feature behaviour depends on it.
+`tests/consistency.test.js`. It is the model behind the Forge glow, the Fractal brightness
+and lightning, the Terminal stream speed/brightness/colour, and calendar frost. Nothing else
+in the app reads it; no feature behaviour depends on it.
+
+Terminal was not originally consistency-responsive — the brief only asked for it on Fractal
+and Forge — but real usage after shipping showed a flat ambient texture reads as "nothing
+changed" exactly when someone's looking for the reward, so it now scales too (see
+`drawTerminal()` in `js/backdrop.js` and decision 48 in `DECISIONS.md`). If you add a fourth
+skin, default to wiring it up the same way rather than treating "ambient and static" as the
+safe default; a skin that never moves in response to anything a user does is the thing this
+whole feature exists to avoid.
 
 **A "training day"** is any date with a session or a run on it — distinct dates, so two
 sessions in one day count once. Doing something is what matters, not doing a lot.
@@ -261,6 +270,17 @@ as `--backdrop-*` tokens, and `contrast.test.js` proves every such token's lumin
 inside `[--backdrop-base, --backdrop-ink]`, checking text contrast against the glass scrim
 composited over just those two endpoints brackets *every frame the animation can produce*.
 Paint a colour that isn't a token and that proof silently stops being true.
+
+Prefer drawing a literal, unblended token over `mix()`-ing two of them, even for variety —
+Terminal gets its colour variance by picking outright between `--backdrop-stream`,
+`--backdrop-stream-2` and `--backdrop-ink` per particle, never blending them. `mix()`'s own
+comment explains why: a linear RGB blend's luminance is not guaranteed to land between its
+two endpoints' (two saturated, differently-hued colours can blend to something darker or
+lighter than either). Forge is the one skin that does blend (`ember`/`iron`/`ink`), and it
+has its own dedicated test — `contrast.test.js` → "forge's mixed colours never escape the
+backdrop range" — that runs the *actual* blend formulas across their full parameter space
+rather than reasoning about the source colours. If a new skin needs to blend, it needs a
+test in that shape, not an assumption that it's probably fine.
 
 Everything else is already handled centrally and needs no per-skin work: the 30fps cap,
 `visibilitychange`, the voice-recognition pause, `prefers-reduced-motion`, and the manual

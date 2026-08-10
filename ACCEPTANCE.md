@@ -9,7 +9,7 @@ _Measured 2026-08-10 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 176 passed, 0 failed | ✅ |
+| Automated tests | 178 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -19,12 +19,12 @@ _Measured 2026-08-10 — regenerate with `npm run acceptance`._
 | Lighthouse — Performance | 94 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 1.7% total, +1.7% vs Light · 22.3 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 1.8% total, +1.8% vs Light · 22.3 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 3% total, +3% vs Light · 22.2 fps | ✅ |
-| App shell size | 0.205 MB | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2.8% total, +2.8% vs Light · 22 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 2.8% total, +2.8% vs Light · 21.7 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 3.4% total, +3.4% vs Light · 22.2 fps | ✅ |
+| App shell size | 0.208 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.33 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.332 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -136,6 +136,22 @@ Per `docs/FOLLOWUP_PROMPT_SKINS_FIX.md`. This was a real defect, diagnosed again
 | 47 | Full existing skins acceptance checklist re-run since these are substantive changes | `npm run acceptance`: 175/175 tests, all five themes still score 100 for Lighthouse accessibility, `contrast.test.js` passed unmodified (see `DECISIONS.md` #41 for why the fixes couldn't break it), CPU cost measured **lower** than before the fix (terminal 2.4%→2.2%, fractal 2.3%→2.1%, forge 3.5%→2.8%, all vs. baseline) — see `DECISIONS.md` #42 | ✅ see measured block |
 | 48 | Pages deployment re-verified live after this merge | GitHub Actions run [`222e466`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31418080653) completed with conclusion `success`. As with the previous two updates, this container's outbound proxy blocks `artyg-dev.github.io`, so the live files could not be fetched back from here — the run conclusion is the verification | ✅ |
 | 49 | Pages deployment re-verified live after the crawler-exclusion audit | GitHub Actions run [`67c9d37`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31424377589) completed with conclusion `success`. Same proxy limitation as above applies to fetching the live files back from here | ✅ |
+
+## Added after widening the reward range
+
+Direct request, not a written follow-up doc: "not seeing much if any of the fractal
+patterns... only a few faint sparks [on Forge]... increase the incidence of effects from the
+first use onwards and then reward a consistent streak with greater visual embellishment...
+[Terminal] speed and brightness increase with an improved streak."
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 50 | Every skin is visibly "on" from the first session, before any consistency has accrued | `browser.test.js` → "forge is visibly warmer for a consistent profile than a fresh one" and "terminal streams read brighter for a consistent profile than a fresh one" both assert a floor on the cold (glow 0) pixel-brightness reading, not just a delta — a base state that happened to round to zero would pass a delta-only check | ✅ |
+| 51 | A consistent streak produces a clearly greater effect than the base state, on all three skins | Same two tests plus "fractal lightning respects the flicker-hazard floor and gets more frequent as consistency rises" assert hot > cold by a wide, named margin. Measured headless (`getImageData`, cold = no history vs. hot = 14 consecutive days): Terminal max brightness 105→191, Fractal average 81→141, Forge average 27→74 | ✅ |
+| 52 | Terminal now scales with training consistency (a deliberate departure from the original brief, which only asked this of Fractal/Forge) | `js/backdrop.js` → `drawTerminal()` scales fall speed, overall brightness and the odds of drawing in the brightest colour token, all off `activity.glow`; documented as an intentional scope change in `CLAUDE.md` and `DECISIONS.md` #48 | ✅ |
+| 53 | Terminal gets colour variance without ever mixing two backdrop tokens together (which isn't provably safe — see #54) | Each stream draws one of three *literal* tokens (`--backdrop-stream`, the new `--backdrop-stream-2`, `--backdrop-ink`) chosen at seed time; only the odds of landing in the brightest bucket move with glow, never the palette itself. Covered by the existing generic "every backdrop token sits inside the range" test — no special-casing needed for a new token | ✅ |
+| 54 | Forge's one runtime colour blend (`mix()`) is proven safe across its full parameter space, not just asserted | `contrast.test.js` → "forge's mixed colours never escape the backdrop range" reimplements the exact `hot`/`ironShape`/`edge`/`flameColor` formulas from `backdrop.js` and sweeps heat/flameT 0→1 in 0.02 steps, asserting every resulting luminance stays inside `[--backdrop-base, --backdrop-ink]`. This replaces an informal comment that turned out to overstate its own guarantee — see `DECISIONS.md` #51 | ✅ |
+| 55 | Re-measured CPU cost stays within budget after widening every range | `npm run skins`: terminal 2.6%, fractal 2.9%, forge 3.8% over baseline (budget +5%) — see measured block | ✅ see measured block |
 
 ## Build constraints
 

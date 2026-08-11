@@ -190,6 +190,7 @@ Per `docs/FOLLOWUP_PROMPT_KEMET.md`.
 | 73 | CPU cost re-measured for every skin post-change | `npm run skins`: terminal 2.3%, fractal 3.1%, forge 2.7%, kemet 2.7% over baseline against a 5% budget — see measured block. Fractal is unchanged from before the Mandelbrot existed, because the per-pixel work happens once | ✅ see measured block |
 | 74 | "Pause activity effects" still freezes level progression | `consistency.test.js` → "pausing activity effects freezes the level where it was" — two months of silence would otherwise empty the pyramid; paused, it holds at 10, via the same `effectiveToday()` path and with no data mutation | ✅ |
 | 75 | Footprint still < 50 MB, no video assets or heavy libraries | `npm run footprint`. The update adds one CSS block and ~300 lines of JS; the Mandelbrot is computed, not shipped | ✅ see measured block |
+| 76 | Pages deployment re-verified live after this merge | GitHub Actions run [`a7cb483`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31475345106) completed with conclusion `success`. Same proxy limitation as above applies to fetching the live files back from here | ✅ |
 
 ## Build constraints
 

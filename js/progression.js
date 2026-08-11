@@ -163,6 +163,27 @@ export function formatWeight(value) {
   return Number.isInteger(num) ? String(num) : String(Math.round(num * 100) / 100);
 }
 
+/**
+ * The "N sets · … volume" line shown above a session's set list.
+ *
+ * The label goes BEFORE the number, deliberately. This previously read
+ * `10 sets · 300 kg volume`, sitting directly above a list of `3 kg × 10` sets,
+ * and was reported as a bug — "a logged weight of 3kg is displaying as 300kg".
+ * Nothing was wrong with the data or the weight formatting: 3 kg × 10 reps ×
+ * 10 sets genuinely is 300 kg of total volume. But a bare `300 kg` leading the
+ * line, one line above `3 kg × 10`, reads as a contradictory weight, and a
+ * trailing "volume" is doing far too much work to prevent that.
+ *
+ * Leading with the label makes the number unmistakably a total. The plain-text
+ * weekly summary already did this (`VOLUME     300 kg`); the UI was the odd one
+ * out. Shared by Today and Diary so the two cannot drift apart again.
+ */
+export function formatVolumeLine(setCount, volume, unit) {
+  const count = Number(setCount) || 0;
+  const sets = `${count} ${count === 1 ? 'set' : 'sets'}`;
+  return `${sets} · total volume ${formatWeight(Math.round(Number(volume) || 0))} ${unit}`;
+}
+
 export function formatDuration(seconds) {
   const s = Math.max(0, Math.round(Number(seconds) || 0));
   const h = Math.floor(s / 3600);

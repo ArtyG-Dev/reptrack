@@ -5,7 +5,7 @@ import * as backdrop from '../backdrop.js';
 import { el, clear, toast, openSheet, promptSheet, confirmSheet, clockTime, disclosure, titleCase } from '../ui.js';
 import { parseTranscript, describeSet, formatNumber } from '../parser.js';
 import { listenOnce, isSupported as voiceSupported, VoiceInputError } from '../voice.js';
-import { formatDuration, suggestProgression, totalVolume } from '../progression.js';
+import { formatDuration, suggestProgression, totalVolume, formatVolumeLine } from '../progression.js';
 import { pace } from '../summary.js';
 import { todayISO } from '../store.js';
 
@@ -448,7 +448,7 @@ function setsCard(s) {
   return el('div', { class: 'card stack' },
     el('div', { class: 'row-between' },
       el('h2', { text: 'This session' }),
-      el('p', { class: 'small muted mono', text: `${s.sessionSets.length} sets · ${Math.round(volume)} ${s.settings.unit} volume` })
+      el('p', { class: 'small muted mono', text: formatVolumeLine(s.sessionSets.length, volume, s.settings.unit) })
     ),
     ...body
   );

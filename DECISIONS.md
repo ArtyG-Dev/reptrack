@@ -763,3 +763,101 @@ animation can reach.
 
 `scripts/check-skin-palettes.mjs` was the tool for this, which is what it exists for: tune
 the palette before it reaches the stylesheet, using the same arithmetic the test enforces.
+
+---
+
+## The "3kg shows as 300kg" report, and the audio-persistence verification
+
+Per `docs/FOLLOWUP_PROMPT_AUDIO_VERIFY_AND_WEIGHT_BUG.md`.
+
+### 61. The weight was never wrong — the volume line was being misread, and that is still a real defect
+
+The brief asked, correctly, to establish whether this was a storage bug or a display bug
+before touching anything, because a storage bug would mean existing data is corrupt. I
+checked that first, empirically rather than by reading code:
+
+- **Storage is correct.** Logged 3, 3.5, 30 and 300 kg through *both* entry paths (voice with
+  a stubbed recogniser, and the tap-to-text/manual path), then read the raw `SetEntry.weight`
+  straight out of IndexedDB. Every value round-tripped exactly: `3` stored as `3`.
+- **Every weight renders correctly, on every screen.** Today, Diary and Progress all showed
+  `3 kg × 10`. `describeSet()`, `formatNumber()` and `formatWeight()` are all correct, and
+  there is no stray `× 100` anywhere in the source (checked directly — every `* 100` in the
+  codebase is a two-decimal rounding idiom with its matching `/ 100`).
+
+So there is **no data corruption and no repair migration to write.** Saying so plainly is
+the point of this entry: a migration written on the assumption of a write-path bug would
+have rewritten correct user data, which is far worse than the reported symptom.
+
+What the user actually saw is real, though. Reproduced exactly by logging a realistic light
+session — 3 kg × 10 reps × 10 sets — which rendered:
+
+```
+10 sets · 300 kg volume
+Bench Press
+  1  3 kg × 10
+  2  3 kg × 10
+  …
+```
+
+`300 kg` is arithmetically right (3 × 10 × 10 = 300 kg of total volume) but it is a bare
+number in a weight unit, sitting one line above a list of `3 kg` sets, with a single
+trailing word carrying the entire burden of distinguishing the two. Reading that as "it
+thinks my 3 kg is 300 kg" is not a misunderstanding — it is the display inviting the wrong
+parse.
+
+**Fix:** the label now leads. `10 sets · total volume 300 kg`. Both Today and Diary route
+through one shared `formatVolumeLine()` in `progression.js` so they cannot drift apart
+again. Notably the plain-text weekly summary already did this (`VOLUME     300 kg`) — the UI
+was the odd one out, and the fix brings it into line with a convention the codebase had
+already settled on elsewhere.
+
+**Regression cover** (`browser.test.js`): one test logs 3, 3.5, 30 and 300 kg via both entry
+paths and asserts, for each, that IndexedDB holds the exact value and that all three screens
+render `N kg × 10` and never `N×100 kg × …`. A second test asserts the volume line reads
+`total volume 300 kg` and specifically *not* `300 kg volume`, so the old phrasing cannot
+come back.
+
+### 62. One related inconsistency found and deliberately left alone
+
+Sets render in the unit they were logged in (`describeSet` uses `entry.unit`), while the
+volume line converts to the user's display-unit preference. A set logged in kg by someone
+whose display unit is lb therefore shows `3 kg × 10` above `total volume 66 lb`. Both
+numbers are correct and each is right in its own terms, but they are in different units on
+adjacent lines.
+
+Not changed, because both candidate fixes are worse than the situation: converting the set
+display would show someone a weight they never entered and cannot match to the plates they
+loaded, and pinning volume to the set's unit breaks down the moment a session mixes units.
+Flagged here rather than silently accepted, per the brief's instruction about ambiguous
+cases — it is a judgement call, and it is the user's to overturn.
+
+### 63. The audio guarantee is now enforced at runtime, and the claim narrowed to what is actually provable
+
+"No audio is ever stored" was previously enforced only statically — `pwa-static.test.js`
+bans `MediaRecorder`/`getUserMedia`/`AudioContext` in the source. That proves the app cannot
+*capture* audio, which is the strongest part of the argument, but it never demonstrated the
+storage side.
+
+`browser.test.js` → "a full voice log writes zero audio bytes to any app-controlled storage"
+closes it: it drives a complete voice log (mic tap → stubbed recogniser → transcript →
+confirm → commit) and then sweeps every storage backend the origin can write — *every*
+IndexedDB database rather than just RepTrack's, every Cache Storage entry and its
+content-type, `localStorage` and `sessionStorage` — recursively inspecting values for
+`Blob`s, `ArrayBuffer`s, typed arrays, `data:audio/…` URIs, audio MIME types and long opaque
+base64 runs. It additionally asserts the committed set carries no field outside the
+documented schema, so a binary payload can't ride along on a legitimate record.
+
+**I verified the test fails when it should**, rather than trusting a green pass on a check
+that might assert nothing: planting an `audio/webm` Blob, a `data:audio/…` string, a raw
+`ArrayBuffer` and a 2000-character base64 run across IndexedDB and `localStorage` produced
+exactly four findings.
+
+**The claim in the docs was narrowed to match what is provable.** `CLAUDE.md` and
+`DEPLOYMENT.md` now say: the Web Speech API is a live recognition stream, not a recorder, so
+the app never receives audio to begin with — a stronger position than "we delete it" — and
+the tests cover storage *this origin controls*. They explicitly do **not** cover what Chrome,
+Android or a platform speech service does inside its own process; some implementations
+recognise server-side and may buffer audio there. That is invisible to the app and
+unclearable by it, and claiming otherwise would be overreach. Anyone needing a guarantee
+that spans the platform should use the tap-to-text fallback, which reaches every voice
+feature without a microphone.

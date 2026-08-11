@@ -9,7 +9,7 @@ _Measured 2026-08-11 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 198 passed, 0 failed | ✅ |
+| Automated tests | 201 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -17,16 +17,16 @@ _Measured 2026-08-11 — regenerate with `npm run acceptance`._
 | Lighthouse — Accessibility (Fractal) | 100 | ✅ |
 | Lighthouse — Accessibility (Forge) | 100 | ✅ |
 | Lighthouse — Accessibility (Kemet) | 100 | ✅ |
-| Lighthouse — Performance | 93 | ✅ |
+| Lighthouse — Performance | 92 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 2.3% total, +2.3% vs Light · 22.2 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 3.1% total, +3.1% vs Light · 22.3 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 2.7% total, +2.7% vs Light · 22 fps | ✅ |
-| Skin CPU — Kemet (main thread, over baseline) | 2.7% total, +2.7% vs Light · 22 fps | ✅ |
-| App shell size | 0.225 MB | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2.9% total, +2.9% vs Light · 22.2 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 3.7% total, +3.7% vs Light · 22.3 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 3.2% total, +3.2% vs Light · 22.2 fps | ✅ |
+| Skin CPU — Kemet (main thread, over baseline) | 3.3% total, +3.3% vs Light · 22 fps | ✅ |
+| App shell size | 0.227 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.35 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.351 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -47,7 +47,7 @@ telling search engines not to index the app.
 | 2 | Works with **zero network** after first load. No account, no login | `browser.test.js` → "registers a service worker and survives a fully offline reload" cuts the network at the browser context and reloads; `pwa-static.test.js` fails on any remote reference in the source | ✅ |
 | 3 | Voice logging does not pause or duck background music (or degrades gracefully to tap-to-text) | Implemented as one-shot-on-tap with no `getUserMedia`/`AudioContext`; the fallback is covered by `browser.test.js` → "voice falls back to tap-to-text". **The music behaviour itself needs a real Android device** | ⚠️ needs device verification — `MANUAL_TEST.md` |
 | 4 | Every voice log shows a confirm/edit step before committing | `browser.test.js` → "voice logs a set end to end, showing the parse before it commits" and "…nothing commits without confirmation" (cancel leaves the `sets` store empty) | ✅ |
-| 5 | No audio is ever written to storage | `pwa-static.test.js` bans `MediaRecorder`, `getUserMedia`, `AudioContext`, `createMediaStream` and asserts `continuous = false` / `interimResults = false` | ✅ |
+| 5 | No audio is ever written to storage | Two halves. Static: `pwa-static.test.js` bans `MediaRecorder`, `getUserMedia`, `AudioContext`, `createMediaStream` and asserts `continuous = false` / `interimResults = false`. Runtime: `browser.test.js` → "a full voice log writes zero audio bytes to any app-controlled storage" sweeps every IndexedDB database, Cache Storage entry, `localStorage` and `sessionStorage` after a real voice log — see #77 for scope and limits | ✅ |
 | 6 | Calendar diary navigable by day / week / month / year | All four scopes implemented in `views/diary.js`; `browser.test.js` navigates the month grid to a day view | ✅ |
 | 7 | Progress charts render per-exercise weight & rep history with PR flags | `chart.test.js` covers the geometry; `progression.test.js` covers PR detection; `browser.test.js` asserts a labelled `svg.chart` renders | ✅ |
 | 8 | Total installed footprint stays well under 50 MB; report the measured number | `npm run footprint` — app shell on disk plus a simulated year (3 sessions/week, 20 sets each, 1 run/week) written to IndexedDB, with a pessimistic ×3 store-overhead factor | ✅ see measured block |
@@ -191,6 +191,19 @@ Per `docs/FOLLOWUP_PROMPT_KEMET.md`.
 | 74 | "Pause activity effects" still freezes level progression | `consistency.test.js` → "pausing activity effects freezes the level where it was" — two months of silence would otherwise empty the pyramid; paused, it holds at 10, via the same `effectiveToday()` path and with no data mutation | ✅ |
 | 75 | Footprint still < 50 MB, no video assets or heavy libraries | `npm run footprint`. The update adds one CSS block and ~300 lines of JS; the Mandelbrot is computed, not shipped | ✅ see measured block |
 | 76 | Pages deployment re-verified live after this merge | GitHub Actions run [`a7cb483`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31475345106) completed with conclusion `success`. Same proxy limitation as above applies to fetching the live files back from here | ✅ |
+
+## Added after the weight-display report and audio verification
+
+Per `docs/FOLLOWUP_PROMPT_AUDIO_VERIFY_AND_WEIGHT_BUG.md`.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 77 | Root cause of the "3kg → 300kg" report identified and documented as write-path vs display-path | **Neither — no weight was ever wrong.** Established empirically before changing anything: logged 3 / 3.5 / 30 / 300 kg through both entry paths and read raw `SetEntry.weight` out of IndexedDB (exact round-trip every time), with all three screens rendering the set correctly. The "300 kg" was the session *volume* line (3 kg × 10 reps × 10 sets = 300 kg), correct arithmetic rendered as a bare number one line above a list of `3 kg × 10` sets. Full diagnosis in `DECISIONS.md` #61 | ✅ |
+| 78 | Fix applied; regression test covers voice and manual entry across multiple weights on every screen showing weight | Volume line now leads with its label — `10 sets · total volume 300 kg` — via one shared `formatVolumeLine()` in `progression.js` used by both Today and Diary. `browser.test.js` → "a logged weight is stored and displayed exactly, on every screen, via both entry paths" (4 weights × 2 paths × 3 screens, asserting stored value *and* rendered text, and explicitly that no `×100` weight appears) and "the session volume line names itself before its number…" (asserts the old `300 kg volume` phrasing cannot return) | ✅ |
+| 79 | Corrupted data repaired where identifiable; ambiguous cases flagged rather than guess-corrected | **No repair pass written, because no data is corrupt** — the raw IndexedDB check above is the evidence. A migration written on the assumption of a write-path bug would have rewritten correct user data, which is worse than the reported symptom. One genuinely ambiguous display inconsistency (sets render in their logged unit, volume in the display-unit preference) is flagged in `DECISIONS.md` #62 with the reasoning for leaving it, rather than silently changed | ✅ |
+| 80 | Automated test confirms zero audio bytes written to any app-controlled storage during voice logging | `browser.test.js` → "a full voice log writes zero audio bytes to any app-controlled storage": drives mic tap → transcript → confirm → commit, then recursively sweeps every IndexedDB database (not only RepTrack's), every Cache Storage entry and content-type, `localStorage` and `sessionStorage` for `Blob`s, `ArrayBuffer`s, typed arrays, `data:audio/…` URIs, audio MIME types and long opaque base64 runs; also asserts the committed set carries no field outside the documented schema. **Verified the test fails when it should** — planting four audio-shaped artefacts across two backends produced exactly four findings | ✅ |
+| 81 | `CLAUDE.md` / `DEPLOYMENT.md` state honestly what is verified vs what is outside the app's visibility | `CLAUDE.md` → "What 'no audio is stored' actually means" and `DEPLOYMENT.md` → "Voice data on a deployed instance". Both make the stronger accurate claim (the Web Speech API is a live recognition stream, so the app never receives audio — there is nothing to delete) **and** state the limit plainly: the tests cover storage this origin controls, not what Chrome/Android/a platform speech service does in its own process, which the app can neither see nor clear | ✅ |
+| 82 | The audio check is on the standing acceptance checklist, re-run on any change to the voice flow | It lives in `tests/browser.test.js`, which `npm test` and `npm run acceptance` both run every time — not a one-off manual check. Criterion #5 above now cites it alongside the static ban | ✅ |
 
 ## Build constraints
 

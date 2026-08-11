@@ -104,3 +104,27 @@ hyperlink, so GitHub's own (indexed) repo page isn't itself a discovery path —
 a minor mitigation, not a barrier. If you want the app to be unreachable by an
 unauthenticated visitor, that's a separate feature (auth/access control), not something
 robots.txt or a meta tag can provide.
+
+## Voice data on a deployed instance
+
+Nothing about deploying RepTrack sends voice data anywhere, because RepTrack never has any
+to send. Spelled out, since "the app uses your microphone" invites the question:
+
+- The app calls the **Web Speech API**, which is a live recognition stream rather than a
+  recorder. What the browser passes back is a transcript string and a confidence number —
+  there is no audio object in that API for the app to store, upload, or fail to delete.
+- The source contains no `MediaRecorder`, `getUserMedia`, `AudioContext` or
+  `createMediaStreamSource`. `tests/pwa-static.test.js` fails the build if one appears.
+- `tests/browser.test.js` → "a full voice log writes zero audio bytes to any app-controlled
+  storage" drives a real voice log and then sweeps every IndexedDB database, every Cache
+  Storage entry, `localStorage` and `sessionStorage` for binary or audio-shaped data.
+- RepTrack makes **no network requests at runtime** at all — enforced by test — so there is
+  no endpoint for a transcript, let alone audio, to be posted to.
+
+**The honest limit.** All of the above covers storage and traffic *this origin controls*.
+Some browser and OS speech implementations perform recognition server-side, and may buffer
+or log audio inside their own infrastructure. That happens below the app, is invisible to
+it, and cannot be cleared by it. Do not read the tests above as a statement about the
+platform layer — they are a statement about RepTrack. Anyone who needs a guarantee spanning
+the platform should use the tap-to-text fallback, which is a complete alternative path to
+every voice feature and involves no microphone at all.

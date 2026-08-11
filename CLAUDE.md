@@ -21,7 +21,8 @@ progression, weekly summary. Phases 2–4 (nutrition, multi-user, auth/social) a
 2. **No network at runtime.** Nothing in `index.html`, `css/` or `js/` may reference a
    remote origin. Enforced by test.
 3. **Audio is never captured.** No `MediaRecorder`, `getUserMedia` or `AudioContext`.
-   Recognition is one-shot (`continuous = false`) on an explicit tap. Enforced by test.
+   Recognition is one-shot (`continuous = false`) on an explicit tap. Enforced by test —
+   statically *and* at runtime; see "What 'no audio is stored' actually means" below.
 4. **No browser dialogs.** `alert`/`confirm`/`prompt` are banned; use the sheets in
    `js/ui.js`. Enforced by test.
 5. **Nothing commits without confirmation.** Voice and manual entry both go through the
@@ -128,6 +129,44 @@ Details that look redundant and are not:
   Flips to `true` the first time `state.init()` has reconciled this install's dictionary
   against `exercises-seed.js`, whether that meant a full seed (brand-new install) or a
   by-name backfill (an existing one). Never re-checked after that.
+
+---
+
+## What "no audio is stored" actually means
+
+Worth stating precisely, because the honest claim is narrower than the slogan and the
+difference matters if anyone ever asks.
+
+**The app never receives audio in the first place.** `js/voice.js` wraps the Web Speech API,
+which is a *live recognition stream*, not a recorder: the browser listens, and what it hands
+back through `onresult` is a `SpeechRecognitionResult` — a string plus a confidence number.
+There is no audio object in that API surface for the app to hold, write, or forget to delete.
+This is a stronger position than "we delete the recording afterwards", because there is no
+recording to delete. RepTrack also never opens the other doors to raw audio: no
+`MediaRecorder`, no `getUserMedia`, no `AudioContext`, no `createMediaStreamSource`.
+
+**Two tests hold that in place, and they check different things:**
+
+- `pwa-static.test.js` is the static half: it fails the build if any of those APIs appears in
+  the source, and asserts `continuous = false` / `interimResults = false`.
+- `browser.test.js` → "a full voice log writes zero audio bytes to any app-controlled
+  storage" is the runtime half: it drives a real voice log end to end, then sweeps every
+  storage backend this origin can write — every IndexedDB database (not just RepTrack's),
+  every Cache Storage entry, `localStorage` and `sessionStorage` — looking for `Blob`s,
+  `ArrayBuffer`s, typed arrays, `data:audio/…` URIs, audio MIME types and long opaque base64
+  runs. It also asserts the stored set carries no field outside the documented schema, so a
+  stray binary payload can't ride along on a legitimate record.
+
+**What neither test can tell you.** They cover storage *this origin controls*. They say
+nothing about what Chrome, Android, or a platform speech service does inside its own process:
+some implementations send audio to a server for recognition, and may buffer or log it there.
+That is outside the app's visibility and outside its ability to clear — RepTrack cannot see
+it, cannot assert on it, and this document should not imply otherwise. What can be said
+truthfully is: *nothing audio-shaped is ever written to storage RepTrack owns, and the app
+never holds raw audio at any point.* If someone needs a guarantee that covers the platform
+layer too, that is a question about the browser and OS, not about this codebase — and the
+answer is to not use speech recognition at all, which the tap-to-text fallback already
+supports as a complete alternative path.
 
 ---
 

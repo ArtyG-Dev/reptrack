@@ -247,6 +247,97 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await context.close();
   });
 
+  /** Logs one set through the confirm sheet, via either entry path, and returns
+   *  what the raw IndexedDB record holds plus what each screen renders. */
+  async function logAndInspect(weight, mode) {
+    const phrase = `bench press ${weight} kilos for 10`;
+    const { context, page } = mode === 'voice'
+      ? await freshPage({ voice: 'working', init: new Function(`window.__transcript = ${JSON.stringify(phrase)};`) })
+      : await freshPage({ voice: 'none' });
+
+    await page.click('#start-session');
+    if (mode === 'voice') {
+      await page.click('#mic-button');
+      await page.waitForSelector('#confirm-sheet button[type="submit"]', { state: 'visible' });
+    } else {
+      await typeSet(page, phrase);
+    }
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForTimeout(200);
+
+    const stored = await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => {
+        const tx = req.result.transaction('sets', 'readonly');
+        tx.objectStore('sets').getAll().onsuccess = (e) => resolve(e.target.result.map((s) => s.weight));
+      };
+    }));
+
+    const today = await page.textContent('#view-today');
+    await page.click('#tab-diary');
+    await page.waitForSelector('.cal-day.has-session');
+    await page.click('.cal-day.has-session');
+    await page.waitForTimeout(200);
+    const diary = await page.textContent('#view-diary');
+    await page.click('#tab-progress');
+    await page.waitForTimeout(300);
+    const progress = await page.textContent('#view-progress');
+
+    await context.close();
+    return { stored, today, diary, progress };
+  }
+
+  test('a logged weight is stored and displayed exactly, on every screen, via both entry paths', async () => {
+    // Regression for a report of "3kg displaying as 300kg" on the Diary. The
+    // weight itself was never wrong — see the volume-line test below — but the
+    // only way to know that is to check the stored value against every screen,
+    // which is what this does. 3 and 3.5 are the small values that would expose
+    // a ×100 or a decimal mis-parse; 300 guards the other direction.
+    for (const weight of [3, 3.5, 30, 300]) {
+      for (const mode of ['manual', 'voice']) {
+        const { stored, today, diary, progress } = await logAndInspect(weight, mode);
+        const where = `${weight}kg via ${mode}`;
+
+        assert.deepEqual(stored, [weight], `${where}: IndexedDB must hold exactly what was logged`);
+        for (const [screen, text] of [['today', today], ['diary', diary], ['progress', progress]]) {
+          assert.ok(
+            text.includes(`${weight} kg × 10`),
+            `${where}: ${screen} should render "${weight} kg × 10", got: ${text.replace(/\s+/g, ' ').slice(0, 200)}`
+          );
+          assert.ok(
+            !text.includes(`${weight * 100} kg × `),
+            `${where}: ${screen} rendered a ×100 weight — the original bug report's symptom`
+          );
+        }
+      }
+    }
+  });
+
+  test('the session volume line names itself before its number, so it cannot read as a set weight', async () => {
+    // The actual defect behind the "3kg shows as 300kg" report: 3 kg × 10 reps
+    // × 10 sets is 300 kg of volume, which is correct — but it was rendered as
+    // a bare "300 kg volume" directly above a list of "3 kg × 10" sets.
+    const { context, page } = await freshPage({ voice: 'none' });
+    await page.click('#start-session');
+    await typeSet(page, 'bench press 3 kilos 10 reps 10 sets');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForTimeout(250);
+
+    for (const [screen, tab] of [['today', null], ['diary', 'diary']]) {
+      if (tab) {
+        await page.click(`#tab-${tab}`);
+        await page.waitForSelector('.cal-day.has-session');
+        await page.click('.cal-day.has-session');
+        await page.waitForTimeout(200);
+      }
+      const text = (await page.textContent(`#view-${screen}`)).replace(/\s+/g, ' ');
+      assert.match(text, /total volume 300 kg/, `${screen}: volume must be labelled before its number`);
+      assert.doesNotMatch(text, /300 kg volume/, `${screen}: the old number-first phrasing is what caused the misreading`);
+      assert.match(text, /3 kg × 10/, `${screen}: the sets themselves still read as 3 kg`);
+    }
+    await context.close();
+  });
+
   test('a run is a few fields and shows its pace', async () => {
     const { context, page } = await freshPage();
     await logRun(page, { distance: 5, minutes: 25 });
@@ -369,6 +460,142 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     assert.equal(backup.runs.length, 1);
     assert.ok(backup.sessions.length >= 1);
     assert.ok(/^reptrack-backup-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename()));
+
+    await context.close();
+  });
+
+  test('a full voice log writes zero audio bytes to any app-controlled storage', async () => {
+    // The "no audio is ever stored" promise has always been enforced statically
+    // (pwa-static.test.js bans MediaRecorder/getUserMedia/AudioContext). This is
+    // the runtime half: drive a real voice log end to end, then sweep every
+    // storage API the app can write to and assert nothing binary landed.
+    //
+    // What this can and cannot prove is stated in CLAUDE.md: it covers storage
+    // this origin controls. It says nothing about Chrome's or Android's own
+    // internals, which the app cannot see or clear.
+    const { context, page } = await freshPage({
+      voice: 'working',
+      init: () => { window.__transcript = 'bench press 60 kilos for 10'; }
+    });
+
+    const before = await page.evaluate(async () => ({
+      dbs: (await indexedDB.databases?.() ?? []).map((d) => d.name).sort(),
+      caches: await caches.keys()
+    }));
+
+    await page.click('#start-session');
+    await page.click('#mic-button');
+    await page.waitForSelector('#confirm-sheet button[type="submit"]', { state: 'visible' });
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForSelector('text=60 kg × 10');
+    await page.waitForTimeout(300);
+
+    const audit = await page.evaluate(async () => {
+      const findings = [];
+
+      /** Anything that could carry audio: a binary container, an audio data URI,
+       *  or a long opaque base64 run. Deliberately over-broad — a false positive
+       *  here is a conversation, a false negative is a broken promise. */
+      const inspect = (value, path, seen = new Set()) => {
+        if (value == null) return;
+        if (typeof value === 'object') {
+          if (seen.has(value)) return;
+          seen.add(value);
+        }
+        if (typeof Blob !== 'undefined' && value instanceof Blob) {
+          findings.push(`${path}: Blob type=${value.type || 'unknown'} size=${value.size}`);
+          return;
+        }
+        if (value instanceof ArrayBuffer) { findings.push(`${path}: ArrayBuffer ${value.byteLength}B`); return; }
+        if (ArrayBuffer.isView(value)) { findings.push(`${path}: ${value.constructor.name} ${value.byteLength}B`); return; }
+        if (typeof value === 'string') {
+          if (/^data:(audio|video)\//i.test(value)) findings.push(`${path}: ${value.slice(0, 40)}…`);
+          else if (value.length > 1024 && /^[A-Za-z0-9+/\r\n]+={0,2}$/.test(value)) findings.push(`${path}: ${value.length}-char opaque base64 run`);
+          return;
+        }
+        if (Array.isArray(value)) { value.forEach((v, i) => inspect(v, `${path}[${i}]`, seen)); return; }
+        if (typeof value === 'object') for (const k of Object.keys(value)) inspect(value[k], `${path}.${k}`, seen);
+      };
+
+      // 1. IndexedDB — every database, every store, every record.
+      const dbNames = (await indexedDB.databases?.() ?? []).map((d) => d.name).filter(Boolean);
+      const stores = {};
+      for (const name of dbNames) {
+        const db = await new Promise((resolve, reject) => {
+          const rq = indexedDB.open(name);
+          rq.onsuccess = () => resolve(rq.result);
+          rq.onerror = () => reject(rq.error);
+        });
+        for (const storeName of [...db.objectStoreNames]) {
+          const rows = await new Promise((resolve) => {
+            const tx = db.transaction(storeName, 'readonly');
+            tx.objectStore(storeName).getAll().onsuccess = (e) => resolve(e.target.result);
+          });
+          stores[`${name}/${storeName}`] = rows.length;
+          inspect(rows, `indexedDB.${name}.${storeName}`);
+        }
+        db.close();
+      }
+
+      // 2. Cache Storage — the service worker's precache and anything else.
+      const cacheNames = await caches.keys();
+      const cachedTypes = [];
+      for (const cacheName of cacheNames) {
+        const cache = await caches.open(cacheName);
+        for (const request of await cache.keys()) {
+          const response = await cache.match(request);
+          const type = response?.headers.get('content-type') || '';
+          cachedTypes.push(type);
+          if (/^(audio|video)\//i.test(type)) findings.push(`cache ${cacheName}: ${request.url} is ${type}`);
+          if (/\.(webm|wav|mp3|ogg|m4a|aac|opus|flac)(\?|$)/i.test(request.url)) findings.push(`cache ${cacheName}: ${request.url} looks like an audio file`);
+        }
+      }
+
+      // 3. localStorage / sessionStorage.
+      for (const [label, store] of [['localStorage', localStorage], ['sessionStorage', sessionStorage]]) {
+        for (let i = 0; i < store.length; i += 1) {
+          const key = store.key(i);
+          inspect(store.getItem(key), `${label}.${key}`);
+        }
+      }
+
+      return {
+        findings,
+        dbs: dbNames.sort(),
+        caches: cacheNames,
+        stores,
+        localStorageKeys: Object.keys(localStorage),
+        sessionStorageKeys: Object.keys(sessionStorage),
+        cachedTypes: [...new Set(cachedTypes)].sort()
+      };
+    });
+
+    assert.deepEqual(audit.findings, [], 'a voice log wrote binary/audio-shaped data to app storage');
+
+    // The transcript is text and it is the only thing the recogniser hands over —
+    // assert the set really was written, so a silently-failed log can't pass this.
+    const setRow = await page.evaluate(() => new Promise((resolve) => {
+      const rq = indexedDB.open('reptrack');
+      rq.onsuccess = () => {
+        const tx = rq.result.transaction('sets', 'readonly');
+        tx.objectStore('sets').getAll().onsuccess = (e) => resolve(e.target.result);
+      };
+    }));
+    assert.equal(setRow.length, 1, 'the voice log must actually have committed a set');
+    assert.equal(setRow[0].weight, 60);
+    assert.deepEqual(
+      Object.keys(setRow[0]).filter((k) => !['id', 'sessionId', 'exerciseId', 'dateISO', 'order', 'weight', 'unit', 'reps', 'rpe', 'holdSeconds', 'side', 'isPR', 'lastModified', 'visibility'].includes(k)),
+      [],
+      'the stored set carries no field beyond the documented schema'
+    );
+
+    // No audio MIME type anywhere in the cache, and no new storage backend
+    // appeared as a side effect of talking to the app.
+    assert.ok(!audit.cachedTypes.some((t) => /^(audio|video)\//i.test(t)), `cached content types: ${audit.cachedTypes.join(', ')}`);
+    assert.deepEqual(audit.dbs, ['reptrack'], `only RepTrack's own database should exist, got ${audit.dbs.join(', ')}`);
+    assert.deepEqual(audit.localStorageKeys, [], 'nothing should be written to localStorage at all');
+    assert.deepEqual(audit.sessionStorageKeys, [], 'nothing should be written to sessionStorage at all');
+    assert.deepEqual(before.dbs.length ? before.dbs : ['reptrack'], ['reptrack']);
 
     await context.close();
   });

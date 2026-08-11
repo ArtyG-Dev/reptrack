@@ -5,7 +5,7 @@
 import * as state from '../state.js';
 import { el, clear, toast, confirmSheet, shareOrDownloadText, MONTHS, DOW, monthLabel, longDate, humanDate, parseISO, clockTime } from '../ui.js';
 import { describeSet } from '../parser.js';
-import { formatDuration, totalVolume } from '../progression.js';
+import { formatDuration, totalVolume, formatVolumeLine } from '../progression.js';
 import { weekRange, weekLabel, pace } from '../summary.js';
 import { todayISO } from '../store.js';
 
@@ -226,7 +226,7 @@ function dayView(rerender) {
         el('h3', { style: 'margin:0', text: session.endTs ? `Session · ${formatDuration(session.durationSec)}` : 'Session in progress' }),
         el('p', { class: 'small muted mono', text: `${clockTime(session.startTs)}${session.endTs ? `–${clockTime(session.endTs)}` : ''}` })
       ),
-      el('p', { class: 'small muted mono', text: `${sets.length} sets · ${Math.round(totalVolume(sets, s.settings.unit))} ${s.settings.unit} volume` }),
+      el('p', { class: 'small muted mono', text: formatVolumeLine(sets.length, totalVolume(sets, s.settings.unit), s.settings.unit) }),
       ...groups.map((group) => el('div', {},
         el('h4', { style: 'margin:8px 0 4px', text: state.exerciseById(group.exerciseId)?.name || 'Unknown exercise' }),
         el('ul', { class: 'list' }, ...group.sets.map((entry, i) => el('li', {},

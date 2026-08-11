@@ -97,11 +97,13 @@ function wireTheme() {
   pushActivity();
 }
 
-/** Feed the consistency-driven glow to the backdrop. Cheap, and only the two
- * activity-responsive skins read it. */
+/** Feed the consistency-driven values to the backdrop. Cheap, and only the
+ * glass skins read them. `glow` drives the continuous warmth/brightness;
+ * `streakLevel`/`streakFraction` drive the discrete progression graphics
+ * (pyramid tiers, barbell clarity, Mandelbrot resolution). */
 function pushActivity() {
-  const { glow, frostHint } = state.activityVisual();
-  backdrop.setActivity({ glow, frostHint });
+  const { glow, frostHint, streakLevel, streakFraction } = state.activityVisual();
+  backdrop.setActivity({ glow, frostHint, streakLevel, streakFraction });
 }
 
 async function registerServiceWorker() {

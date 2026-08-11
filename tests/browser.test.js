@@ -533,7 +533,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
 
   /* ---------- frosted-glass skins ---------- */
 
-  const GLASS_SKINS = ['terminal', 'fractal', 'forge'];
+  const GLASS_SKINS = ['terminal', 'fractal', 'forge', 'kemet'];
 
   /** Writes sessions straight into IndexedDB so a profile with real history can
    *  be simulated. Returns after the write commits; caller reloads to pick it up. */
@@ -612,12 +612,12 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
-  test('all five themes are selectable, apply without reload, and persist', async () => {
+  test('every theme is selectable, applies without reload, and persists', async () => {
     const { context, page } = await freshPage();
     await page.click('#tab-settings');
 
     const options = await page.$$eval('#set-theme option', (opts) => opts.map((o) => o.value));
-    assert.deepEqual(options, ['light', 'neon', 'terminal', 'fractal', 'forge']);
+    assert.deepEqual(options, ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet']);
 
     for (const theme of GLASS_SKINS) {
       await page.selectOption('#set-theme', theme);
@@ -628,7 +628,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await page.reload({ waitUntil: 'load' });
     // Wait for boot to have applied a theme rather than racing it.
     await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') !== null, null, { timeout: 5000 });
-    assert.equal(await page.getAttribute('html', 'data-theme'), 'forge', 'the choice survives a reload');
+    assert.equal(await page.getAttribute('html', 'data-theme'), 'kemet', 'the choice survives a reload');
     assert.equal(await page.getAttribute('html', 'data-glass'), '1');
 
     // …and switching back to a flat theme takes the glass and the canvas away.
@@ -863,6 +863,100 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     assert.ok(hotGlow > 0.9, 'sanity check: the seeded profile really is at high consistency');
     assert.ok(coldBright > 20, `even at glow 0 the base state (dumbbell + embers) must not be literally invisible, got ${coldBright}`);
     assert.ok(hotBright > coldBright + 20, `the hot profile (${hotBright}) should read visibly brighter than the cold one (${coldBright})`);
+  });
+
+  /** Drives the backdrop straight to a given streak level, bypassing the
+   *  database. Seeding 0–10 real training histories per assertion would make
+   *  these tests minutes long for no extra coverage — consistency.test.js
+   *  already proves history maps to level correctly. */
+  async function forceLevel(page, level) {
+    await page.evaluate((lv) => {
+      window.__backdrop.setActivity({ glow: lv / 10, frostHint: 0, streakLevel: lv, streakFraction: lv / 10 });
+    }, level);
+  }
+
+  test('the pyramid lights its ten tiers cumulatively across every level', async () => {
+    const { context, page } = await freshPage();
+    await page.goto(`${baseURL}?theme=kemet&static=1`, { waitUntil: 'load' });
+    await page.waitForSelector('#start-session');
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'kemet', null, { timeout: 5000 });
+
+    // Static mode snaps the tiers to their target, so each level can be read
+    // immediately rather than waiting out the ease — and it doubles as the
+    // reduced-motion check that the pyramid still shows the right count.
+    for (let level = 0; level <= 10; level += 1) {
+      await forceLevel(page, level);
+      const tiers = await page.evaluate(() => window.__backdrop.getDiagnostics().tierGlow);
+      const lit = tiers.filter((v) => v > 0.5).length;
+      assert.equal(lit, level, `level ${level} should light exactly ${level} tiers, got ${lit}`);
+      // Cumulative: the lit ones are always the bottom ones, never a gap.
+      for (let i = 0; i < 10; i += 1) {
+        assert.equal(tiers[i] > 0.5, i < level, `tier ${i} wrong at level ${level}`);
+      }
+    }
+    await context.close();
+  });
+
+  test('each skin draws its signature graphic inside the visible band, clear of the tab bar', async () => {
+    const { context, page } = await freshPage();
+    for (const theme of ['kemet', 'forge', 'fractal']) {
+      await page.goto(`${baseURL}?theme=${theme}`, { waitUntil: 'load' });
+      await page.waitForSelector('#start-session');
+      await page.waitForFunction((t) => window.__backdrop?.getDiagnostics().skin === t, theme, { timeout: 5000 });
+
+      const { band, store, tabbarTop } = await page.evaluate(() => {
+        const d = window.__backdrop.getDiagnostics();
+        const bar = document.querySelector('.tabbar').getBoundingClientRect();
+        return { band: d.featureBand, store: d.backingStore, tabbarTop: bar.top / window.innerHeight };
+      });
+
+      // The band is the bottom third…
+      assert.ok(Math.abs(band.y / store.h - 2 / 3) < 0.02, `${theme}: band should start at the bottom third`);
+      // …and must stop above the tab bar, or the graphic is drawn where nobody
+      // can see it. This is what made the bottom pyramid tiers uncountable.
+      const bandBottom = (band.y + band.h) / store.h;
+      assert.ok(bandBottom <= tabbarTop + 0.01, `${theme}: band bottom ${bandBottom.toFixed(3)} runs under the tab bar at ${tabbarTop.toFixed(3)}`);
+      assert.ok(band.h > 0, `${theme}: band must have height`);
+    }
+    await context.close();
+  });
+
+  test('the fractal Mandelbrot is pre-rendered once, not computed per frame', async () => {
+    const { context, page } = await freshPage();
+    await page.goto(`${baseURL}?theme=fractal`, { waitUntil: 'load' });
+    await page.waitForSelector('#start-session');
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().hasMandelbrot === true, null, { timeout: 5000 });
+
+    // If it were computed per frame, the frame budget would collapse: the cap
+    // is 30fps and a full escape-time pass per frame cannot hold that.
+    const before = await page.evaluate(() => window.__backdrop.getDiagnostics().frames);
+    await page.waitForTimeout(1500);
+    const after = await page.evaluate(() => window.__backdrop.getDiagnostics().frames);
+    const drawn = after - before;
+    assert.ok(drawn > 15, `fractal only drew ${drawn} frames in 1.5s — the Mandelbrot is likely being recomputed`);
+    assert.ok(drawn <= 30 * 1.8, `fractal drew ${drawn} frames in ~1.5s — above the 30fps cap`);
+    await context.close();
+  });
+
+  test('the signature graphics get brighter and clearer as the streak level climbs', async () => {
+    const { context, page } = await freshPage();
+    for (const theme of ['kemet', 'forge', 'fractal']) {
+      await page.goto(`${baseURL}?theme=${theme}&static=1`, { waitUntil: 'load' });
+      await page.waitForSelector('#start-session');
+      await page.waitForFunction((t) => window.__backdrop?.getDiagnostics().skin === t, theme, { timeout: 5000 });
+
+      const readings = [];
+      for (const level of [0, 5, 10]) {
+        await forceLevel(page, level);
+        await page.waitForTimeout(120);
+        readings.push(await backdropMaxBrightness(page));
+      }
+      const [low, mid, high] = readings;
+      assert.ok(low > 15, `${theme}: level 0 must still render something visible, got ${low}`);
+      assert.ok(mid > low, `${theme}: level 5 (${mid}) should read brighter than level 0 (${low})`);
+      assert.ok(high > mid, `${theme}: level 10 (${high}) should read brighter than level 5 (${mid})`);
+    }
+    await context.close();
   });
 
   test('terminal streams read brighter for a consistent profile than a fresh one', async () => {

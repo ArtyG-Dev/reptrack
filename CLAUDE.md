@@ -37,7 +37,7 @@ progression, weekly summary. Phases 2–4 (nutrition, multi-user, auth/social) a
 index.html              shell: app bar, five view sections, tab bar, two <dialog> sheets
 manifest.webmanifest    PWA manifest
 sw.js                   service worker — precache the shell, cache-first, offline navigations
-css/styles.css          one stylesheet; semantic custom properties, five palettes
+css/styles.css          one stylesheet; semantic custom properties, six palettes
 
 js/
   app.js                boot, tab router (hash + ARIA tablist), SW registration, theme
@@ -48,7 +48,7 @@ js/
   voice.js              one-shot SpeechRecognition wrapper (transcript only)
   progression.js        1RM/hold-duration scoring, PR detection, progression nudge (pure)
   summary.js            weekly plain-text summary, reps- and hold-mode rows (pure)
-  consistency.js        consistency score, glow curve, frost gating (pure — see below)
+  consistency.js        consistency score, streak level, frost gating (pure — see below)
   backdrop.js           the animated-skin canvas: 30fps cap, auto-pause, static mode
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
   ui.js                 element builder, toasts, <dialog> sheets, disclosure, share/download
@@ -111,8 +111,8 @@ Details that look redundant and are not:
   `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
   `state.setPanelExpanded()`, which also supply the "most recently used category starts
   expanded" default when no explicit choice is stored yet.
-- **`settings.theme`** — `'light' | 'neon' | 'terminal' | 'fractal' | 'forge'`. The last
-  three are the animated frosted-glass skins. `normaliseTheme()` in `views/settings.js`
+- **`settings.theme`** — `'light' | 'neon' | 'terminal' | 'fractal' | 'forge' | 'kemet'`.
+  The last four are the animated frosted-glass skins. `normaliseTheme()` in `views/settings.js`
   maps anything unrecognised (including a `'dark'`/`'auto'` value saved by a much older
   build) back to `'light'`, so no stored value can leave someone on a broken theme.
 - **`settings.reduceBackgroundEffects`** (default `false`) — the manual counterpart to
@@ -141,10 +141,16 @@ in the app reads it; no feature behaviour depends on it.
 Terminal was not originally consistency-responsive — the brief only asked for it on Fractal
 and Forge — but real usage after shipping showed a flat ambient texture reads as "nothing
 changed" exactly when someone's looking for the reward, so it now scales too (see
-`drawTerminal()` in `js/backdrop.js` and decision 48 in `DECISIONS.md`). If you add a fourth
+`drawTerminal()` in `js/backdrop.js` and decision 48 in `DECISIONS.md`). If you add another
 skin, default to wiring it up the same way rather than treating "ambient and static" as the
 safe default; a skin that never moves in response to anything a user does is the thing this
 whole feature exists to avoid.
+
+**There are two separate numbers here and they are not interchangeable.** `glow` (below) is
+continuous and measured against the user's *own* baseline. `streakLevel` (further down) is a
+0–10 integer measured against an *absolute* target. Continuous-and-relative is right for
+warmth; discrete-and-absolute is right for progression, because a beginner needs countable
+progress and a baseline-relative score would put them at maximum on their second session.
 
 **A "training day"** is any date with a session or a run on it — distinct dates, so two
 sessions in one day count once. Doing something is what matters, not doing a lot.
@@ -174,6 +180,51 @@ Three deliberate softenings, all of them load-bearing rather than incidental:
   state cools slowly at first rather than dropping off a cliff.
 - **The target is capped at 6.** However consistent someone has been, the bar it holds them
   to stops at ~3×/week. Consistency can't ratchet itself into something unreachable.
+
+### Streak level — the 0–10 progression metric
+
+`streakState()` in `js/consistency.js`. This is what the skins' *signature graphics* read:
+the ten Kemet pyramid tiers, the Forge barbell's brightness and edge definition, the Fractal
+Mandelbrot's resolution.
+
+**It is deliberately not a consecutive-day streak**, and that was a considered override of
+how the feature was originally described. A strict streak resets to zero on one rest day,
+which means it only ever climbs if you train *every* day — a mechanic that quietly rewards
+overtraining, when adaptation happens during recovery, and which collides head-on with the
+over-activity guardrail already planned for Phase 4. So it's a rolling-window count: nothing
+ever "breaks", and the level only eases down if activity genuinely thins out.
+
+```
+recent   = training days in the last 14 days
+long     = training days in the last 28 days
+blended  = 0.6 × recent  +  0.4 × (long / 2)      // same damping as `glow`
+raw      = clamp(blended / 7, 0, 1)               // 7 training days per 14 = 3.5×/week
+fraction = raw ** 0.7                             // continuous, drives brightness/clarity
+level    = round(fraction × 10)                   // integer, drives the pyramid tiers
+```
+
+Why `targetDays: 7` when the brief asks 4–5 sessions/week to be *capable* of maxing it out:
+the headroom is the mechanism, not sloppiness. At 4×/week the blend sits above the target, so
+the clamp absorbs a dropped session entirely and the level does not move. Measured:
+
+| Pattern | Level | After one extra rest day |
+|---|---|---|
+| 7×/week | 10 | 10 (no change) |
+| 5×/week | 10 | 10 (no change) |
+| 4×/week | 10 | 10 (no change) |
+| 3×/week | 9 | 8 |
+| 2×/week | 7 | 6 |
+
+Be precise about the guarantee when you touch this: **a rest day never resets the level**, at
+any frequency, and at 4–5×/week it doesn't move it at all. Below the target rate it eases
+down by one tier of ten — which is the metric honestly reflecting a genuinely lower rate, not
+a punishment, and is the behaviour `tests/consistency.test.js` pins in both directions.
+
+The curve makes early progress fast on purpose: one session is already level 1–2, six
+sessions is level 8. A beginner should see the pyramid filling, not a flat floor.
+
+`streakLevel` respects "Pause activity effects" through the same `effectiveToday()` path as
+everything else — pausing freezes the level where it stood, and mutates no training data.
 
 ### Frost
 
@@ -261,8 +312,8 @@ Views are re-rendered wholesale on every state change — keep them cheap and st
 feature module, needs to change.
 
 ### Adding a colour scheme
-Five exist: Light (`:root`, default), High-Contrast Neon, and the three animated skins
-(Terminal, Fractal, Forge). Add another the same way — a new `[data-theme="..."]` block in
+Six exist: Light (`:root`, default), High-Contrast Neon, and the four animated skins
+(Terminal, Fractal, Forge, Kemet). Add another the same way — a new `[data-theme="..."]` block in
 `css/styles.css` overriding only the colour custom properties (never introduce a hardcoded
 colour in component CSS), an entry in `THEMES` in `views/settings.js`, and it flows through
 `applyTheme()`, `run-lighthouse.mjs` and `run-acceptance.mjs` automatically. Then run
@@ -275,23 +326,43 @@ motion goes on the canvas instead, and the reason is not stylistic: CSS animatio
 reliably *stopped*, and skin motion must stop dead during voice recognition.
 
 ### Adding an animated skin
-Three exist. A fourth needs, in this order:
+Four exist. A fifth needs, in this order:
 
 1. A `[data-theme="..."]` block declaring the normal semantic tokens **plus** the backdrop
    contract: `--backdrop-base` (the darkest colour the canvas will ever paint),
    `--backdrop-ink` (the lightest), and any skin-specific `--backdrop-*` colours in
-   between. Set `--glass`/`--glass-2`/`--glass-alpha` for the frosted panels.
+   between. Set `--glass`/`--glass-2`/`--glass-alpha` for the frosted panels. Use
+   `node scripts/check-skin-palettes.mjs` to tune the palette *before* it reaches the
+   stylesheet — it runs the same arithmetic the test does.
 2. A draw function in `js/backdrop.js` that reads **only** `--backdrop-*` properties via
    `getComputedStyle`. Never hardcode a colour there — the stylesheet is the single source
    of truth, and that is the entire mechanism by which contrast stays provable.
-3. An entry in `SCALE` in `backdrop.js` (the backing-store resolution divisor) and in
-   `THEMES` in `views/settings.js`.
+3. Entries in `SCALE` (backing-store resolution), `SKIN_TOKENS` (which tokens the renderer
+   reads) and `GLASS_SKINS` in `backdrop.js`, plus `THEMES` in `views/settings.js`. The
+   scripts (`run-lighthouse`, `measure-skins`, `run-acceptance`) each carry their own theme
+   list too — grep for an existing skin's name to find them all.
 
 The contrast guarantee works like this: because the canvas can only paint colours declared
 as `--backdrop-*` tokens, and `contrast.test.js` proves every such token's luminance sits
 inside `[--backdrop-base, --backdrop-ink]`, checking text contrast against the glass scrim
 composited over just those two endpoints brackets *every frame the animation can produce*.
 Paint a colour that isn't a token and that proof silently stops being true.
+
+**Two rules keep that bracket valid, and both are enforced by test:**
+
+- `SKIN_TOKENS` must list every token the renderer reads. `readPalette()` has a hardcoded
+  fallback for each one, so a skin that forgets to *declare* a token still renders happily —
+  in a colour no contrast test has ever seen. The test cross-checks the two.
+- **Never use an additive composite op** (`globalCompositeOperation = 'lighter'`, `screen`,
+  …). Normal source-over alpha is a convex combination, so stacked draws land *between* the
+  colours involved and can't exceed `--backdrop-ink` however many layers pile up. Additive
+  blending breaks exactly that, and would break it silently.
+
+**The feature band.** Each skin draws its signature graphic (pyramid, barbell, Mandelbrot)
+into `featureBand()` — the bottom third of the viewport, *less* the tab bar's height. The
+inset is not cosmetic: without it the bottom two pyramid tiers sit behind the tab bar, which
+makes "all ten tiers light up" false in the only way that matters, since you can't count what
+you can't see. `browser.test.js` asserts the band clears the tab bar for every skin.
 
 Prefer drawing a literal, unblended token over `mix()`-ing two of them, even for variety —
 Terminal gets its colour variance by picking outright between `--backdrop-stream`,
@@ -311,11 +382,12 @@ reduce-effects toggle all live in `backdrop.js`'s `shouldRun()`.
 **Two things a first pass at a skin will get wrong** (see `DECISIONS.md` #40 — a real
 regression, diagnosed the hard way):
 
-- **The glass panel's fixed 88% opacity eats most of a raw canvas alpha.** It's required by
+- **The glass panel's opacity (now 92%) eats most of a raw canvas alpha.** It's there for
   the 4.5:1 contrast proof, so it isn't a lever you can pull — draw amplitudes have to be
-  tuned *knowing* only ~12% of what the canvas paints ever reaches a card. What looks fine
-  in a standalone canvas test can read as "not running" once composited. Check the rendered
-  page, not just the canvas.
+  tuned *knowing* under a tenth of what the canvas paints ever reaches a card. What looks
+  fine in a standalone canvas test can read as "not running" once composited. Check the
+  rendered page, not just the canvas: `page.screenshot()` and look at it, because
+  `getImageData` on the canvas alone cannot tell you what the glass did to it.
 - **If any visual element scales to zero at `glow = 0`, that element is invisible on first
   load — which is the most common state anyone will ever see it in**, since a fresh install
   has no training history. Anything meant to always be present (a silhouette, a few ambient

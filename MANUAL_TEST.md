@@ -39,9 +39,13 @@ glass blur, which on a phone is plausibly the bigger half. So the budget in the 
 (~5% CPU on a mid-range Android, no meaningful battery hit over a session) is only really
 answerable here.
 
-1. On the phone, **Settings → Theme → Forge**. Then **Terminal**, then **Fractal**.
+1. On the phone, **Settings → Theme → Kemet**. Then **Forge**, **Fractal**, **Terminal**.
 2. For each: leave it on the Today tab for ~30 seconds and just watch.
 3. Then do one real thing — start a session and log a set by voice.
+
+Kemet is the one to watch hardest: the pyramid, its ten tiers and the arcs crawling over it
+are the most drawing any skin does. Fractal's Mandelbrot is computed once when the theme
+loads, so a brief hitch *on switching to it* is expected and fine; a sustained one is not.
 
 ### What to watch for
 
@@ -57,9 +61,13 @@ Also worth a quick look while you're in there:
 
 - **Settings → Background effects → Reduce background effects.** The background should go
   completely still — a frozen frame, not a slow one — and stay a still frame after a reload.
-- **Text stays easy to read** over the moving background on all three, in daylight and in a
+- **Text stays easy to read** over the moving background on all four, in daylight and in a
   dark room. The contrast is verified mathematically at both extremes of the animation, but
-  a phone screen at low brightness in the sun is the real test.
+  a phone screen at low brightness in the sun is the real test. Pay particular attention to
+  the **tab bar**, which now sits directly over each skin's focal graphic — that's the one
+  spot where busy detail meets small text.
+- **The whole graphic is visible**, not cut off behind the tab bar: you should be able to
+  count all ten pyramid tiers, and see the full barbell including both outer plates.
 
 ---
 

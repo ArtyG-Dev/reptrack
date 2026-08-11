@@ -638,3 +638,128 @@ starter across every category; an existing dictionary gets exactly the missing s
 nothing already present is altered; a second boot after the flag is set does not resurrect a
 deliberately deleted starter; and a starter already present under different casing is not
 duplicated.
+
+---
+
+## Kemet skin + prominent streak-responsive graphics
+
+Per `docs/FOLLOWUP_PROMPT_KEMET.md`.
+
+### 54. The progression metric is a rolling window, not a consecutive-day streak — as the brief itself directed
+
+The brief opens by overriding its own earlier framing: the effects had been described as a
+consecutive-day streak, and it asks for a rolling-window training-day count instead, because
+a strict streak resets on one rest day and therefore only climbs if you train daily. That
+rewards overtraining, when adaptation happens during recovery, and collides with the
+over-activity guardrail already planned for Phase 4.
+
+Implemented as `streakState()` in `js/consistency.js`, reusing the same 14/28-day blend the
+existing `glow` uses, then a compressive curve, then a clamp, then rounding to 0–10.
+
+**`targetDays: 7` (3.5×/week) is the load-bearing choice.** The brief asks that 4–5×/week be
+*capable* of reaching maximum, and separately that a single rest day not visibly drop the
+level. Those two requirements are in tension on a 10-point scale: if the target is exactly
+what 4×/week produces, you sit on the boundary and one dropped session costs a tier. Setting
+the target *below* the sustained rate gives the clamp headroom to absorb a missed session
+entirely. Measured: at 4×, 5× and 7×/week a rest day moves the level by exactly zero.
+
+Being precise about the guarantee, because "does not visibly drop" is easy to overclaim: at
+2–3×/week — below the target rate — a rest day does cost one tier of ten. That is the metric
+honestly reflecting a genuinely lower training rate, and it is a *gradual ease*, never the
+reset a consecutive-day streak would inflict. `tests/consistency.test.js` pins both halves:
+zero movement at 4–5×/week, and "at most one tier, never to zero" below it.
+
+### 55. `streakLevel` is absolute where `glow` is relative, and that asymmetry is the point
+
+`glow` measures the user against their *own* prior baseline — right for warmth, because a
+2×/week trainer holding their own pattern deserves to read as consistent. `streakLevel`
+measures against a fixed 3.5×/week target instead.
+
+Making it baseline-relative would have been the "consistent" choice and would have been
+wrong: a beginner's baseline is near zero, so their second session would light all ten tiers
+and the mechanic would have nowhere left to go. The brief's stated purpose for discrete tiers
+is "a beginner unmistakable visible progress" — which requires an absolute scale with room
+above them. Both numbers are exposed from `activityVisualState()`; `CLAUDE.md` states the
+distinction so a future change doesn't quietly collapse them into one.
+
+### 56. The Mandelbrot is rendered twice at seed time and never computed in the frame loop
+
+The brief flags it explicitly: "do not compute a full Mandelbrot per frame". `buildMandelbrot()`
+renders two offscreen buffers when the skin mounts or resizes — one at 14 iterations (coarse,
+soft) and one at 96 (filaments resolved) — and the loop only ever `drawImage`s them.
+
+Cross-fading *between the two buffers* is what makes "faint and low-detail → vivid and sharply
+resolved" a real change in resolved structure rather than the same picture at two opacities.
+It costs one extra `drawImage` per frame, which is nothing, and the per-pixel work happens
+once. This is the only per-pixel code in `backdrop.js`, and the file header now says so
+rather than continuing to claim there is none.
+
+Measured after the change: fractal 2.9% of one core over baseline, unchanged from before the
+Mandelbrot existed, against a 5% budget.
+
+### 57. The feature band stops above the tab bar — found by screenshotting, not by testing the canvas
+
+First implementation put all three signature graphics in the literal bottom third of the
+viewport. The canvas diagnostics were perfect: ten tiers lit, correct geometry, no errors.
+The screenshot showed the bottom two pyramid tiers sitting behind the fixed tab bar.
+
+"All ten tiers light up cumulatively" is false in the only way that matters if two of them
+are behind opaque chrome — you cannot count what you cannot see. `featureBand()` now insets
+the band by the tab bar's height, and `browser.test.js` asserts the band's bottom clears the
+tab bar's top for every skin.
+
+The general lesson, now in `CLAUDE.md`: `getImageData` on the backdrop canvas cannot tell you
+what the page looks like. It sees neither the glass scrim nor the chrome drawn over it. A
+graphic that is "prominent" on the canvas and invisible on the page passes every canvas-based
+assertion. Screenshot the page.
+
+### 58. Two new structural guards on the contrast proof, both prompted by this change
+
+The proof rests on "the canvas only ever paints declared `--backdrop-*` tokens, all of which
+are tested to lie inside `[base, ink]`". Adding a fourth skin with eight tokens surfaced two
+ways that can quietly stop being true:
+
+- **A renderer can read a token its theme never declares.** `readPalette()` supplies a
+  hardcoded fallback for every token, so the skin renders fine — in a colour no contrast test
+  has ever seen. `SKIN_TOKENS` in `backdrop.js` now declares which tokens each renderer
+  reads, and a test cross-checks it against the stylesheet.
+- **An additive composite op would break the bound.** Source-over alpha is a convex
+  combination, so stacked draws land between the colours involved; `'lighter'` or `'screen'`
+  would let two mid-tone layers sum past `--backdrop-ink`. Nothing used one, but nothing
+  stopped it either. A test now asserts `globalCompositeOperation` never appears in
+  `backdrop.js`.
+
+Both are cheap, and both close a gap where the code would keep passing while the *proof*
+silently stopped holding — the same failure mode as decision 32's "paint a colour that isn't
+a token".
+
+### 59. The glass scrim went from .88 to .92, and the opaque fallbacks were recomputed to match
+
+The brief anticipates this: "A brighter, sharper graphic in the bottom third makes this
+harder — if text sits over that region, strengthen the scrim rather than dropping contrast."
+
+Worth being precise about what changed and why, because the numbers alone don't justify it:
+contrast passed at .88, and still passes at .92 with 7:1+ margins everywhere. The reason to
+strengthen it anyway is that a computed ratio is measured against a *flat* backdrop colour,
+and the bottom third is no longer flat — it's a Mandelbrot's filaments, or ten tier seams, or
+plate edges. Text over high-frequency detail reads as harder work than the same ratio over a
+smooth gradient, and WCAG's arithmetic doesn't model that. The tab bar sits directly over the
+band, so it was the concrete case.
+
+`--surface`/`--surface-2` are documented as "the scrim over `--backdrop-base`", used as the
+opaque fallback where `backdrop-filter` is unsupported. They were computed at .88, so they
+were recomputed at .92 — otherwise the documented invariant would have quietly become false
+and the no-blur fallback would no longer match the blurred rendering.
+
+### 60. Kemet's `--backdrop-ink` is a bright cyan, chosen against the scrim rather than by eye
+
+`--backdrop-ink` is the luminance *ceiling* — the lightest colour the canvas may paint — and
+neon detailing needs headroom that a dark ceiling doesn't give. Rather than picking a colour
+and hoping, I swept candidate ceilings against the composited scrim first: at .92 alpha the
+worst text pair stays above 7:1 even with an ink luminance of 0.31. `#5f8f96` (0.243) leaves
+room for the cyan hieroglyphs (0.174) and violet arcs (0.158) while keeping every text pair
+at 7.45:1 or better — comfortably clear of the 4.5 floor at the *lightest* extreme the
+animation can reach.
+
+`scripts/check-skin-palettes.mjs` was the tool for this, which is what it exists for: tune
+the palette before it reaches the stylesheet, using the same arithmetic the test enforces.

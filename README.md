@@ -19,7 +19,7 @@ Vanilla HTML/CSS/JS. No framework, no build step, no runtime dependencies.
 - **Exercises** — your own dictionary, grouped into collapsible categories (Strength,
   Calisthenics, Yoga, Pilates, or anything you type — it's not a fixed list). Add lifts,
   poses or holds and the aliases you actually say out loud.
-- **Settings** — units, rest timer, **five themes** (two flat, three animated), background
+- **Settings** — units, rest timer, **six themes** (two flat, four animated), background
   effect controls, JSON export/import, wipe.
 - **Weekly summary** — one tap turns the week into a plain-text file (sessions, lifts, PRs,
   volume, runs) that you can share or save. Generated on-device, works offline.
@@ -114,17 +114,18 @@ runs with pace, and a day-by-day line. Plain text, no network, no formatting to 
 
 ## Themes
 
-**Settings → Theme.** Five of them. The choice applies instantly and is remembered.
+**Settings → Theme.** Six of them. The choice applies instantly and is remembered.
 
 | | |
 |---|---|
 | **Light** | The default — clean, minimal, soft neutrals. |
 | **High-Contrast Neon** | Dark and saturated, electric cyan/green/pink. Bold in colour, not in motion. |
 | **Terminal** | Frosted glass over drifting data streams. Cool and dark; streams fall a little faster and a little brighter, and more of them shift into the brightest colour, the more consistently you've been training. |
-| **Fractal** | Frosted glass over a slowly morphing pattern, with the odd flicker of lightning through it. Both brightness and how often lightning strikes rise with training consistency. A full cycle takes about a minute. |
-| **Forge** | Frosted glass over a huge dumbbell with drifting embers. The glow, ember density, and — once you've built up a real streak — a flame lick above the bar all rise with consistency, and cool slowly when you ease off. |
+| **Fractal** | A Mandelbrot set across the lower screen, under slowly morphing colour and the odd flicker of lightning. It resolves as your level climbs — soft and low-detail at first, sharply defined at the top. |
+| **Forge** | A big barbell across the lower screen with drifting embers and a warm forge glow. It sharpens and brightens as your level climbs, with a flame lick above the bar once you're well into a run. |
+| **Kemet** | Cyberpunk Egypt — night sky, gold and neon cyan, and a **Pyramid of Power** in ten tiers that light up one by one as you train. Electrical arcs crawl across it, more of them the higher you get. |
 
-All five meet the same accessibility bar: every colour pair clears 4.5:1 contrast — for the
+All six meet the same accessibility bar: every colour pair clears 4.5:1 contrast — for the
 animated ones, checked against the background at both its lightest and its darkest, so it
 holds for every frame. Nothing flashes or strobes.
 
@@ -140,19 +141,34 @@ competes with a background effect.
 - **Reduce background effects** — keep the theme, drop the motion. The background renders as
   a single still frame. If your device is set to reduce motion system-wide, this happens
   automatically, and it's still a still frame rather than a slow one.
-- **Pause activity effects** — freezes the Terminal/Forge/Fractal response where it is. For
-  illness, injury, a holiday, or a deliberate deload. Nothing is erased; turn it off and it
-  picks up from the real date again.
+- **Pause activity effects** — freezes the level and the glow where they are. For illness,
+  injury, a holiday, or a deliberate deload. Nothing is erased; turn it off and it picks up
+  from the real date again.
 
-### About the consistency-driven visuals
+### Your level (and why it isn't a daily streak)
 
-All three animated themes brighten as you show up more consistently, measured against *your
-own* recent baseline rather than a fixed target — so it means the same thing whether you
-train twice a week or five times. It moves slowly and deliberately: missing one session is
-essentially invisible, and easing off cools it gently rather than dropping it. There's
-deliberately no floor of "nothing happens until you've proven yourself" either — even on day
-one, before there's any history to measure, the background is already doing something; it
-just gets more so as a streak builds.
+All four animated themes respond to how consistently you've been training. There are two
+things moving: a **level from 0 to 10** that drives the big graphic — the pyramid's lit
+tiers, the barbell's sharpness, the Mandelbrot's detail — and a softer glow that drives
+brightness and warmth.
+
+**The level counts training days in a rolling two-week window, not consecutive days.** That
+distinction is deliberate and it matters:
+
+- **A rest day never resets anything.** There is no streak to break. Train four or five
+  times a week and a rest day doesn't move the level at all — the maths has headroom built
+  in precisely so it doesn't.
+- **You don't have to train daily to max it out.** Four sessions a week gets you to level 10.
+  Seven gets you to level 10 as well — training every day earns nothing extra, because rest
+  is when you actually adapt, and a mechanic that only rewards daily training is a mechanic
+  that pushes you toward overtraining.
+- **It eases, it doesn't snap.** If you genuinely train less over a couple of weeks the level
+  drifts down a tier at a time, and lit tiers dim gradually rather than switching off.
+
+It climbs fast early on purpose: your first session is already worth a tier or two, and six
+sessions puts you most of the way up. There's no floor of "nothing happens until you've
+proven yourself" — the pyramid is fully drawn from day one, with all ten empty tiers visible,
+so you can see what you're filling in.
 
 After a long gap, and only if you'd built a real habit first, calendar days can pick up a
 faint frosted edge. It's capped — a very long gap looks the same as a moderate one — it's
@@ -166,7 +182,7 @@ coming back feel bad.
 ```bash
 npm test               # unit, integration and browser tests
 npm run footprint      # app shell + a simulated year of data, in MB
-npm run lighthouse     # PWA + accessibility scores, for all five themes
+npm run lighthouse     # PWA + accessibility scores, for all six themes
 npm run skins          # CPU cost of each animated skin
 npm run acceptance     # all of the above, and rewrites ACCEPTANCE.md
 npm run icons          # regenerate the PWA icons

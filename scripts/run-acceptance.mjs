@@ -51,7 +51,7 @@ const skins = read('.reports/skins.json');
 /* 5. Write the measured block into ACCEPTANCE.md */
 const scores = lighthouse?.scores ?? {};                                    // default (light) run
 const themeScores = lighthouse?.themes ?? {};
-const THEME_LABELS = { light: 'Light', neon: 'Neon', terminal: 'Terminal', fractal: 'Fractal', forge: 'Forge' };
+const THEME_LABELS = { light: 'Light', neon: 'Neon', terminal: 'Terminal', fractal: 'Fractal', forge: 'Forge', kemet: 'Kemet' };
 const a11yOf = (theme) => themeScores?.[theme]?.scores?.accessibility;
 const everyThemeAccessible = Object.keys(THEME_LABELS).every((t) => (a11yOf(t) ?? scores.accessibility ?? 0) >= 90);
 
@@ -66,7 +66,7 @@ const rows = [
   ['Lighthouse — Performance', scores.performance ?? 'n/a', true],
   ['Lighthouse — Best practices', scores['best-practices'] ?? 'n/a', true],
   ['Lighthouse — SEO', scores.seo ?? 'n/a', true],
-  ...(skins ? ['terminal', 'fractal', 'forge'].map((skin) => [
+  ...(skins ? ['terminal', 'fractal', 'forge', 'kemet'].map((skin) => [
     `Skin CPU — ${THEME_LABELS[skin]} (main thread, over baseline)`,
     `${skins.runs[skin].animated.cpuPercent}% total, +${skins.runs[skin].overBaselinePercent}% vs Light · ${skins.runs[skin].animated.fps} fps`,
     skins.runs[skin].withinBudget
@@ -110,7 +110,7 @@ writeFileSync(join(ROOT, '.reports/acceptance.json'), `${JSON.stringify({
   skins
 }, null, 2)}\n`);
 
-const skinsWithinBudget = !skins || ['terminal', 'fractal', 'forge'].every((s) => skins.runs[s].withinBudget);
+const skinsWithinBudget = !skins || ['terminal', 'fractal', 'forge', 'kemet'].every((s) => skins.runs[s].withinBudget);
 const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90
   && everyThemeAccessible && skinsWithinBudget;
 console.log(`\n${green ? '✅ All headless acceptance criteria pass.' : '❌ Acceptance criteria not met.'}`);

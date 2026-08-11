@@ -1,16 +1,23 @@
 /* RepTrack — single stylesheet, semantic custom properties.
  *
- * Five colour schemes. Settings sets `data-theme` on <html> and it applies
+ * Six colour schemes. Settings sets `data-theme` on <html> and it applies
  * immediately, no reload:
- *   light     (default, on :root)   flat, opaque
- *   neon                            flat, opaque, high-contrast
- *   terminal | fractal | forge      frosted glass over an animated backdrop
+ *   light     (default, on :root)          flat, opaque
+ *   neon                                   flat, opaque, high-contrast
+ *   terminal | fractal | forge | kemet     frosted glass over an animated backdrop
  *
  * Every foreground/background pair is contrast-checked at >= 4.5:1 by
- * tests/contrast.test.js in EVERY scheme. For the three glass schemes that check
+ * tests/contrast.test.js in EVERY scheme. For the four glass schemes that check
  * is run twice — compositing the glass scrim over `--backdrop-base` (the darkest
  * the animated layer ever draws) and over `--backdrop-ink` (the lightest) — so
  * the floor holds across the whole animation range, not just one frame.
+ *
+ * The scrim sits at .92 rather than .88 because each glass skin now carries a
+ * *focal* graphic in the bottom third (a pyramid, a barbell, a Mandelbrot)
+ * rather than a soft wash. Contrast passed at .88 too — this is about text
+ * sitting over busy, high-frequency detail rather than a smooth gradient, which
+ * the ratio alone does not capture. Strengthening the scrim was the brief's own
+ * instruction for that case, in preference to dimming the graphic.
  *
  * No scheme animates in CSS. The only @keyframes in this file is the
  * pre-existing mic recording pulse, and a test enforces that it stays the only
@@ -75,8 +82,8 @@
 
 [data-theme="terminal"] {
   --bg: #04070b;
-  --surface: #080c13;
-  --surface-2: #12171d;
+  --surface: #080d13;
+  --surface-2: #13181e;
   --text: #e2edf3;
   --muted: #9db4c2;
   --border: #223240;
@@ -90,7 +97,7 @@
 
   --glass: 8 13 20;
   --glass-2: 20 25 32;
-  --glass-alpha: .88;
+  --glass-alpha: .92;
   --backdrop-base: #04070b;
   --backdrop-ink: #2f5567;
   --backdrop-grid: #12222c;
@@ -103,8 +110,8 @@
 
 [data-theme="fractal"] {
   --bg: #070510;
-  --surface: #0c0917;
-  --surface-2: #171422;
+  --surface: #0d0a17;
+  --surface-2: #181522;
   --text: #ece7fa;
   --muted: #b3a9d0;
   --border: #2b2440;
@@ -118,7 +125,7 @@
 
   --glass: 13 10 24;
   --glass-2: 25 22 36;
-  --glass-alpha: .88;
+  --glass-alpha: .92;
   --backdrop-base: #070510;
   --backdrop-ink: #4a3a7a;
   --backdrop-bloom-a: #2c2154;
@@ -130,8 +137,8 @@
 
 [data-theme="forge"] {
   --bg: #0a0604;
-  --surface: #110a07;
-  --surface-2: #1c1511;
+  --surface: #110b07;
+  --surface-2: #1c1612;
   --text: #f6e9df;
   --muted: #c4a894;
   --border: #3a2a20;
@@ -145,7 +152,7 @@
 
   --glass: 18 11 7;
   --glass-2: 30 23 19;
-  --glass-alpha: .88;
+  --glass-alpha: .92;
   --backdrop-base: #0a0604;
   --backdrop-ink: #6b3410;
   --backdrop-iron: #241813;
@@ -154,6 +161,42 @@
 
   --frost-edge: #8fb6c8;
   --frost-sheen: rgba(198, 226, 238, .2);
+}
+
+/* Kemet — cyberpunk Egypt. Deep night sky, gold/cyan/violet, neon hieroglyph
+ * accents. --backdrop-ink is a bright cyan here rather than a mid-tone: it is
+ * the luminance *ceiling* the canvas may paint, and the neon detailing needs
+ * headroom. The glass scrim (see --glass-alpha below) is what keeps text
+ * comfortably clear of it — every pair still measures ≥ 7:1 at that extreme. */
+[data-theme="kemet"] {
+  --bg: #050410;
+  --surface: #0b0a19;
+  --surface-2: #161524;
+  --text: #f2ecdc;
+  --muted: #bdb4c9;
+  --border: #2c2748;
+  --accent: #f2c85a;
+  --on-accent: #241a02;
+  --danger: #ff8fa0;
+  --on-danger: #2b0209;
+  --ok: #7fe0b4;
+  --warn: #ffcf6b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .7), 0 10px 30px rgba(0, 0, 0, .55);
+
+  --glass: 11 10 26;
+  --glass-2: 23 22 38;
+  --glass-alpha: .92;
+  --backdrop-base: #050410;
+  --backdrop-ink: #5f8f96;
+  --backdrop-sky: #1d1745;
+  --backdrop-stone: #2a2340;
+  --backdrop-gold: #6d5a24;
+  --backdrop-gold-hot: #8f7530;
+  --backdrop-glyph: #3d7d85;
+  --backdrop-arc: #7a5cc4;
+
+  --frost-edge: #86b4c4;
+  --frost-sheen: rgba(190, 222, 236, .2);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -527,12 +570,13 @@ textarea { min-height: 84px; resize: vertical; }
   pointer-events: none;
 }
 [data-glass="1"] #backdrop { display: block; }
-/* Was 18px over a 0.12-scale backing store — enough blur to erase any bloom
- * shape entirely, which was the main reason Fractal read as "not running"
- * rather than merely subtle. The store is bigger again now (see
- * SCALE.fractal in js/backdrop.js) and needs correspondingly less blur to
- * stay soft without washing out. See DECISIONS.md. */
-[data-theme="fractal"] #backdrop { filter: blur(8px); }
+/* Fractal's blur has come down 18px → 8px → 3px across successive rounds, each
+ * time alongside a bigger backing store (see SCALE.fractal in js/backdrop.js).
+ * It is this low now because the Mandelbrot is a focal graphic that has to
+ * *resolve* — the brief asks for "sharply resolved" at high streak levels, and
+ * blur is the one thing that cannot deliver that at any resolution. What's left
+ * is just enough to take the edge off the upscale. See DECISIONS.md. */
+[data-theme="fractal"] #backdrop { filter: blur(3px); }
 
 /* Opaque fallback first (above), glass only where the browser can actually
  * blur — an unsupported backdrop-filter would otherwise leave text floating on

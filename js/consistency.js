@@ -28,6 +28,29 @@ export const CONSISTENCY = Object.freeze({
   frostCapDays: 21            // frost stops growing here, in depth AND in extent
 });
 
+/**
+ * The 0..10 progression level the skins' signature graphics read (pyramid
+ * tiers, barbell clarity, Mandelbrot resolution).
+ *
+ * Deliberately NOT a consecutive-day streak. A strict streak resets to zero on
+ * one rest day and therefore only ever climbs if you train daily — which
+ * quietly rewards overtraining, when adaptation happens during recovery. This
+ * is a rolling-window training-day count instead: nothing ever "breaks", and
+ * the level only eases down if activity genuinely thins out across the window.
+ *
+ * `targetDays: 7` (3.5×/week) is what reaches level 10, deliberately set below
+ * the 4–5×/week the brief asks to be *capable* of maxing it. That headroom is
+ * the mechanism by which a single rest day is invisible rather than a one-tier
+ * drop: at 4×/week the blend sits above the target, so losing one session is
+ * absorbed by the clamp instead of moving the level. See CLAUDE.md for the
+ * worked numbers.
+ */
+export const STREAK = Object.freeze({
+  levels: 10,                 // discrete tiers — countable progress, not a continuous glow
+  targetDays: 7,              // training days per 14 that reaches the top level (3.5×/week)
+  curve: 0.7                  // same compressive shape as glowCurve: fast early, forgiving late
+});
+
 /* ---------- date helpers (local time, DST-safe via rounding) ---------- */
 
 function parseISO(dateISO) {
@@ -129,6 +152,44 @@ export function consistencyScore({ sessions = [], runs = [], days, todayISO, pau
   };
 }
 
+/* ---------- streak level ---------- */
+
+/**
+ * Rolling-window progression level. See STREAK above for why this is a window
+ * count and not a consecutive-day streak.
+ *
+ * The blend is the same one `consistencyScore` uses — 0.6 × (days in the last
+ * 14) + 0.4 × (days in the last 28, halved onto a 14-day footing) — so a single
+ * dropped session moves it by well under one session's worth before the curve
+ * and the clamp are even applied.
+ *
+ * @returns {{level, fraction, raw, recentDays, longDays, paused, asOf}}
+ *   level    0..10 integer — how many pyramid tiers are lit
+ *   fraction 0..1 continuous — what brightness/clarity scaling reads
+ */
+export function streakState({ sessions = [], runs = [], days, todayISO, pauseActivityEffects = false, activityPausedAt = null }) {
+  const list = days || trainingDays({ sessions, runs });
+  const asOf = effectiveToday({ todayISO, pauseActivityEffects, activityPausedAt });
+  const { windowDays, longWindowDays, recentWeight } = CONSISTENCY;
+
+  const recentDays = countInWindow(list, asOf, windowDays);
+  const longDays = countInWindow(list, asOf, longWindowDays);
+
+  const blended = recentWeight * recentDays + (1 - recentWeight) * (longDays / 2);
+  const raw = Math.min(Math.max(blended / STREAK.targetDays, 0), 1);
+  const fraction = raw ** STREAK.curve;
+
+  return {
+    level: Math.round(fraction * STREAK.levels),
+    fraction,
+    raw,
+    recentDays,
+    longDays,
+    paused: Boolean(pauseActivityEffects && activityPausedAt),
+    asOf
+  };
+}
+
 /* ---------- frost ---------- */
 
 /** Has a 14-day window with enough sessions in it ever happened? */
@@ -199,9 +260,20 @@ export function frostedDates(input) {
  */
 export function activityVisualState(input) {
   const { glow, score, paused, asOf, established } = consistencyScore(input);
+  const streak = streakState(input);
   const frost = frostState(input);
   const frostHint = frost.active
     ? Math.min((frost.gapDays - CONSISTENCY.frostStartGapDays) / (CONSISTENCY.frostCapDays - CONSISTENCY.frostStartGapDays), 1)
     : 0;
-  return { glow, score, frost, frostHint, paused, asOf, established };
+  return {
+    glow,
+    score,
+    frost,
+    frostHint,
+    paused,
+    asOf,
+    established,
+    streakLevel: streak.level,
+    streakFraction: streak.fraction
+  };
 }

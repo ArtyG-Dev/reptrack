@@ -50,7 +50,7 @@ const THEMES = {
     backdropBase: '#04070b',
     backdropInk: '#2f5567',
     glass: '#080d14',
-    glassAlpha: 0.88,
+    glassAlpha: 0.92,
     text: '#e2edf3',
     muted: '#9db4c2',
     accent: '#63d0e6',
@@ -64,7 +64,7 @@ const THEMES = {
     backdropBase: '#070510',
     backdropInk: '#4a3a7a',
     glass: '#0d0a18',
-    glassAlpha: 0.88,
+    glassAlpha: 0.92,
     text: '#ece7fa',
     muted: '#b3a9d0',
     accent: '#b39cf5',
@@ -78,7 +78,7 @@ const THEMES = {
     backdropBase: '#0a0604',
     backdropInk: '#6b3410',
     glass: '#120b07',
-    glassAlpha: 0.88,
+    glassAlpha: 0.92,
     text: '#f6e9df',
     muted: '#c4a894',
     accent: '#ff9d4d',
@@ -87,6 +87,20 @@ const THEMES = {
     'on-danger': '#2c0604',
     ok: '#8fe0a0',
     warn: '#ffc861'
+  },
+  kemet: {
+    backdropBase: '#050410',
+    backdropInk: '#5f8f96',
+    glass: '#0b0a1a',
+    glassAlpha: 0.92,
+    text: '#f2ecdc',
+    muted: '#bdb4c9',
+    accent: '#f2c85a',
+    'on-accent': '#241a02',
+    danger: '#ff8fa0',
+    'on-danger': '#2b0209',
+    ok: '#7fe0b4',
+    warn: '#ffcf6b'
   }
 };
 

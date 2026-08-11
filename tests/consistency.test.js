@@ -7,8 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CONSISTENCY, trainingDays, daysBetween, shiftDays, baselineTarget,
-  consistencyScore, hasEstablishedRun, frostState, frostedDates, activityVisualState
+  CONSISTENCY, STREAK, trainingDays, daysBetween, shiftDays, baselineTarget,
+  consistencyScore, streakState, hasEstablishedRun, frostState, frostedDates, activityVisualState
 } from '../js/consistency.js';
 
 const TODAY = '2026-06-15';
@@ -219,4 +219,94 @@ test('a new user gets warmth, not frost, from their very first week', () => {
   assert.ok(visual.glow > 0.5, 'three sessions in a week should read as hot for a newcomer');
   assert.equal(visual.frost.active, false);
   assert.equal(visual.frostHint, 0);
+});
+
+/* ---------- streak level (the progression metric the skins' graphics read) ---------- */
+
+/** `perWeek` sessions a week for `weeks` weeks, ending today, optionally
+ *  dropping the most recent `dropRecent` training days — i.e. taking that many
+ *  extra rest days on top of the usual pattern. */
+function weeklyPattern(perWeek, { weeks = 8, dropRecent = 0 } = {}) {
+  const slots = { 7: [0, 1, 2, 3, 4, 5, 6], 5: [0, 1, 3, 4, 6], 4: [0, 2, 4, 6], 3: [0, 2, 4], 2: [0, 3] }[perWeek];
+  const offsets = [];
+  for (let w = 0; w < weeks; w += 1) for (const s of slots) offsets.push(w * 7 + s);
+  offsets.sort((a, b) => a - b);
+  return offsets.slice(dropRecent).map((o) => ago(o));
+}
+
+test('sustained 4-5 sessions a week reaches the top level — daily training is not required', () => {
+  for (const perWeek of [4, 5]) {
+    const { level } = streakState({ days: weeklyPattern(perWeek), todayISO: TODAY });
+    assert.equal(level, STREAK.levels, `${perWeek}x/week should be able to max the level out`);
+  }
+  // …and training every single day is not *more* than maximum.
+  assert.equal(streakState({ days: weeklyPattern(7), todayISO: TODAY }).level, STREAK.levels);
+});
+
+test('a single rest day never resets the level, and does not move it at all at 4-5x/week', () => {
+  for (const perWeek of [4, 5, 7]) {
+    const before = streakState({ days: weeklyPattern(perWeek), todayISO: TODAY }).level;
+    const after = streakState({ days: weeklyPattern(perWeek, { dropRecent: 1 }), todayISO: TODAY }).level;
+    assert.equal(after, before, `one extra rest day should be invisible at ${perWeek}x/week`);
+  }
+});
+
+test('below the target rate a rest day eases the level down by a tier, never to zero', () => {
+  // Honest about the limit of the above: at 2-3x/week you sit under the target,
+  // so the window count genuinely is what moves. What must never happen is the
+  // reset-to-zero a consecutive-day streak would inflict.
+  for (const perWeek of [2, 3]) {
+    const before = streakState({ days: weeklyPattern(perWeek), todayISO: TODAY }).level;
+    const after = streakState({ days: weeklyPattern(perWeek, { dropRecent: 1 }), todayISO: TODAY }).level;
+    assert.ok(before - after <= 1, `${perWeek}x/week should lose at most one tier to a rest day`);
+    assert.ok(after > 0, 'a rest day must never zero the level');
+  }
+});
+
+test('the level climbs visibly from the very first session', () => {
+  const first = streakState({ days: [ago(0)], todayISO: TODAY });
+  assert.ok(first.level >= 1, 'one session must be worth at least one lit tier');
+
+  // …and keeps climbing, so a beginner sees progress rather than a plateau.
+  const seen = [0, 1, 2, 3, 4, 6].map((n) => {
+    const days = Array.from({ length: n }, (_, i) => ago(i * 2));
+    return streakState({ days, todayISO: TODAY }).level;
+  });
+  assert.equal(seen[0], 0, 'no training at all is level 0');
+  for (let i = 1; i < seen.length; i += 1) {
+    assert.ok(seen[i] >= seen[i - 1], `level must not go backwards as sessions accumulate: ${seen}`);
+  }
+  assert.ok(seen.at(-1) > seen[1], 'six sessions should read higher than one');
+});
+
+test('the level stays inside 0..10 for empty, sparse and relentless histories', () => {
+  for (const days of [[], [ago(400)], history({ every: 1, spanDays: 400 })]) {
+    const { level, fraction } = streakState({ days, todayISO: TODAY });
+    assert.ok(Number.isInteger(level) && level >= 0 && level <= STREAK.levels, `level out of range: ${level}`);
+    assert.ok(fraction >= 0 && fraction <= 1);
+  }
+});
+
+test('pausing activity effects freezes the level where it was', () => {
+  const days = weeklyPattern(5);
+  const live = streakState({ days, todayISO: shiftDays(TODAY, 60) });
+  const frozen = streakState({
+    days,
+    todayISO: shiftDays(TODAY, 60),
+    pauseActivityEffects: true,
+    activityPausedAt: TODAY
+  });
+  assert.equal(live.level, 0, 'sanity check: two months of silence would otherwise empty it');
+  assert.equal(frozen.level, STREAK.levels, 'pausing holds the level at what it was when switched on');
+  assert.equal(frozen.paused, true);
+});
+
+test('the visual state carries the streak level and its continuous fraction', () => {
+  const visual = activityVisualState({ days: weeklyPattern(5), todayISO: TODAY });
+  assert.equal(visual.streakLevel, STREAK.levels);
+  assert.ok(visual.streakFraction > 0.99);
+
+  const quiet = activityVisualState({ days: [], todayISO: TODAY });
+  assert.equal(quiet.streakLevel, 0);
+  assert.equal(quiet.streakFraction, 0);
 });

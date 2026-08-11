@@ -5,26 +5,28 @@ Regenerate the measured block with `npm run acceptance`.
 
 <!-- measured:start -->
 
-_Measured 2026-08-10 — regenerate with `npm run acceptance`._
+_Measured 2026-08-11 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 182 passed, 0 failed | ✅ |
+| Automated tests | 198 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
 | Lighthouse — Accessibility (Terminal) | 100 | ✅ |
 | Lighthouse — Accessibility (Fractal) | 100 | ✅ |
 | Lighthouse — Accessibility (Forge) | 100 | ✅ |
-| Lighthouse — Performance | 94 | ✅ |
+| Lighthouse — Accessibility (Kemet) | 100 | ✅ |
+| Lighthouse — Performance | 93 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 2% total, +2% vs Light · 21.8 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 1.9% total, +1.9% vs Light · 22.2 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 2.6% total, +2.6% vs Light · 22.2 fps | ✅ |
-| App shell size | 0.209 MB | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2.3% total, +2.3% vs Light · 22.2 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 3.1% total, +3.1% vs Light · 22.3 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 2.7% total, +2.7% vs Light · 22 fps | ✅ |
+| Skin CPU — Kemet (main thread, over baseline) | 2.7% total, +2.7% vs Light · 22 fps | ✅ |
+| App shell size | 0.225 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.333 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.35 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -96,8 +98,8 @@ Per `docs/FOLLOWUP_PROMPT_SKINS.md`.
 
 | # | Criterion | How it is verified | Status |
 |---|---|---|---|
-| 30 | All three skins selectable in Settings, persist across sessions, apply without reload | `browser.test.js` → "all five themes are selectable, apply without reload, and persist" selects each in turn, asserts `data-theme` changes with no navigation, then reloads and asserts the stored choice survives | ✅ |
-| 31 | All three pass Lighthouse a11y ≥ 90 **and** 4.5:1 contrast at both extremes of their animation range | `contrast.test.js` — per skin, composites the glass scrim (`--glass`/`--glass-2` at `--glass-alpha`) over **both** `--backdrop-base` and `--backdrop-ink` and checks 12 text pairs against each; a companion test asserts every `--backdrop-*` token's luminance sits inside that range, which is what makes the two endpoints bracket every frame the canvas can draw. `npm run lighthouse` now loops all five themes and gates each on a11y ≥ 90; `browser.test.js` → "axe-core finds no violations in any of the glass skins" | ✅ see measured block (five a11y rows) |
+| 30 | All three skins selectable in Settings, persist across sessions, apply without reload | `browser.test.js` → "every theme is selectable, applies without reload, and persists" selects each in turn, asserts `data-theme` changes with no navigation, then reloads and asserts the stored choice survives | ✅ |
+| 31 | All three pass Lighthouse a11y ≥ 90 **and** 4.5:1 contrast at both extremes of their animation range | `contrast.test.js` — per skin, composites the glass scrim (`--glass`/`--glass-2` at `--glass-alpha`) over **both** `--backdrop-base` and `--backdrop-ink` and checks 12 text pairs against each; a companion test asserts every `--backdrop-*` token's luminance sits inside that range, which is what makes the two endpoints bracket every frame the canvas can draw. `npm run lighthouse` loops every theme and gates each on a11y ≥ 90; `browser.test.js` → "axe-core finds no violations in any of the glass skins" | ✅ see measured block (one a11y row per theme) |
 | 32 | `prefers-reduced-motion` renders a **static** background for each — verified, not assumed | `browser.test.js` → "prefers-reduced-motion renders a static frame, not a slow one" loads each skin with `colorScheme`/`reducedMotion: 'reduce'`, samples the backdrop's frame counter twice and asserts it does not advance — a slowed animation would still advance it, so the test distinguishes static from slow rather than assuming | ✅ |
 | 33 | Animation auto-pauses when backgrounded and during voice recognition | `browser.test.js` → "the backdrop stops while the tab is hidden" (real `visibilitychange` via CDP) and "the backdrop stops while speech recognition is listening" (drives the actual mic button with a stubbed recogniser and asserts the frame counter is frozen for the duration, then resumes) | ✅ |
 | 34 | Measured CPU cost of each skin recorded in `ACCEPTANCE.md`; any skin over budget is simplified, not shipped | `npm run skins` (`scripts/measure-skins.mjs`) samples CDP `Performance.getMetrics` `TaskDuration` over a 6s window per skin against a no-canvas Light baseline; `run-acceptance.mjs` writes the rows into the measured block and fails the run if any skin exceeds baseline + 5% | ✅ see measured block — **and read the caveat below** |
@@ -169,6 +171,26 @@ were the Phase 1 seed list, frozen because seeding only ever writes to an empty 
 | 61 | The known limitation (name-matching can't tell a rename from an absence) is documented, not silently accepted | `CLAUDE.md` → "Adding a starter exercise" and `DECISIONS.md` #53 both state it plainly, including why a seed-id wasn't added to close the gap | ✅ |
 | 62 | Pages deployment re-verified live after this merge | GitHub Actions run [`1b8a8c0`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31441309041) completed with conclusion `success`. Same proxy limitation as above applies to fetching the live files back from here | ✅ |
 
+## Added after the Kemet skin / prominent streak graphics update
+
+Per `docs/FOLLOWUP_PROMPT_KEMET.md`.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 63 | `streakLevel` is a rolling-window training-day count, not a consecutive-day reset; formula documented in `CLAUDE.md` | `streakState()` in `js/consistency.js`; `CLAUDE.md` → "Streak level" gives the formula, the reasoning for `targetDays: 7`, and a measured table of level-vs-pattern. Nothing anywhere resets on a missed day — there is no streak counter to reset | ✅ |
+| 64 | Verified 4–5 sessions/week can reach maximum level, without daily training | `consistency.test.js` → "sustained 4-5 sessions a week reaches the top level — daily training is not required" asserts level 10 at both 4× and 5×/week, and that 7×/week is not *more* than maximum | ✅ |
+| 65 | Verified a single rest day does not reset or visibly drop the level | `consistency.test.js` → "a single rest day never resets the level, and does not move it at all at 4-5x/week" (zero change at 4×, 5×, 7×). A companion test is explicit about the honest limit: below the target rate (2–3×/week) a rest day eases the level by **one tier of ten and never to zero** — a gradual ease, not a reset. See `DECISIONS.md` #54 | ✅ |
+| 66 | Kemet skin selectable, persists, applies without reload | `browser.test.js` → "every theme is selectable, applies without reload, and persists" (now six; asserts the option list, that `data-theme`/`data-glass` change with no navigation, and that the choice survives a reload) | ✅ |
+| 67 | Pyramid fully visible in the bottom third; all 10 tiers light cumulatively across levels 0–10 | `browser.test.js` → "the pyramid lights its ten tiers cumulatively across every level" drives levels 0→10 and asserts the lit count equals the level *and* that the lit tiers are always the bottom ones with no gaps. "…signature graphic inside the visible band, clear of the tab bar" asserts the band starts at the bottom third and ends above the tab bar — the first implementation hid two tiers behind it, see `DECISIONS.md` #57 | ✅ |
+| 68 | Lightning crawl scales with level; flash frequency cap recorded | `LIGHTNING` in `js/backdrop.js`, shared by the Fractal bolts and the Kemet crawl so there is one cap, not two: `minIntervalS: 3.5` enforced structurally via `Math.max` so it holds at maximum intensity; `durationS: 0.15` (~4–5 frames at the 30fps cap, linear fade); peak alpha 0.22→0.67 and 0–2 branches, both scaling with level. `browser.test.js` → "fractal lightning respects the flicker-hazard floor…" samples the shared counter | ✅ |
+| 69 | Forge barbell and Fractal Mandelbrot both fully visible in the bottom third, scaling in brightness/clarity | Same band test as #67 covers all three skins. `browser.test.js` → "the signature graphics get brighter and clearer as the streak level climbs" asserts, per skin, that level 0 still renders something visible **and** that 0 < 5 < 10 in measured pixel brightness | ✅ |
+| 70 | The Mandelbrot is pre-rendered/cached, never computed per frame | `buildMandelbrot()` renders two offscreen buffers at seed/resize; the loop only `drawImage`s them. `browser.test.js` → "the fractal Mandelbrot is pre-rendered once, not computed per frame" asserts the frame rate holds (a per-frame escape-time pass could not sustain it) | ✅ |
+| 71 | Contrast ≥ 4.5:1 verified at minimum and maximum level for all skins | Structural rather than per-level: the canvas may only paint declared `--backdrop-*` tokens, every token is tested to sit inside `[--backdrop-base, --backdrop-ink]`, and text contrast is checked with the scrim composited over **both** endpoints — which brackets every level, not just the two sampled. Two new guards close the ways that could stop being true: `contrast.test.js` → "every skin declares each --backdrop-* token its renderer actually reads" and "…never uses an additive composite operation". Scrim strengthened .88 → .92 per the brief; measured margin ≥ 7:1 everywhere | ✅ |
+| 72 | Reduced-motion static fallback correct for all skins, pyramid tiers still readable | `snapTiers()` sets tiers to their exact target in static mode, so the count is correct without the ease. `browser.test.js` → "prefers-reduced-motion renders a static frame, not a slow one" (frame counter must not advance) and the tier test itself runs under `?static=1` | ✅ |
+| 73 | CPU cost re-measured for every skin post-change | `npm run skins`: terminal 2.3%, fractal 3.1%, forge 2.7%, kemet 2.7% over baseline against a 5% budget — see measured block. Fractal is unchanged from before the Mandelbrot existed, because the per-pixel work happens once | ✅ see measured block |
+| 74 | "Pause activity effects" still freezes level progression | `consistency.test.js` → "pausing activity effects freezes the level where it was" — two months of silence would otherwise empty the pyramid; paused, it holds at 10, via the same `effectiveToday()` path and with no data mutation | ✅ |
+| 75 | Footprint still < 50 MB, no video assets or heavy libraries | `npm run footprint`. The update adds one CSS block and ~300 lines of JS; the Mandelbrot is computed, not shipped | ✅ see measured block |
+
 ## Build constraints
 
 | Constraint | Verification | Status |
@@ -192,7 +214,7 @@ npm run acceptance     # all three + rewrites the measured block above
 Two things cannot be settled headlessly, and both live in `MANUAL_TEST.md`: criterion #3,
 the music behaviour, and the real-device half of criterion #34, the skin CPU/battery cost.
 
-Lighthouse runs against all five themes (`?theme=light|neon|terminal|fractal|forge` — a
+Lighthouse runs against all six themes (`?theme=light|neon|terminal|fractal|forge|kemet` — a
 preview-only URL override `app.js` reads at boot, see `js/app.js` `wireTheme()`) and gates
 every one of them at ≥ 90 for accessibility. The measured block above reports the default
 (light) run's other categories; each theme's accessibility score has its own row.

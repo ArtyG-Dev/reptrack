@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { SKIN_TOKENS } from '../js/backdrop.js';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const css = readFileSync(join(ROOT, 'css/styles.css'), 'utf8');
 
@@ -62,7 +64,8 @@ const FLAT_THEMES = [['light', ':root {'], ['neon', '[data-theme="neon"] {']];
 const GLASS_THEMES = [
   ['terminal', '[data-theme="terminal"] {'],
   ['fractal', '[data-theme="fractal"] {'],
-  ['forge', '[data-theme="forge"] {']
+  ['forge', '[data-theme="forge"] {'],
+  ['kemet', '[data-theme="kemet"] {']
 ];
 
 for (const [themeName, selector] of [...FLAT_THEMES, ...GLASS_THEMES]) {
@@ -203,6 +206,35 @@ test('forge\'s mixed colours never escape the backdrop range', () => {
     if (l < lo - 1e-9 || l > hi + 1e-9) outside.push(`flameColor at flameT=${flameT.toFixed(2)}: luminance ${l.toFixed(4)}`);
   }
   assert.deepEqual(outside, [], 'a runtime blend escaped [--backdrop-base, --backdrop-ink]');
+});
+
+test('every skin declares each --backdrop-* token its renderer actually reads', () => {
+  // readPalette() supplies a hardcoded fallback for every token, so a skin that
+  // forgets to declare one still renders — in a colour no contrast test has
+  // ever seen, silently outside the proven range. This closes that gap by
+  // checking the renderers' own declared token list against the stylesheet.
+  const missing = [];
+  for (const [themeName, selector] of GLASS_THEMES) {
+    const palette = tokens(selector);
+    for (const token of SKIN_TOKENS[themeName]) {
+      if (!palette[`backdrop-${token}`]) missing.push(`${themeName}: --backdrop-${token}`);
+    }
+  }
+  assert.deepEqual(missing, [], 'a renderer reads a token its theme never declares');
+});
+
+test('the backdrop never uses an additive composite operation', () => {
+  // The whole contrast proof rests on stacked draws being convex combinations:
+  // normal source-over alpha blending can only ever land *between* the colours
+  // involved, so nothing can exceed --backdrop-ink however many layers pile up.
+  // 'lighter'/'screen'/'plus-lighter' break that — two mid-tone draws could sum
+  // past the ceiling — and would do so without failing any existing test.
+  const source = readFileSync(join(ROOT, 'js/backdrop.js'), 'utf8');
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.doesNotMatch(code, /globalCompositeOperation/, 'backdrop.js must stay on the default source-over compositing');
+  for (const op of ['lighter', 'plus-lighter', 'screen', 'color-dodge']) {
+    assert.ok(!code.includes(`'${op}'`), `additive composite op ${op} would break the contrast proof`);
+  }
 });
 
 test('the glass skins declare an opaque fallback for browsers without backdrop-filter', () => {

@@ -46,7 +46,8 @@ export const THEMES = [
   ['neon', 'High-Contrast Neon'],
   ['terminal', 'Terminal (frosted glass)'],
   ['fractal', 'Fractal (frosted glass)'],
-  ['forge', 'Forge (frosted glass)']
+  ['forge', 'Forge (frosted glass)'],
+  ['kemet', 'Kemet (frosted glass)']
 ];
 
 const THEME_IDS = new Set(THEMES.map(([id]) => id));

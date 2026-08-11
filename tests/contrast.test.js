@@ -187,21 +187,24 @@ test('forge\'s mixed colours never escape the backdrop range', () => {
   const palette = tokens('[data-theme="forge"]');
   const lo = luminance(palette['backdrop-base']);
   const hi = luminance(palette['backdrop-ink']);
-  const [ink, iron, ember] = ['backdrop-ink', 'backdrop-iron', 'backdrop-ember'].map((k) => hexToRgb(palette[k]));
+  // `glow` is the warm mid-tone the forge mixes toward. It used to be `ink`,
+  // but ink had to rise to a near-white ceiling for the white-hot bar layer —
+  // so the mix endpoint got its own token and these formulas kept their values.
+  const [glow, iron, ember] = ['backdrop-glow', 'backdrop-iron', 'backdrop-ember'].map((k) => hexToRgb(palette[k]));
 
   const outside = [];
   const STEP = 0.02;
   for (let heat = 0; heat <= 1 + 1e-9; heat += STEP) {
-    const hot = mixRgb(ember, ink, heat);
+    const hot = mixRgb(ember, glow, heat);
     const ironShape = mixRgb(iron, hot, heat * 0.45);
-    const edge = mixRgb(ironShape, ink, 0.4);
+    const edge = mixRgb(ironShape, glow, 0.4);
     for (const [label, rgb] of [['hot', hot], ['ironShape', ironShape], ['edge', edge]]) {
       const l = rgbLuminance(rgb);
       if (l < lo - 1e-9 || l > hi + 1e-9) outside.push(`${label} at heat=${heat.toFixed(2)}: luminance ${l.toFixed(4)}`);
     }
   }
   for (let flameT = 0; flameT <= 1 + 1e-9; flameT += STEP) {
-    const flameColor = mixRgb(ember, ink, 0.6 + 0.4 * flameT);
+    const flameColor = mixRgb(ember, glow, 0.6 + 0.4 * flameT);
     const l = rgbLuminance(flameColor);
     if (l < lo - 1e-9 || l > hi + 1e-9) outside.push(`flameColor at flameT=${flameT.toFixed(2)}: luminance ${l.toFixed(4)}`);
   }

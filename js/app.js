@@ -98,12 +98,14 @@ function wireTheme() {
 }
 
 /** Feed the consistency-driven values to the backdrop. Cheap, and only the
- * glass skins read them. `glow` drives the continuous warmth/brightness;
- * `streakLevel`/`streakFraction` drive the discrete progression graphics
- * (pyramid tiers, barbell clarity, Mandelbrot resolution). */
+ * glass skins read them. Three independent signals: `glow` drives continuous
+ * warmth/brightness, `streakLevel`/`streakFraction` drive the rolling-window
+ * progression graphics (pyramid tiers, barbell clarity, Mandelbrot detail), and
+ * `monthPercent` drives the month-to-date layer (Kemet halo, Forge white-hot
+ * bars). They are layered, never combined — see CLAUDE.md. */
 function pushActivity() {
-  const { glow, frostHint, streakLevel, streakFraction } = state.activityVisual();
-  backdrop.setActivity({ glow, frostHint, streakLevel, streakFraction });
+  const { glow, frostHint, streakLevel, streakFraction, monthPercent } = state.activityVisual();
+  backdrop.setActivity({ glow, frostHint, streakLevel, streakFraction, monthPercent });
 }
 
 async function registerServiceWorker() {

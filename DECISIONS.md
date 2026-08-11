@@ -861,3 +861,127 @@ recognise server-side and may buffer audio there. That is invisible to the app a
 unclearable by it, and claiming otherwise would be overreach. Anyone needing a guarantee
 that spans the platform should use the tap-to-text fallback, which reaches every voice
 feature without a microphone.
+
+---
+
+## Monthly-progress halo (Kemet) and white-hot bars (Forge)
+
+Per `docs/FOLLOWUP_PROMPT_MONTHLY_HALO_1.md`.
+
+### 64. `monthPercent` is a third metric, kept deliberately separate from the other two
+
+There are now three independent signals feeding the skins, and the brief is explicit that
+the new one must not be conflated with `streakLevel`:
+
+| | `glow` | `streakLevel` | `monthPercent` |
+|---|---|---|---|
+| Window | rolling 14/28 days | rolling 14/28 days | this calendar month |
+| Scale | 0–1 continuous | 0–10 integer | 0–1 continuous |
+| Measured against | the user's own baseline | an absolute target | days elapsed this month |
+
+They are layered, never combined: Kemet shows tiers *and* a halo, Forge shows barbell clarity
+*and* white-hot bars. A strong rolling streak crossing into a new month legitimately shows a
+full pyramid with the halo just starting — that is the honest picture of two different
+things, and collapsing them into one number would lose it.
+
+### 65. Elapsed days as the denominator, exactly as the brief instructed, and it matters more than it looks
+
+`monthPercent = training days this month / day-of-month`. The brief pre-empted the naive
+implementation and it was right to: against the full month, training every single day of the
+first week caps at 7/31 ≈ 23%, so a perfect run would leave the halo dark until mid-month.
+Against elapsed days a perfect run reads 100% on any date. There is a test named for exactly
+that case, asserting both the 100% and that the naive denominator would have read under 25%.
+
+The honest cost, stated in `CLAUDE.md` rather than damped away: early in a month the metric
+is *jumpy* by construction — on the 3rd, one missed day is 67%. That is inherent to the
+definition being asked for, not a defect, and widening the window to smooth it would quietly
+turn it back into the rolling metric we already have.
+
+### 66. The month boundary carries the previous month out over two days
+
+The raw ratio resets hard at midnight on the 1st: a month finishing at 100% becomes 0/1 the
+next morning and the halo would slam off. `MONTH.carryDays: 2` blends the previous month's
+final figure out linearly, so a perfect June reads 100% → 67% → 33% → 0% across the 30th,
+1st, 2nd and 3rd. Chosen over damping the ratio itself because it touches only the boundary,
+leaving the metric's definition intact everywhere else.
+
+### 67. Two new backdrop tokens per skin, and the luminance ceiling had to rise for both
+
+`--backdrop-ink` is the ceiling — the lightest colour the canvas may paint — and both new
+effects reach past the old one: Forge's bars go white-hot, Kemet's halo goes bright gold.
+
+Raising ink alone would have silently changed the *existing* streak visuals, because both
+renderers used `ink` as the warm/bright endpoint of their `mix()` calls. So the old value
+got its own name in each skin — `--backdrop-glow` (Forge) and `--backdrop-star` (Kemet), both
+unchanged in value — and `ink` became purely the ceiling. Existing appearance is byte-for-byte
+identical; only the headroom moved.
+
+Verified before writing any CSS that the brighter ceilings still clear the contrast floor at
+the *lightest* extreme: worst text pair is 6.35:1 (Forge) and 6.78:1 (Kemet) against a 4.5
+requirement. The .92 scrim does the work — a near-white backdrop still only lifts the panel
+to `#251d18`.
+
+### 68. Heat and halo colours are token cross-fades, not blends
+
+Both new layers could have interpolated toward a computed colour. Neither does. Forge's
+dull-red → orange → yellow → white ramp picks the two adjacent stops from four declared
+tokens and draws each at a weight; Kemet's halo layers `--backdrop-halo` and
+`--backdrop-halo-hot` at separate alphas. Every pixel is therefore a literal declared token
+at some alpha — a convex combination, provably inside `[base, ink]` — and neither needs the
+bespoke luminance proof that Forge's one remaining `mix()` still requires.
+
+### 69. The flicker cap became skin-wide, because two layers can now flash independently
+
+Kemet runs two bolt tracks: the streak-driven pyramid crawl and the month-driven halo
+lightning. Each obeying `minIntervalS` separately is *not* the same guarantee as before —
+two tracks could put flashes 0.1s apart on screen while both satisfied their own floor.
+
+Added `lastFlashAt`, a module-level gate every track must clear before firing. The cap is now
+a statement about what the eye actually sees rather than about any one layer. This is a case
+where honouring the brief's constraint ("same flicker-hazard cap as all prior lightning
+effects") required *changing* the mechanism, not just reusing it.
+
+### 70. Two visual corrections found by testing and by looking, not by reading the code
+
+- **The halo plateaued at 58%.** `brighten` was a smoothstep saturating at 0.58, so the top
+  forty points of the range added sparks and arcs but no actual light — while the brief calls
+  for "halo at its brightest" in the 90–100% band. Caught by the browser test that sweeps
+  month-percent expecting a monotonic rise. `strike` now feeds ring brightness too.
+- **The Forge bloom washed out the plates.** The first bloom radius was proportional to
+  segment *width*, which on the full-length rod threw a halo wide enough to obscure the
+  plates — and the plates are what carry the streak signal. Two layers that are meant to be
+  independently readable had become one. Replaced with an inflated-outline glow that follows
+  whatever shape it is given, so the rod and the vertical bars each glow along their length.
+
+### 71. A test that measures the wrong thing is a broken test, even when it fails "correctly"
+
+"Both metrics high must exceed either alone" initially failed on Kemet — and the code was
+right. Peak pixel brightness cannot rise when the halo is by construction the brightest
+element on screen; lighting the pyramid tiers beneath it adds a great deal of light without
+touching the maximum. Switched that assertion to *average* brightness (total light), which is
+the measure that actually matches the claim, and kept max brightness for the "is the peak
+brighter" assertions where it is the right instrument. Both helpers now sit side by side with
+a comment explaining when each applies.
+
+### 72. Follow-up tuning from live review: the halo is a flattened torus, and the vertical bars glow
+
+Two adjustments after seeing it running:
+
+- The halo was a perfect circle, which read as a drawn ring with a hole punched in the middle
+  rather than a glow — and a circle wide enough to look deliberate is also tall enough to
+  reach the card panel above it, which would have forced either overlapping the UI or
+  shortening the pyramid. It is now an ellipse at roughly 1:0.32. Flattening buys the width
+  without the height: it sits in the gap and the pyramid keeps all ten tiers.
+
+  **The first version of that torus cost 10.8% of a core — double the budget — and dropped
+  Kemet to 16fps.** It was built from four concentric strokes of the ring band, which looked
+  right and was quietly ruinous: stroking an ellipse with a ~32px line width is a large
+  antialiased fill, four times a frame. Rebuilt as a *single* radial gradient with the band
+  shaped into its colour stops, drawn through a y-scale to make it elliptical — same picture,
+  3.5%. `npm run skins` caught it on the acceptance pass, which is the entire argument for
+  that gate running every time rather than once per feature. Worth noting the run that caught
+  it also threw a 9.4% outlier on Fractal, which two clean re-runs did not reproduce — a
+  measurement on a loaded machine, not a regression. Re-run before acting on a number.
+- The white-hot layer glowed the rod but left the vertical bars looking cold beside it. They
+  now take the same heat ramp at 1.35× intensity — they are the tallest, most readable pieces
+  of the barbell, and the effect is called "white-hot bars".

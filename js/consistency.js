@@ -51,6 +51,28 @@ export const STREAK = Object.freeze({
   curve: 0.7                  // same compressive shape as glowCurve: fast early, forgiving late
 });
 
+/**
+ * Month-to-date completion, 0..1 — a SECOND, independent progression metric.
+ * Drives the Kemet halo and the Forge white-hot bars; `STREAK` continues to
+ * drive the pyramid tiers and barbell clarity. The two coexist and are tracked
+ * separately: you can be high on one and low on the other, and the visuals are
+ * layered accordingly.
+ *
+ * Denominator is **days elapsed this month**, not days in the month. Measured
+ * against the full month, someone training every day of the first week could
+ * only reach 7/31 ≈ 23% however perfectly they trained, and the effect would
+ * stay dark until mid-month through no fault of theirs. Against elapsed days a
+ * perfect run reads 100% on any date, which is what makes it motivating.
+ *
+ * `carryDays` handles the month boundary. The raw ratio resets hard at midnight
+ * on the 1st (a full month at 100% becomes 0/1 or 1/1), so for the first couple
+ * of days the previous month's final figure is blended out rather than cut —
+ * the halo fades over a day or two instead of slamming off.
+ */
+export const MONTH = Object.freeze({
+  carryDays: 2                // days of the new month over which last month's value fades out
+});
+
 /* ---------- date helpers (local time, DST-safe via rounding) ---------- */
 
 function parseISO(dateISO) {
@@ -190,6 +212,63 @@ export function streakState({ sessions = [], runs = [], days, todayISO, pauseAct
   };
 }
 
+/* ---------- month-to-date completion ---------- */
+
+/** `YYYY-MM` prefix of an ISO date. */
+function monthKey(dateISO) {
+  return String(dateISO).slice(0, 7);
+}
+
+/** The calendar month before `dateISO`, as `{ key, days }`. */
+function previousMonth(dateISO) {
+  const [y, m] = String(dateISO).split('-').map(Number);
+  const py = m === 1 ? y - 1 : y;
+  const pm = m === 1 ? 12 : m - 1;
+  return {
+    key: `${py}-${String(pm).padStart(2, '0')}`,
+    days: new Date(py, pm, 0).getDate()          // day 0 of the next month = last day of this one
+  };
+}
+
+/**
+ * Month-to-date training completion. See MONTH above for why the denominator is
+ * elapsed days and why the month boundary fades.
+ *
+ * @returns {{percent, raw, previousPercent, trainingDays, elapsedDays, carrying, paused, asOf}}
+ *   percent 0..1 — what the visuals read (carry-blended near a month boundary)
+ *   raw     0..1 — the unblended ratio, for tests and diagnostics
+ */
+export function monthProgress({ sessions = [], runs = [], days, todayISO, pauseActivityEffects = false, activityPausedAt = null }) {
+  const list = days || trainingDays({ sessions, runs });
+  const asOf = effectiveToday({ todayISO, pauseActivityEffects, activityPausedAt });
+
+  const thisKey = monthKey(asOf);
+  const elapsedDays = Number(String(asOf).slice(8, 10)) || 1;   // day-of-month == days elapsed, inclusive
+  const trained = list.filter((d) => monthKey(d) === thisKey).length;
+  const raw = Math.min(Math.max(trained / elapsedDays, 0), 1);
+
+  const prev = previousMonth(asOf);
+  const prevTrained = list.filter((d) => monthKey(d) === prev.key).length;
+  const previousPercent = Math.min(Math.max(prevTrained / prev.days, 0), 1);
+
+  // Fade the previous month out over the first `carryDays` days rather than
+  // cutting: on day 1 the new ratio has one sample and swings wildly.
+  const carrying = elapsedDays <= MONTH.carryDays;
+  const blend = carrying ? elapsedDays / (MONTH.carryDays + 1) : 1;
+  const percent = carrying ? previousPercent * (1 - blend) + raw * blend : raw;
+
+  return {
+    percent,
+    raw,
+    previousPercent,
+    trainingDays: trained,
+    elapsedDays,
+    carrying,
+    paused: Boolean(pauseActivityEffects && activityPausedAt),
+    asOf
+  };
+}
+
 /* ---------- frost ---------- */
 
 /** Has a 14-day window with enough sessions in it ever happened? */
@@ -261,6 +340,7 @@ export function frostedDates(input) {
 export function activityVisualState(input) {
   const { glow, score, paused, asOf, established } = consistencyScore(input);
   const streak = streakState(input);
+  const month = monthProgress(input);
   const frost = frostState(input);
   const frostHint = frost.active
     ? Math.min((frost.gapDays - CONSISTENCY.frostStartGapDays) / (CONSISTENCY.frostCapDays - CONSISTENCY.frostStartGapDays), 1)
@@ -274,6 +354,7 @@ export function activityVisualState(input) {
     asOf,
     established,
     streakLevel: streak.level,
-    streakFraction: streak.fraction
+    streakFraction: streak.fraction,
+    monthPercent: month.percent
   };
 }

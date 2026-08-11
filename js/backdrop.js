@@ -50,14 +50,19 @@ const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet']);
 export const SKIN_TOKENS = Object.freeze({
   terminal: ['base', 'ink', 'grid', 'stream', 'stream-2'],
   fractal: ['base', 'ink', 'bloom-a', 'bloom-b'],
-  forge: ['base', 'ink', 'iron', 'ember', 'spark'],
-  kemet: ['base', 'ink', 'sky', 'stone', 'gold', 'gold-hot', 'glyph', 'arc']
+  forge: ['base', 'ink', 'glow', 'iron', 'ember', 'spark', 'heat-a', 'heat-b', 'heat-c'],
+  kemet: ['base', 'ink', 'star', 'halo', 'halo-hot', 'sky', 'stone', 'gold', 'gold-hot', 'glyph', 'arc']
 });
 
 // Lightning — a flicker-hazard budget, not a suggestion. The floor applies at
 // maximum intensity: however strong the streak, a flash is never closer than
-// this to the last one. Shared by the Fractal bolts and the Kemet pyramid
-// crawl, so there is exactly one cap to verify rather than two.
+// this to the last one.
+//
+// There are now two independent bolt tracks on Kemet (the streak-driven pyramid
+// crawl and the month-driven halo), so per-track capping is no longer enough —
+// two tracks each obeying a 3.5s floor could still put flashes 0.1s apart on
+// screen. `lastFlashAt` is a skin-wide gate every track must clear, so the cap
+// is on what the eye actually sees rather than on any one layer.
 const LIGHTNING = Object.freeze({
   minIntervalS: 3.5,     // hard floor — never more than one flash per ~3.5s
   maxIntervalS: 9,       // at zero intensity a flash is still rare, just not absent
@@ -104,7 +109,7 @@ let lastFrameAt = 0;
 let clock = 0;                       // seconds; only advances while actually running
 let voiceActive = false;
 let reduceEffects = false;           // the manual Settings toggle
-let activity = { glow: 0.5, frostHint: 0, streakLevel: 0, streakFraction: 0 };
+let activity = { glow: 0.5, frostHint: 0, streakLevel: 0, streakFraction: 0, monthPercent: 0 };
 let palette = {};
 let dims = { w: 0, h: 0 };
 let streams = [];
@@ -113,9 +118,14 @@ let stars = [];
 let glyphs = [];
 let tierGlow = new Float64Array(STREAK_LEVELS);
 let mandelbrot = null;               // { low, high } offscreen canvases, or null
-let bolt = null;                     // the one active flash, or null
-let nextBoltAt = 0;
-let boltFlashes = 0;                 // diagnostics/test hook — cumulative flash count
+/** One independent lightning layer. Kemet runs two (pyramid crawl + halo);
+ *  Fractal runs one. All of them clear the shared `lastFlashAt` gate. */
+function makeBoltTrack() {
+  return { bolt: null, nextAt: 0, flashes: 0 };
+}
+let boltTrack = makeBoltTrack();     // pyramid surface (Kemet) / bolts (Fractal)
+let haloTrack = makeBoltTrack();     // Kemet halo only
+let lastFlashAt = -Infinity;         // skin-wide flicker gate, across every track
 let frames = 0;                      // diagnostics/test hook
 
 const reducedMotionQuery = typeof matchMedia === 'function'
@@ -190,9 +200,16 @@ function readPalette() {
     stream2: read('--backdrop-stream-2', '#1c5248'),
     bloomA: read('--backdrop-bloom-a', '#2c2154'),
     bloomB: read('--backdrop-bloom-b', '#1c3350'),
+    glow: read('--backdrop-glow', '#6b3410'),
     iron: read('--backdrop-iron', '#241813'),
     ember: read('--backdrop-ember', '#5a2a0c'),
     spark: read('--backdrop-spark', '#6b3410'),
+    heatA: read('--backdrop-heat-a', '#8a3a12'),
+    heatB: read('--backdrop-heat-b', '#c9701f'),
+    heatC: read('--backdrop-heat-c', '#f0c25e'),
+    star: read('--backdrop-star', '#5f8f96'),
+    halo: read('--backdrop-halo', '#d8bf72'),
+    haloHot: read('--backdrop-halo-hot', '#f4e7b4'),
     sky: read('--backdrop-sky', '#1d1745'),
     stone: read('--backdrop-stone', '#2a2340'),
     gold: read('--backdrop-gold', '#6d5a24'),
@@ -261,8 +278,9 @@ function seed() {
 
   mandelbrot = skin === 'fractal' ? buildMandelbrot() : null;
 
-  bolt = null;
-  nextBoltAt = 0;
+  boltTrack = makeBoltTrack();
+  haloTrack = makeBoltTrack();
+  lastFlashAt = -Infinity;
 }
 
 /* ---------- Mandelbrot (rendered once, drawn every frame) ---------- */
@@ -368,32 +386,46 @@ function strokePath(points, colour, alpha, width = 1) {
   ctx.stroke();
 }
 
+/** Smooth 0→1 ramp. Used for every month-percent threshold, so crossing 25%
+ *  eases in rather than snapping from nothing to visible. */
+function smoothstep(edge0, edge1, x) {
+  const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+  return t * t * (3 - 2 * t);
+}
+
 /** Schedules once, then re-schedules itself every time a flash finishes.
  *  Interval shortens with intensity but never below LIGHTNING.minIntervalS at
  *  any intensity — the flicker-hazard cap holds at maximum, not just on
- *  average. `makeBolt` supplies the skin-specific geometry. */
-function maybeStrikeBolt(t, intensity, makeBolt) {
-  if (nextBoltAt === 0) { nextBoltAt = t + LIGHTNING.maxIntervalS * 0.4; return; }
-  if (bolt) return;
-  if (t < nextBoltAt) return;
+ *  average. `makeBolt` supplies the layer-specific geometry.
+ *
+ *  Two gates, not one: the track's own `nextAt`, and the skin-wide
+ *  `lastFlashAt`. The second is what makes the cap a statement about what
+ *  reaches the eye — with the halo track running alongside the pyramid track,
+ *  per-track floors alone would allow two flashes back to back. */
+function maybeStrikeBolt(track, t, intensity, makeBolt) {
+  if (track.nextAt === 0) { track.nextAt = t + LIGHTNING.maxIntervalS * 0.4; return; }
+  if (track.bolt) return;
+  if (t < track.nextAt) return;
+  if (t - lastFlashAt < LIGHTNING.minIntervalS) return;    // another layer just flashed
 
-  bolt = { bornAt: t, ...makeBolt(intensity) };
-  boltFlashes += 1;
+  track.bolt = { bornAt: t, ...makeBolt(intensity) };
+  track.flashes += 1;
+  lastFlashAt = t;
 
   const span = LIGHTNING.maxIntervalS - LIGHTNING.minIntervalS;
-  nextBoltAt = t + Math.max(
+  track.nextAt = t + Math.max(
     LIGHTNING.minIntervalS,
     LIGHTNING.maxIntervalS - span * intensity + (Math.random() - 0.5) * 1.5
   );
 }
 
-function drawBolt(t, colour, peak) {
-  if (!bolt) return;
-  const age = t - bolt.bornAt;
-  if (age > LIGHTNING.durationS) { bolt = null; return; }
+function drawBolt(track, t, colour, peak) {
+  if (!track.bolt) return;
+  const age = t - track.bolt.bornAt;
+  if (age > LIGHTNING.durationS) { track.bolt = null; return; }
   const envelope = 1 - age / LIGHTNING.durationS;         // quick linear fade
-  strokePath(bolt.points, colour, peak * envelope);
-  for (const branch of bolt.branches) strokePath(branch, colour, peak * envelope * 0.7);
+  strokePath(track.bolt.points, colour, peak * envelope);
+  for (const branch of track.bolt.branches) strokePath(branch, colour, peak * envelope * 0.7);
 }
 
 /* ---------- Terminal ---------- */
@@ -491,7 +523,7 @@ function drawFractal(t) {
     ctx.globalAlpha = 1;
   }
 
-  maybeStrikeBolt(t, activity.glow, () => {
+  maybeStrikeBolt(boltTrack, t, activity.glow, () => {
     const x0 = w * (0.15 + Math.random() * 0.7);
     const y1 = h * (0.5 + Math.random() * 0.3);
     const points = displace(x0, 0, x0 + (Math.random() - 0.5) * w * 0.12, y1, 4, w * 0.06);
@@ -507,7 +539,7 @@ function drawFractal(t) {
     }
     return { points, branches };
   });
-  drawBolt(t, palette.ink, 0.20 + activity.glow * 0.40);
+  drawBolt(boltTrack, t, palette.ink, 0.20 + activity.glow * 0.40);
 }
 
 /* ---------- Forge ---------- */
@@ -516,6 +548,56 @@ function roundedRectPath(x, y, w, h, r) {
   ctx.beginPath();
   if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r);
   else ctx.rect(x, y, w, h);
+}
+
+/** The Forge bar heat ramp: dull red → orange → yellow → white-hot.
+ *
+ *  Returns at most two adjacent stops with weights summing to 1, so the caller
+ *  draws two plain source-over fills of *declared tokens* rather than blending
+ *  toward a computed colour. Same reasoning as Terminal's stream buckets: an
+ *  alpha-weighted stack of two tokens is a convex combination and therefore
+ *  provably inside [--backdrop-base, --backdrop-ink], where a `mix()` of two
+ *  arbitrary colours would need its own luminance proof. */
+const HEAT_STOPS = ['heatA', 'heatB', 'heatC', 'ink'];
+
+function heatRamp(t) {
+  const scaled = Math.min(Math.max(t, 0), 1) * (HEAT_STOPS.length - 1);
+  const i = Math.min(Math.floor(scaled), HEAT_STOPS.length - 2);
+  const f = scaled - i;
+  return [{ key: HEAT_STOPS[i], weight: 1 - f }, { key: HEAT_STOPS[i + 1], weight: f }];
+}
+
+/** A bar segment glowing at `heatT` along the ramp, at `intensity` strength.
+ *
+ *  The bloom is drawn as the shape itself, inflated in a couple of steps with
+ *  falling alpha, rather than a radial gradient. A radial gradient only suits
+ *  one aspect ratio: centred on the long horizontal rod it either fails to
+ *  reach the ends or throws a halo wide enough to wash out the vertical bars,
+ *  and centred on a tall vertical bar it lights a circle in the middle and
+ *  leaves the ends cold. An inflated outline follows whatever shape it is
+ *  given, so the rod and the vertical bars both glow along their length. */
+function drawHeatBar(x, y, w, h, r, heatT, intensity) {
+  const strength = Math.min(Math.max(intensity, 0), 1);
+  if (strength <= 0.001) return;
+  const stops = heatRamp(heatT);
+  const spread = Math.max(2, Math.min(w, h) * 0.9);
+
+  for (const { key, weight } of stops) {
+    if (weight <= 0.001) continue;
+    const colour = palette[key];
+
+    for (const [grow, alpha] of [[2.0, 0.05], [1.0, 0.10]]) {
+      const pad = spread * grow;
+      roundedRectPath(x - pad, y - pad, w + pad * 2, h + pad * 2, r + pad);
+      ctx.fillStyle = rgba(colour, Math.min(alpha * weight * strength, 1));
+      ctx.fill();
+    }
+
+    // The metal itself.
+    roundedRectPath(x, y, w, h, r);
+    ctx.fillStyle = rgba(colour, Math.min((0.30 + 0.55 * heatT) * weight * strength, 1));
+    ctx.fill();
+  }
 }
 
 function ironShape(x, y, w, h, r, fillColor, fillAlpha, edgeColor, edgeAlpha) {
@@ -556,7 +638,7 @@ function drawForge(t) {
 
   // Forge glow behind the bar — breathes very slowly, never pulses.
   const breathe = 0.9 + 0.1 * Math.sin(t * 0.22);
-  const hot = mix(palette.ember, palette.ink, heat);
+  const hot = mix(palette.ember, palette.glow, heat);
   const glowR = Math.max(w, band.h * 2) * (0.34 + heat * 0.26) * breathe;
   fillRadialBounded(cx, cy, glowR, (grad) => {
     grad.addColorStop(0, rgba(hot, (0.22 + heat * 0.53) * breathe));
@@ -568,22 +650,45 @@ function drawForge(t) {
   // climb with clarity — that is the "dim and softly defined → bright and
   // sharply rendered" the brief asks for.
   const iron = mix(palette.iron, hot, heat * 0.45);
-  const edge = mix(iron, palette.ink, 0.4);
+  const edge = mix(iron, palette.glow, 0.4);
   const fillAlpha = 0.5 + 0.42 * clarity;
   const edgeAlpha = 0.16 + 0.5 * clarity;
 
   ironShape(cx - barW / 2, cy - barH / 2, barW, barH, barH / 2, iron, fillAlpha, edge, edgeAlpha);
 
-  const plate = (offset, pw, ph) => {
-    ironShape(cx + offset - pw / 2, cy - ph / 2, pw, ph, Math.min(pw, ph) * 0.28, iron, fillAlpha, edge, edgeAlpha);
-  };
   const innerW = barW * 0.085;
   const innerH = band.h * 0.62;
   const outerW = barW * 0.065;
   const outerH = band.h * 0.40;
+
+  /* The vertical bars either side of the rod. Collected rather than drawn
+   * inline because the month-to-date layer below needs the same geometry —
+   * these are the pieces that carry most of the white-hot glow. */
+  const verticals = [];
   for (const dir of [-1, 1]) {
-    plate(dir * barW * 0.34, innerW, innerH);
-    plate(dir * barW * 0.45, outerW, outerH);
+    verticals.push({ x: cx + dir * barW * 0.34 - innerW / 2, y: cy - innerH / 2, w: innerW, h: innerH });
+    verticals.push({ x: cx + dir * barW * 0.45 - outerW / 2, y: cy - outerH / 2, w: outerW, h: outerH });
+  }
+  for (const v of verticals) {
+    ironShape(v.x, v.y, v.w, v.h, Math.min(v.w, v.h) * 0.28, iron, fillAlpha, edge, edgeAlpha);
+  }
+
+  // ---- month-to-date layer: the bars run white-hot ----
+  // Independent of `heat` above, which is streak-driven. This is the metal
+  // heating up with how much of the month has been trained, climbing dull red →
+  // orange → yellow → white so the top of the range reads as earned rather than
+  // switched on. See drawHeatBar().
+  //
+  // The vertical bars carry the stronger glow: they are the tallest, most
+  // readable pieces of the barbell, and a rod-only glow left them looking cold
+  // next to a white-hot bar.
+  const monthGlow = smoothstep(0.15, 0.30, activity.monthPercent);
+  if (monthGlow > 0) {
+    const heatT = Math.min(Math.max((activity.monthPercent - 0.22) / (0.95 - 0.22), 0), 1);
+    drawHeatBar(cx - barW / 2, cy - barH / 2, barW, barH, barH / 2, heatT, monthGlow);
+    for (const v of verticals) {
+      drawHeatBar(v.x, v.y, v.w, v.h, Math.min(v.w, v.h) * 0.28, heatT, monthGlow * 1.35);
+    }
   }
 
   // Embers: a few always drift, more join and burn brighter as the forge heats.
@@ -603,7 +708,7 @@ function drawForge(t) {
   // sustained flicker at full heat. Slow sine flicker only, no strobe.
   const flameT = Math.max(0, (heat - FLAME_START_HEAT) / (1 - FLAME_START_HEAT));
   if (flameT > 0) {
-    const flameColor = mix(palette.ember, palette.ink, 0.6 + 0.4 * flameT);
+    const flameColor = mix(palette.ember, palette.glow, 0.6 + 0.4 * flameT);
     const lickCount = flameT > 0.6 ? 4 : 3;
     for (let i = 0; i < lickCount; i += 1) {
       const flicker = 0.85 + 0.15 * Math.sin(t * 0.9 + i * 2.1);
@@ -676,7 +781,7 @@ function drawKemet(t) {
 
   for (const s of stars) {
     const twinkle = 0.7 + 0.3 * Math.sin(t * 0.5 + s.phase);
-    ctx.fillStyle = rgba(palette.ink, s.alpha * twinkle * 0.55);
+    ctx.fillStyle = rgba(palette.star, s.alpha * twinkle * 0.55);
     ctx.fillRect(s.x, s.y, s.size, s.size);
   }
 
@@ -741,14 +846,14 @@ function drawKemet(t) {
   if (fraction > 0.85) {
     const crown = (fraction - 0.85) / 0.15;
     fillRadialBounded(g.cx, g.baseY - g.height, g.height * 0.22, (grad) => {
-      grad.addColorStop(0, rgba(palette.ink, 0.42 * crown * (0.8 + 0.2 * Math.sin(t * 0.6))));
-      grad.addColorStop(1, rgba(palette.ink, 0));
+      grad.addColorStop(0, rgba(palette.star, 0.42 * crown * (0.8 + 0.2 * Math.sin(t * 0.6))));
+      grad.addColorStop(1, rgba(palette.star, 0));
     });
   }
 
   // Lightning crawl across the pyramid face — sparse and faint when the level
   // is low, dense and bright when it is high, under the shared flash cap.
-  maybeStrikeBolt(t, fraction, () => {
+  maybeStrikeBolt(boltTrack, t, fraction, () => {
     const side = Math.random() < 0.5 ? -1 : 1;
     const startT = Math.random() * 0.35;
     const endT = Math.min(1, startT + 0.35 + Math.random() * 0.45);
@@ -771,7 +876,133 @@ function drawKemet(t) {
     }
     return { points, branches };
   });
-  drawBolt(t, palette.arc, 0.22 + fraction * 0.45);
+  drawBolt(boltTrack, t, palette.arc, 0.22 + fraction * 0.45);
+
+  drawHalo(t, g);
+}
+
+/**
+ * The month-to-date halo above the pyramid apex — a second, independent layer
+ * over the streak-driven tiers below it.
+ *
+ * Three staged bands, all eased with smoothstep so crossing a threshold fades
+ * in rather than snapping (24% → 25% must not be a hard cut):
+ *   ~25%   a faint ring appears, dropping small golden sparks
+ *   ~50%   it brightens, and lightning crawls within the ring itself
+ *   90%+   brightest; sparks spill past the ring, and arcs strike down from the
+ *          halo to the pyramid — a connection, not just ambient crawl
+ *
+ * The halo's lightning is its own track, so it is genuinely distinct from the
+ * pyramid-surface crawl — but both clear the shared `lastFlashAt` gate, so the
+ * flicker cap applies to what the eye sees rather than per layer.
+ */
+function drawHalo(t, g) {
+  const mp = activity.monthPercent;
+  const presence = smoothstep(0.15, 0.30, mp);
+  if (presence <= 0.001) return;
+
+  const brighten = smoothstep(0.42, 0.58, mp);
+  const strike = smoothstep(0.82, 0.92, mp);
+
+  const apexX = g.cx;
+  const apexY = g.baseY - g.height;
+  const breathe = 0.9 + 0.1 * Math.sin(t * 0.35);
+
+  /* A flattened torus, not a circle. Two reasons for the ellipse: a true circle
+   * above the apex reads as a drawn ring with a hole punched in the middle
+   * rather than a halo, and a circle wide enough to look deliberate is also
+   * tall enough to reach the card panel above it — which would force either
+   * overlapping the UI or shortening the pyramid to make room. Flattening buys
+   * the width without the height, so it sits in the gap and the pyramid keeps
+   * its full ten tiers. */
+  const ringRX = g.halfBase * (0.46 + 0.06 * brighten);
+  const ringRY = ringRX * 0.32;
+  const ringY = apexY - ringRY - g.height * 0.08;         // clear of the apex
+
+  const ellipsePath = (rx, ry) => {
+    ctx.beginPath();
+    if (typeof ctx.ellipse === 'function') ctx.ellipse(apexX, ringY, rx, ry, 0, 0, Math.PI * 2);
+    else ctx.arc(apexX, ringY, rx, 0, Math.PI * 2);
+  };
+
+  /* The torus is one radial gradient with a transparent core and a bright band,
+   * drawn through a y-scale so it comes out elliptical.
+   *
+   * The obvious implementation — several concentric strokes of the ring at
+   * decreasing width — looked right and cost 10.8% of a core, double the
+   * budget, dropping Kemet to 16fps: stroking an ellipse with a ~32px line is a
+   * large antialiased fill, and there were four of them a frame. A gradient
+   * with the band shaped into its colour stops draws the same thing in a single
+   * fill over a rect the size of the torus. Caught by `npm run skins`, which is
+   * why that gate runs on every acceptance pass rather than once per feature.
+   *
+   * `strike` feeds brightness as well as the connecting arcs: the brief calls
+   * for the halo to be "at its brightest" in the 90–100% band, and an earlier
+   * pass had `brighten` saturating at 58%, so the top forty points of the range
+   * added sparks and arcs but no actual light. */
+  const lift = presence * breathe;
+  const body = Math.min((0.20 + 0.16 * brighten + 0.16 * strike) * lift, 1);
+  const core = Math.min(0.20 * (0.5 + brighten + 0.9 * strike) * lift, 1);
+
+  ctx.save();
+  ctx.translate(apexX, ringY);
+  ctx.scale(1, ringRY / ringRX);
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, ringRX * 1.5);
+  grad.addColorStop(0, rgba(palette.halo, body * 0.10));      // hollow centre — a torus, not a disc
+  grad.addColorStop(0.42, rgba(palette.halo, body * 0.22));
+  grad.addColorStop(0.63, rgba(palette.haloHot, core));        // the band itself
+  grad.addColorStop(0.74, rgba(palette.halo, body));
+  grad.addColorStop(1, rgba(palette.halo, 0));                 // falls off outward
+  ctx.fillStyle = grad;
+  ctx.fillRect(-ringRX * 1.5, -ringRX * 1.5, ringRX * 3, ringRX * 3);
+  ctx.restore();
+
+  // A single thin rim keeps the torus's edge crisp against the sky.
+  ctx.strokeStyle = rgba(palette.haloHot, Math.min((0.12 + 0.20 * brighten) * lift, 1));
+  ctx.lineWidth = Math.max(1, ringRY * 0.16);
+  ellipsePath(ringRX * 0.95, ringRY * 0.95);
+  ctx.stroke();
+
+  // Golden sparks falling from the ring toward the apex. At 90%+ they also
+  // spill outward past the ring's edge rather than staying inside it.
+  /** A point on the torus at angle `a`, optionally scaled off the band. */
+  const onRing = (a, scale = 1) => ({
+    x: apexX + Math.cos(a) * ringRX * scale,
+    y: ringY + Math.sin(a) * ringRY * scale
+  });
+
+  const sparkCount = Math.round(5 + 9 * presence + 4 * strike);
+  const spill = 1 + 0.55 * strike;
+  for (let i = 0; i < sparkCount; i += 1) {
+    const phase = (i * 2.399) % (Math.PI * 2);              // stable, evenly scattered
+    const drop = ((t * 0.22 + i / sparkCount) % 1);
+    const p = onRing(phase + t * 0.05, spill * (0.7 + 0.3 * Math.sin(phase * 3)));
+    const fade = Math.sin(drop * Math.PI);                  // in and out, never a pop
+    const size = Math.max(1, g.height * 0.012);
+    ctx.fillStyle = rgba(palette.haloHot, 0.55 * presence * fade * breathe);
+    ctx.fillRect(p.x, p.y + drop * g.height * 0.26, size, size);
+  }
+
+  // Halo lightning. Below the 90% band it crawls around the ring; in it, most
+  // flashes become a connecting arc down to the pyramid.
+  maybeStrikeBolt(haloTrack, t, brighten, () => {
+    const connecting = strike > 0 && Math.random() < strike;
+    if (connecting) {
+      const from = onRing(Math.random() * Math.PI * 2, 0.9);
+      const landT = Math.random() * 0.5;                    // somewhere on the upper pyramid
+      const to = {
+        x: g.cx + (Math.random() - 0.5) * g.halfBase * (1 - landT) * 1.2,
+        y: g.baseY - (1 - landT) * g.height
+      };
+      return { points: displace(from.x, from.y, to.x, to.y, 4, g.halfBase * 0.09), branches: [] };
+    }
+    const a0 = Math.random() * Math.PI * 2;
+    const a1 = a0 + (0.6 + Math.random() * 1.1) * (Math.random() < 0.5 ? -1 : 1);
+    const from = onRing(a0);
+    const to = onRing(a1);
+    return { points: displace(from.x, from.y, to.x, to.y, 3, ringRY * 0.7), branches: [] };
+  });
+  drawBolt(haloTrack, t, palette.haloHot, (0.25 + 0.40 * brighten) * presence);
 }
 
 /* ---------- tier easing ---------- */
@@ -868,17 +1099,23 @@ export function setSkin(name) {
   clock = 0;
   tierGlow = new Float64Array(STREAK_LEVELS);
   mandelbrot = null;
+  boltTrack = makeBoltTrack();
+  haloTrack = makeBoltTrack();
+  lastFlashAt = -Infinity;
   if (!skin && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   sync();
 }
 
-/** Consistency-driven values from js/consistency.js. */
-export function setActivity({ glow = 0.5, frostHint = 0, streakLevel = 0, streakFraction = 0 } = {}) {
+/** Consistency-driven values from js/consistency.js. `streakLevel`/
+ *  `streakFraction` and `monthPercent` are two independent metrics — see
+ *  CLAUDE.md — and the skins layer them rather than combining them. */
+export function setActivity({ glow = 0.5, frostHint = 0, streakLevel = 0, streakFraction = 0, monthPercent = 0 } = {}) {
   activity = {
     glow: Math.min(Math.max(glow, 0), 1),
     frostHint: Math.min(Math.max(frostHint, 0), 1),
     streakLevel: Math.min(Math.max(Math.round(streakLevel), 0), STREAK_LEVELS),
-    streakFraction: Math.min(Math.max(streakFraction, 0), 1)
+    streakFraction: Math.min(Math.max(streakFraction, 0), 1),
+    monthPercent: Math.min(Math.max(monthPercent, 0), 1)
   };
   if (isStatic()) sync();                  // keep the held frame current
 }
@@ -910,7 +1147,9 @@ export function getDiagnostics() {
     fpsCap: FPS,
     backingStore: { ...dims },
     activity: { ...activity },
-    boltFlashes,                     // the flicker-hazard cap under test
+    boltFlashes: boltTrack.flashes,  // the flicker-hazard cap under test
+    haloFlashes: haloTrack.flashes,  // Kemet's second, month-driven bolt layer
+    totalFlashes: boltTrack.flashes + haloTrack.flashes,
     tierGlow: [...tierGlow],         // Kemet pyramid: which tiers are lit, and how far
     levels: STREAK_LEVELS,
     featureBand: featureBand(),

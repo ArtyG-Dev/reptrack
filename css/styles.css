@@ -154,20 +154,33 @@
   --glass-2: 30 23 19;
   --glass-alpha: .92;
   --backdrop-base: #0a0604;
-  --backdrop-ink: #6b3410;
+  /* --backdrop-ink is the luminance CEILING, and the white-hot bar glow now
+   * reaches near-white — so ink rose to match it. The warm mid-tone that ink
+   * used to supply to the streak-driven forge glow moved to --backdrop-glow,
+   * unchanged in value, so raising the ceiling did not alter any existing
+   * visual. See DECISIONS.md. */
+  --backdrop-ink: #fff0d8;
+  --backdrop-glow: #6b3410;
   --backdrop-iron: #241813;
   --backdrop-ember: #5a2a0c;
   --backdrop-spark: #6b3410;
+  /* Bar heat ramp, month-to-date driven: dull red → orange → yellow → white
+   * (--backdrop-ink is the last stop). Drawn as adjacent-stop cross-fades of
+   * literal tokens, never a blend, so every pixel is a declared colour. */
+  --backdrop-heat-a: #8a3a12;
+  --backdrop-heat-b: #c9701f;
+  --backdrop-heat-c: #f0c25e;
 
   --frost-edge: #8fb6c8;
   --frost-sheen: rgba(198, 226, 238, .2);
 }
 
 /* Kemet — cyberpunk Egypt. Deep night sky, gold/cyan/violet, neon hieroglyph
- * accents. --backdrop-ink is a bright cyan here rather than a mid-tone: it is
- * the luminance *ceiling* the canvas may paint, and the neon detailing needs
- * headroom. The glass scrim (see --glass-alpha below) is what keeps text
- * comfortably clear of it — every pair still measures ≥ 7:1 at that extreme. */
+ * accents. --backdrop-ink is bright here rather than a mid-tone: it is the
+ * luminance *ceiling* the canvas may paint, and both the neon detailing and the
+ * month-progress halo need headroom. The glass scrim (see --glass-alpha below)
+ * is what keeps text comfortably clear of it — every pair still measures
+ * ≥ 6.7:1 even composited over that lightest extreme. */
 [data-theme="kemet"] {
   --bg: #050410;
   --surface: #0b0a19;
@@ -187,7 +200,13 @@
   --glass-2: 23 22 38;
   --glass-alpha: .92;
   --backdrop-base: #050410;
-  --backdrop-ink: #5f8f96;
+  /* As with Forge: ink is the ceiling, raised for the golden halo. The cyan
+   * that ink used to supply to the stars and apex crown moved to
+   * --backdrop-star, unchanged, so the existing pyramid looks identical. */
+  --backdrop-ink: #f4e7b4;
+  --backdrop-star: #5f8f96;
+  --backdrop-halo: #d8bf72;
+  --backdrop-halo-hot: #f4e7b4;
   --backdrop-sky: #1d1745;
   --backdrop-stone: #2a2340;
   --backdrop-gold: #6d5a24;

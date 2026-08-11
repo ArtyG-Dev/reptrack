@@ -824,6 +824,21 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     });
   }
 
+  /** Total light on the backdrop — the right measure for "is more happening",
+   *  where max brightness answers "is the peak brighter". They differ: on Kemet
+   *  the halo is by construction the brightest thing on screen, so lighting the
+   *  pyramid tiers underneath it adds a great deal of light without moving the
+   *  peak at all. */
+  async function backdropAverageBrightness(page) {
+    return page.evaluate(() => {
+      const c = document.getElementById('backdrop');
+      const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
+      return sum / (data.length / 4);
+    });
+  }
+
   /** A prior baseline plus a fortnight of daily training — the "hot" end of
    *  the consistency score, used to drive Forge/Fractal to glow ≈ 1. */
   function consistentDays(dayIndexes) {
@@ -1096,10 +1111,10 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
    *  database. Seeding 0–10 real training histories per assertion would make
    *  these tests minutes long for no extra coverage — consistency.test.js
    *  already proves history maps to level correctly. */
-  async function forceLevel(page, level) {
-    await page.evaluate((lv) => {
-      window.__backdrop.setActivity({ glow: lv / 10, frostHint: 0, streakLevel: lv, streakFraction: lv / 10 });
-    }, level);
+  async function forceLevel(page, level, monthPercent = 0) {
+    await page.evaluate(([lv, mp]) => {
+      window.__backdrop.setActivity({ glow: lv / 10, frostHint: 0, streakLevel: lv, streakFraction: lv / 10, monthPercent: mp });
+    }, [level, monthPercent]);
   }
 
   test('the pyramid lights its ten tiers cumulatively across every level', async () => {
@@ -1183,6 +1198,116 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
       assert.ok(mid > low, `${theme}: level 5 (${mid}) should read brighter than level 0 (${low})`);
       assert.ok(high > mid, `${theme}: level 10 (${high}) should read brighter than level 5 (${mid})`);
     }
+    await context.close();
+  });
+
+  test('the month-to-date layer responds independently of the streak level', async () => {
+    // The two metrics are separate signals and the skins layer them. If they
+    // had been conflated, holding the streak fixed and moving month-percent
+    // would do nothing — which is exactly what this rules out.
+    for (const theme of ['kemet', 'forge']) {
+      const { context, page } = await freshPage();
+      await page.goto(`${baseURL}?theme=${theme}&static=1`, { waitUntil: 'load' });
+      await page.waitForSelector('#start-session');
+      await page.waitForFunction((t) => window.__backdrop?.getDiagnostics().skin === t, theme, { timeout: 5000 });
+
+      const read = async (level, month) => {
+        await forceLevel(page, level, month);
+        await page.waitForTimeout(120);
+        return backdropMaxBrightness(page);
+      };
+
+      // Streak pinned low, month sweeping up.
+      const lowStreak = [await read(0, 0), await read(0, 0.5), await read(0, 1)];
+      assert.ok(lowStreak[1] > lowStreak[0], `${theme}: month 50% should read brighter than 0% at streak 0`);
+      assert.ok(lowStreak[2] > lowStreak[1], `${theme}: month 100% should read brighter than 50% at streak 0`);
+
+      // Month pinned at zero, streak sweeping up — still works, unchanged.
+      const lowMonth = [await read(0, 0), await read(10, 0)];
+      assert.ok(lowMonth[1] > lowMonth[0], `${theme}: the streak layer must still respond with month at 0`);
+
+      // The two together must put more light on screen than either alone.
+      // Measured as total light rather than peak: Kemet's halo is the brightest
+      // element by design, so adding lit pyramid tiers beneath it cannot raise
+      // the peak even though it plainly adds to the picture.
+      const lit = async (level, month) => {
+        await forceLevel(page, level, month);
+        await page.waitForTimeout(120);
+        return backdropAverageBrightness(page);
+      };
+      const monthOnly = await lit(0, 1);
+      const streakOnly = await lit(10, 0);
+      const both = await lit(10, 1);
+      assert.ok(both > monthOnly, `${theme}: both metrics high (${both.toFixed(1)}) should exceed month alone (${monthOnly.toFixed(1)})`);
+      assert.ok(both > streakOnly, `${theme}: both metrics high (${both.toFixed(1)}) should exceed streak alone (${streakOnly.toFixed(1)})`);
+      await context.close();
+    }
+  });
+
+  test('no frame exceeds the declared backdrop ceiling, at any combination of the two metrics', async () => {
+    // The contrast proof rests on the canvas never painting brighter than
+    // --backdrop-ink. contrast.test.js proves the *tokens* obey that; this
+    // proves the *code* does, by sampling real rendered pixels across the
+    // corners of the two-metric space. With two independent layers stacking,
+    // that is no longer self-evident from reading the source.
+    for (const theme of ['kemet', 'forge']) {
+      const { context, page } = await freshPage();
+      await page.goto(`${baseURL}?theme=${theme}&static=1`, { waitUntil: 'load' });
+      await page.waitForSelector('#start-session');
+      await page.waitForFunction((t) => window.__backdrop?.getDiagnostics().skin === t, theme, { timeout: 5000 });
+
+      const ceiling = await page.evaluate(() => {
+        const css = getComputedStyle(document.documentElement);
+        const hex = css.getPropertyValue('--backdrop-ink').trim().replace('#', '');
+        const ch = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+        const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+        return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+      });
+
+      for (const [level, month] of [[0, 0], [0, 1], [10, 0], [10, 1], [5, 0.5]]) {
+        await forceLevel(page, level, month);
+        await page.waitForTimeout(140);
+        const worst = await page.evaluate(() => {
+          const c = document.getElementById('backdrop');
+          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          const ch = (v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+          let max = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            const l = 0.2126 * ch(d[i]) + 0.7152 * ch(d[i + 1]) + 0.0722 * ch(d[i + 2]);
+            if (l > max) max = l;
+          }
+          return max;
+        });
+        assert.ok(
+          worst <= ceiling + 0.005,
+          `${theme} at streak ${level} / month ${month}: a pixel reached luminance ${worst.toFixed(4)}, above the declared ceiling ${ceiling.toFixed(4)} — the contrast proof assumes this cannot happen`
+        );
+      }
+      await context.close();
+    }
+  });
+
+  test('the reduced-motion frame still reflects both metrics, it just does not move', async () => {
+    const { context, page } = await freshPage();
+    await page.goto(`${baseURL}?theme=kemet&static=1`, { waitUntil: 'load' });
+    await page.waitForSelector('#start-session');
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().static === true, null, { timeout: 5000 });
+
+    await forceLevel(page, 7, 1);
+    await page.waitForTimeout(150);
+    const hot = await backdropMaxBrightness(page);
+    const tiers = await page.evaluate(() => window.__backdrop.getDiagnostics().tierGlow.filter((v) => v > 0.5).length);
+    assert.equal(tiers, 7, 'the static frame shows the correct tier count');
+
+    await forceLevel(page, 7, 0);
+    await page.waitForTimeout(150);
+    const cold = await backdropMaxBrightness(page);
+    assert.ok(hot > cold, 'and the correct halo level for the month metric, held still');
+
+    const settled = await settledFrameCount(page);
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(() => window.__backdrop.getDiagnostics().frames);
+    assert.equal(after, settled, 'nothing animates in static mode');
     await context.close();
   });
 

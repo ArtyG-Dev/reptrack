@@ -9,7 +9,7 @@ _Measured 2026-08-11 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 201 passed, 0 failed | ✅ |
+| Automated tests | 211 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -17,16 +17,16 @@ _Measured 2026-08-11 — regenerate with `npm run acceptance`._
 | Lighthouse — Accessibility (Fractal) | 100 | ✅ |
 | Lighthouse — Accessibility (Forge) | 100 | ✅ |
 | Lighthouse — Accessibility (Kemet) | 100 | ✅ |
-| Lighthouse — Performance | 92 | ✅ |
+| Lighthouse — Performance | 93 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 2.9% total, +2.9% vs Light · 22.2 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 3.7% total, +3.7% vs Light · 22.3 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 3.2% total, +3.2% vs Light · 22.2 fps | ✅ |
-| Skin CPU — Kemet (main thread, over baseline) | 3.3% total, +3.3% vs Light · 22 fps | ✅ |
-| App shell size | 0.227 MB | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2.9% total, +2.9% vs Light · 21.8 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 3.9% total, +3.9% vs Light · 22 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 3.4% total, +3.4% vs Light · 22.3 fps | ✅ |
+| Skin CPU — Kemet (main thread, over baseline) | 3.5% total, +3.5% vs Light · 21.8 fps | ✅ |
+| App shell size | 0.242 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.351 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.367 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -204,6 +204,25 @@ Per `docs/FOLLOWUP_PROMPT_AUDIO_VERIFY_AND_WEIGHT_BUG.md`.
 | 80 | Automated test confirms zero audio bytes written to any app-controlled storage during voice logging | `browser.test.js` → "a full voice log writes zero audio bytes to any app-controlled storage": drives mic tap → transcript → confirm → commit, then recursively sweeps every IndexedDB database (not only RepTrack's), every Cache Storage entry and content-type, `localStorage` and `sessionStorage` for `Blob`s, `ArrayBuffer`s, typed arrays, `data:audio/…` URIs, audio MIME types and long opaque base64 runs; also asserts the committed set carries no field outside the documented schema. **Verified the test fails when it should** — planting four audio-shaped artefacts across two backends produced exactly four findings | ✅ |
 | 81 | `CLAUDE.md` / `DEPLOYMENT.md` state honestly what is verified vs what is outside the app's visibility | `CLAUDE.md` → "What 'no audio is stored' actually means" and `DEPLOYMENT.md` → "Voice data on a deployed instance". Both make the stronger accurate claim (the Web Speech API is a live recognition stream, so the app never receives audio — there is nothing to delete) **and** state the limit plainly: the tests cover storage this origin controls, not what Chrome/Android/a platform speech service does in its own process, which the app can neither see nor clear | ✅ |
 | 82 | The audio check is on the standing acceptance checklist, re-run on any change to the voice flow | It lives in `tests/browser.test.js`, which `npm test` and `npm run acceptance` both run every time — not a one-off manual check. Criterion #5 above now cites it alongside the static ban | ✅ |
+
+## Added after the monthly-progress halo / white-hot bars update
+
+Per `docs/FOLLOWUP_PROMPT_MONTHLY_HALO_1.md`.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 83 | `monthPercent` implemented against **elapsed days**, formula documented in `CLAUDE.md` as distinct from `streakLevel` | `monthProgress()` in `js/consistency.js`; `CLAUDE.md` → "Month percent" gives the formula and a table contrasting all three metrics (`glow`, `streakLevel`, `monthPercent`) side by side, including which visual each drives | ✅ |
+| 84 | Verified: training every day for the first 7 days of a month reads at or near 100%, not ~23% | `consistency.test.js` → "a perfect run reads 100% on any date — the denominator is days elapsed, not days in the month" asserts 100% *and* asserts that the naive full-month denominator would have read under 25%, so the test documents the trap it guards | ✅ |
+| 85 | Month-boundary transition fades rather than snaps | `MONTH.carryDays: 2` blends the previous month's final figure out linearly. `consistency.test.js` → "the month boundary fades over a couple of days instead of snapping off" walks a perfect June across the 30th/1st/2nd/3rd and asserts a monotonic fade to zero rather than a cut | ✅ |
+| 86 | Kemet halo staged at 25/50/90–100% with smooth interpolation; halo lightning distinct from pyramid-surface lightning | `drawHalo()` in `js/backdrop.js` — three `smoothstep` bands (presence ~25%, brighten ~50%, strike ~90%) so no threshold is a hard cut. The halo runs its own bolt track (`haloTrack`) separate from the pyramid's (`boltTrack`), with `getDiagnostics()` reporting each count separately | ✅ |
+| 87 | Halo-to-pyramid lightning strike appears only in the 90–100% band | The connecting-arc geometry is chosen with probability `strike`, which is `smoothstep(0.82, 0.92, monthPercent)` — zero below the band, so no connecting arc can be generated there; below it the same track draws crawl around the ring instead | ✅ |
+| 88 | Forge bar glow staged at the same thresholds with a believable dull-red → white progression, not a jump to white | `HEAT_STOPS` cross-fades four declared tokens (`heat-a` → `heat-b` → `heat-c` → `ink`) across the range. Verified by screenshot at 50% (orange) and 100% (white), not just by reading the ramp | ✅ |
+| 89 | Contrast checked across **independent combinations** of the two metrics, not each in isolation | Structural: the canvas may only paint declared tokens, all tested inside `[base, ink]`, and text contrast is checked with the scrim over both endpoints — which brackets every combination. Empirical backup: `browser.test.js` → "no frame exceeds the declared backdrop ceiling, at any combination of the two metrics" samples real rendered pixels at (0,0), (0,100%), (10,0), (10,100%) and (5,50%) and asserts no pixel's luminance exceeds `--backdrop-ink`. That verifies the *code* honours the token contract, which reading the source no longer makes obvious now that two layers stack | ✅ |
+| 90 | Reduced-motion fallback reflects the correct static level for both metrics | `browser.test.js` → "the reduced-motion frame still reflects both metrics, it just does not move" asserts the tier count is correct, that the halo level differs between month 0% and 100%, and that the frame counter does not advance | ✅ |
+| 91 | CPU re-measured with both animated layers running; simplified if over budget | `npm run skins`: terminal 2.9%, fractal 3.9%, forge 3.4%, kemet 3.5% over baseline against a 5% budget — see measured block. Kemet now runs two independent bolt tracks plus the halo and still fits. The first halo implementation did **not**: it measured 10.8% and dropped Kemet to 16fps, and was rebuilt as a single gradient (see `DECISIONS.md` #72). That gate earning its keep is the reason it runs every acceptance pass | ✅ see measured block |
+| 92 | "Pause activity effects" freezes both `streakLevel` and `monthPercent` | `consistency.test.js` → "pausing activity effects freezes month progress, not just the streak level" — two months on, live reads 0% while paused holds at 100%, through the same `effectiveToday()` path and with no data mutation | ✅ |
+| 93 | The two metrics are demonstrably independent, not conflated | `consistency.test.js` → "month progress and streak level are genuinely independent" (a perfect 3-day month with an unfilled rolling window, and a streak carrying into an empty new month); `browser.test.js` → "the month-to-date layer responds independently of the streak level" sweeps each with the other pinned and asserts both respond | ✅ |
+| 94 | Live-review tuning applied: flattened torus halo, stronger glow on the vertical bars | Halo is now an ellipse (~1:0.32) built from concentric ring-band strokes rather than radial fills, sized to sit between the card panel and the pyramid apex without shortening the pyramid; the vertical bars take the heat ramp at 1.35× the rod's intensity. Both verified by screenshot — see `DECISIONS.md` #72 | ✅ |
 
 ## Build constraints
 

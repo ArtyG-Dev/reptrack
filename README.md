@@ -122,8 +122,8 @@ runs with pace, and a day-by-day line. Plain text, no network, no formatting to 
 | **High-Contrast Neon** | Dark and saturated, electric cyan/green/pink. Bold in colour, not in motion. |
 | **Terminal** | Frosted glass over drifting data streams. Cool and dark; streams fall a little faster and a little brighter, and more of them shift into the brightest colour, the more consistently you've been training. |
 | **Fractal** | A Mandelbrot set across the lower screen, under slowly morphing colour and the odd flicker of lightning. It resolves as your level climbs — soft and low-detail at first, sharply defined at the top. |
-| **Forge** | A big barbell across the lower screen with drifting embers and a warm forge glow. It sharpens and brightens as your level climbs, with a flame lick above the bar once you're well into a run. |
-| **Kemet** | Cyberpunk Egypt — night sky, gold and neon cyan, and a **Pyramid of Power** in ten tiers that light up one by one as you train. Electrical arcs crawl across it, more of them the higher you get. |
+| **Forge** | A big barbell across the lower screen with drifting embers and a warm forge glow. It sharpens and brightens as your level climbs, and the bars themselves run dull red → orange → yellow → white-hot as you get through more of the month. |
+| **Kemet** | Cyberpunk Egypt — night sky, gold and neon cyan, and a **Pyramid of Power** in ten tiers that light up one by one as you train. Electrical arcs crawl across it, and a golden halo forms above the apex as you get through more of the month. |
 
 All six meet the same accessibility bar: every colour pair clears 4.5:1 contrast — for the
 animated ones, checked against the background at both its lightest and its darkest, so it
@@ -169,6 +169,25 @@ It climbs fast early on purpose: your first session is already worth a tier or t
 sessions puts you most of the way up. There's no floor of "nothing happens until you've
 proven yourself" — the pyramid is fully drawn from day one, with all ten empty tiers visible,
 so you can see what you're filling in.
+
+### The monthly layer
+
+Kemet and Forge track a **second, separate** thing on top of that: how much of *this calendar
+month* you've trained. It's the share of days so far this month you've done something on —
+so if you've trained five of the last five days, that's 100%, whether it's the 5th or the
+25th. It is deliberately measured against days elapsed rather than the whole month, so a
+perfect week at the start of the month reads as a perfect week, not as 23%.
+
+- **Kemet** grows a golden halo above the pyramid: faint from about a quarter of the month,
+  brighter with lightning crawling around it by half, and at 90%+ it's at its brightest with
+  sparks spilling out and arcs striking down to the pyramid.
+- **Forge** heats the bars themselves — dull red, then orange, then yellow, then white-hot
+  as you approach a full month.
+
+The two are independent, so a strong two-week streak that runs into a new month will show a
+full pyramid with the halo just starting again — which is the honest picture. At the turn of
+a month the halo fades out over a day or two rather than snapping off overnight. Pausing
+activity effects freezes both.
 
 After a long gap, and only if you'd built a real habit first, calendar days can pick up a
 faint frosted edge. It's capped — a very long gap looks the same as a moderate one — it's

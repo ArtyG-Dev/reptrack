@@ -49,7 +49,7 @@ js/
   voice.js              one-shot SpeechRecognition wrapper (transcript only)
   progression.js        1RM/hold-duration scoring, PR detection, progression nudge (pure)
   summary.js            weekly plain-text summary, reps- and hold-mode rows (pure)
-  consistency.js        consistency score, streak level, frost gating (pure — see below)
+  consistency.js        consistency score, streak level, month percent, frost (pure)
   backdrop.js           the animated-skin canvas: 30fps cap, auto-pause, static mode
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
   ui.js                 element builder, toasts, <dialog> sheets, disclosure, share/download
@@ -173,9 +173,14 @@ supports as a complete alternative path.
 ## Consistency score
 
 `js/consistency.js` — pure, clock-free (the caller passes `todayISO`), fully covered by
-`tests/consistency.test.js`. It is the model behind the Forge glow, the Fractal brightness
-and lightning, the Terminal stream speed/brightness/colour, and calendar frost. Nothing else
-in the app reads it; no feature behaviour depends on it.
+`tests/consistency.test.js`. It is the model behind every activity-responsive visual: the
+Forge glow, the Fractal brightness and lightning, the Terminal stream speed/brightness/
+colour, the Kemet pyramid tiers and halo, and calendar frost. Nothing else in the app reads
+it; no feature behaviour depends on it.
+
+**There are three independent signals in here**, and they are deliberately not one number:
+`glow` (continuous, baseline-relative), `streakLevel` (0–10, rolling window, absolute), and
+`monthPercent` (0–1, calendar month to date). Each section below covers one.
 
 Terminal was not originally consistency-responsive — the brief only asked for it on Fractal
 and Forge — but real usage after shipping showed a flat ambient texture reads as "nothing
@@ -185,11 +190,11 @@ skin, default to wiring it up the same way rather than treating "ambient and sta
 safe default; a skin that never moves in response to anything a user does is the thing this
 whole feature exists to avoid.
 
-**There are two separate numbers here and they are not interchangeable.** `glow` (below) is
-continuous and measured against the user's *own* baseline. `streakLevel` (further down) is a
-0–10 integer measured against an *absolute* target. Continuous-and-relative is right for
-warmth; discrete-and-absolute is right for progression, because a beginner needs countable
-progress and a baseline-relative score would put them at maximum on their second session.
+**`glow` and `streakLevel` are not interchangeable.** `glow` (below) is continuous and
+measured against the user's *own* baseline. `streakLevel` (further down) is a 0–10 integer
+measured against an *absolute* target. Continuous-and-relative is right for warmth;
+discrete-and-absolute is right for progression, because a beginner needs countable progress
+and a baseline-relative score would put them at maximum on their second session.
 
 **A "training day"** is any date with a session or a run on it — distinct dates, so two
 sessions in one day count once. Doing something is what matters, not doing a lot.
@@ -264,6 +269,50 @@ sessions is level 8. A beginner should see the pyramid filling, not a flat floor
 
 `streakLevel` respects "Pause activity effects" through the same `effectiveToday()` path as
 everything else — pausing freezes the level where it stood, and mutates no training data.
+
+### Month percent — the 0–1 month-to-date metric
+
+`monthProgress()` in `js/consistency.js`. **A second, entirely separate metric
+from `streakLevel`.** They coexist, are tracked independently, and the skins *layer* them
+rather than combining them:
+
+| | `streakLevel` | `monthPercent` |
+|---|---|---|
+| Window | rolling 14/28 days | the current calendar month |
+| Scale | 0–10 integer | 0–1 continuous |
+| Kemet | the ten pyramid tiers | the golden halo above the apex |
+| Forge | barbell brightness/clarity | the bars running white-hot |
+
+You can be high on one and low on the other, and that is a normal state — a strong rolling
+streak that crosses into a new month starts that month at zero, and a perfect first three
+days of a month sits well below a full rolling window. Don't "simplify" them into one number.
+
+```
+elapsed  = day-of-month           // 7th → 7. Days ELAPSED, not days in the month.
+trained  = distinct training days in this calendar month
+raw      = clamp(trained / elapsed, 0, 1)
+percent  = raw, except during the first `carryDays` (2) of a month, where the
+           previous month's final figure is blended out linearly
+```
+
+**Elapsed days, not total days in the month**, and this is the whole design of it. Measured
+against the full month, someone training every day of the first week could only reach
+7/31 ≈ 23% however perfectly they trained — the effect would stay dark until mid-month
+through no fault of theirs. Against elapsed days a perfect run reads 100% on any date, which
+is what makes it worth looking at. A test asserts exactly this case.
+
+**The carry** exists because the raw ratio resets hard at midnight on the 1st: a month
+finishing at 100% becomes 0/1 the next morning, and the halo would slam off. For the first
+two days the previous month's final figure fades out instead — 100% → 67% → 33% → 0%.
+
+Being straight about a property of the elapsed-days denominator: early in a month it is
+*jumpy* by construction. On the 3rd, one missed day is 67%. That is inherent to the
+definition the metric is supposed to have, not a bug to damp — and the carry already covers
+the one place it would have been jarring. If it ever needs softening beyond that, do it
+knowingly rather than by quietly widening the window.
+
+`monthPercent` respects "Pause activity effects" through the same `effectiveToday()` path as
+everything else, so pausing freezes *both* metrics.
 
 ### Frost
 

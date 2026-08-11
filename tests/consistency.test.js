@@ -7,8 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CONSISTENCY, STREAK, trainingDays, daysBetween, shiftDays, baselineTarget,
-  consistencyScore, streakState, hasEstablishedRun, frostState, frostedDates, activityVisualState
+  CONSISTENCY, STREAK, MONTH, trainingDays, daysBetween, shiftDays, baselineTarget,
+  consistencyScore, streakState, monthProgress, hasEstablishedRun, frostState, frostedDates, activityVisualState
 } from '../js/consistency.js';
 
 const TODAY = '2026-06-15';
@@ -309,4 +309,80 @@ test('the visual state carries the streak level and its continuous fraction', ()
   const quiet = activityVisualState({ days: [], todayISO: TODAY });
   assert.equal(quiet.streakLevel, 0);
   assert.equal(quiet.streakFraction, 0);
+});
+
+/* ---------- month-to-date completion (the second, independent metric) ---------- */
+
+test('a perfect run reads 100% on any date — the denominator is days elapsed, not days in the month', () => {
+  // The whole point: measured against the full month, training every day of the
+  // first week could only ever reach 7/31 and the effect would stay dark.
+  const first7 = Array.from({ length: 7 }, (_, i) => `2026-07-0${i + 1}`);
+  const m = monthProgress({ days: first7, todayISO: '2026-07-07' });
+  assert.equal(m.percent, 1, 'seven days trained out of seven elapsed is 100%');
+  assert.ok(7 / 31 < 0.25, 'sanity check: the naive full-month denominator would have read under 25%');
+
+  // …and it holds on day 1 of a month too.
+  assert.equal(monthProgress({ days: ['2026-09-01'], todayISO: '2026-09-01' }).raw, 1);
+});
+
+test('partial months read as the right fraction of elapsed days', () => {
+  const everyOther = ['2026-07-01', '2026-07-03', '2026-07-05', '2026-07-07', '2026-07-09', '2026-07-11', '2026-07-13'];
+  assert.equal(monthProgress({ days: everyOther, todayISO: '2026-07-14' }).raw, 0.5);
+  assert.equal(monthProgress({ days: [], todayISO: '2026-07-14' }).raw, 0);
+});
+
+test('only this calendar month counts — last month\'s training does not leak in', () => {
+  const june = Array.from({ length: 30 }, (_, i) => `2026-06-${String(i + 1).padStart(2, '0')}`);
+  const m = monthProgress({ days: june, todayISO: '2026-07-15' });
+  assert.equal(m.raw, 0, 'a perfect June contributes nothing to July');
+  assert.equal(m.previousPercent, 1);
+});
+
+test('the month boundary fades over a couple of days instead of snapping off', () => {
+  const june = Array.from({ length: 30 }, (_, i) => `2026-06-${String(i + 1).padStart(2, '0')}`);
+  const on = (dateISO) => monthProgress({ days: june, todayISO: dateISO }).percent;
+
+  assert.equal(on('2026-06-30'), 1, 'a perfect June ends at 100%');
+  const day1 = on('2026-07-01');
+  const day2 = on('2026-07-02');
+  const day3 = on('2026-07-03');
+
+  assert.ok(day1 > 0 && day1 < 1, `day 1 should be partway down, got ${day1}`);
+  assert.ok(day2 < day1, 'day 2 continues the fade');
+  assert.equal(day3, 0, 'by day 3 the carry is finished and the new month stands alone');
+  assert.equal(MONTH.carryDays, 2);
+});
+
+test('pausing activity effects freezes month progress, not just the streak level', () => {
+  const june = Array.from({ length: 30 }, (_, i) => `2026-06-${String(i + 1).padStart(2, '0')}`);
+  const live = monthProgress({ days: june, todayISO: '2026-08-20' });
+  const frozen = monthProgress({
+    days: june, todayISO: '2026-08-20', pauseActivityEffects: true, activityPausedAt: '2026-06-30'
+  });
+  assert.equal(live.percent, 0, 'sanity check: two months on, August is empty');
+  assert.equal(frozen.percent, 1, 'paused, it holds where it stood');
+  assert.equal(frozen.paused, true);
+});
+
+test('month progress and streak level are genuinely independent', () => {
+  // A month of daily training that has only just started: month-to-date is
+  // perfect, but the 14-day rolling window has barely filled.
+  const shortPerfect = ['2026-07-01', '2026-07-02', '2026-07-03'];
+  const early = { days: shortPerfect, todayISO: '2026-07-03' };
+  assert.equal(monthProgress(early).percent, 1, 'three of three days is a perfect month so far');
+  assert.ok(streakState(early).level < STREAK.levels, 'but the rolling window is not yet full');
+
+  // And the reverse: a strong rolling window landing on the 1st of a new month.
+  const runIntoNewMonth = [];
+  for (let d = 20; d <= 31; d += 2) runIntoNewMonth.push(`2026-07-${d}`);
+  const turnover = { days: runIntoNewMonth, todayISO: '2026-08-01' };
+  assert.ok(streakState(turnover).level > 0, 'the streak carries across the boundary');
+  assert.ok(monthProgress(turnover).raw === 0, 'while the new month itself starts empty');
+});
+
+test('the visual state carries month percent alongside the streak', () => {
+  const first7 = Array.from({ length: 7 }, (_, i) => `2026-07-0${i + 1}`);
+  const visual = activityVisualState({ days: first7, todayISO: '2026-07-07' });
+  assert.equal(visual.monthPercent, 1);
+  assert.equal(activityVisualState({ days: [], todayISO: '2026-07-07' }).monthPercent, 0);
 });

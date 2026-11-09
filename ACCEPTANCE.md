@@ -269,7 +269,7 @@ Per `docs/FOLLOWUP_PROMPT_FORGE_ROTATE_PLATES.md`.
 | 117 | Simulated level-up slides a plate on; level drop slides one off gently | `visuals.test.js` → "a level-up slides a plate on; a level easing down slides one off gently" (seen mid-move; alpha fades gradually); unit tests pin order and timing; `forge-plates-sliding-on.jpg` | ✅ |
 | 118 | Forge CPU re-measured, within budget | `npm run skins`: app JS +0.9% (was +0.7%), 30 fps; 2D fallback 2.9% | ✅ headless / ⚠️ device — `MANUAL_TEST.md` Check 2 |
 | 119 | Existing acceptance suite green | 258 passing, two consecutive full runs | ✅ |
-| 120 | Pushed, cache bumped, live re-verified | `reptrack-shell-v5`. See `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
+| 120 | Pushed, cache bumped, live re-verified | Live files byte-identical to `9f37261`; SW `/reptrack/` with `reptrack-shell-v5`; on the live site a Forge drag changes 4.85% of the frame (0.11% before the fix); plates correct; no console errors. `DEPLOYMENT.md` → "Live verification" | ✅ |
 | 121 | `MANUAL_TEST.md` on-phone check for Forge drag and plate count | Check 2 → "Forge, specifically", with the plate table to compare against | ✅ |
 
 ## Build constraints

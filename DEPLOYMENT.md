@@ -148,3 +148,12 @@ every voice feature and involves no microphone at all.
 
 Earlier passes could only confirm the Actions run, because this sandbox's proxy refused the Pages
 host. This session's environment now allows it, so the live files themselves were fetched back.
+
+### Forge rotation + plates — commit `9f37261`, 2026-11-09
+
+- The live site serves `sw.js`, `js/app.js`, `js/backdrop.js`, `js/backdrop-gl.js`,
+  `js/theme-engine.js` and `js/graphic-view.js` byte-identical to the commit. The service
+  worker is scoped to `/reptrack/` with the single cache `reptrack-shell-v5`.
+- On the live site, the same scripted Forge drag that changed **0.11%** of the frame before
+  the fix now changes **4.85%**. Level 6 shows two large plates per side. No console errors.
+- `docs/screenshots/live/` re-captured from the deployment, including the Forge plate set.

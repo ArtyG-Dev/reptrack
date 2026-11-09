@@ -11,7 +11,6 @@
  */
 
 import * as backdrop from './backdrop.js';
-import * as state from './state.js';
 import { el } from './ui.js';
 
 const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal' };
@@ -124,7 +123,9 @@ export function open(skin, { returnFocus = 'view-graphic' } = {}) {
   openFor = skin;
   returnFocusId = returnFocus;
 
-  const { streakLevel, monthPercent } = state.activityVisual();
+  // What the scene is drawing — app.js feeds it from state.activityVisual(),
+  // so the label and the picture can never disagree.
+  const { streakLevel, monthPercent } = backdrop.getDiagnostics().activity;
   document.getElementById('graphic-level').textContent = levelText(skin, { streakLevel, monthPercent });
   toggleLevel(true);
   root.setAttribute('aria-label', `${skinLabel(skin)} graphic, full screen`);

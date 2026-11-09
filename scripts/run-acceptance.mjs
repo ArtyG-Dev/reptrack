@@ -24,7 +24,8 @@ function run(label, args) {
 /* 1. Test suite */
 const tests = run('Test suite', ['--test', 'tests/browser.test.js', 'tests/chart.test.js', 'tests/consistency.test.js',
   'tests/contrast.test.js', 'tests/db.test.js', 'tests/parser.test.js', 'tests/progression.test.js',
-  'tests/pwa-static.test.js', 'tests/state.test.js', 'tests/summary.test.js']);
+  'tests/pwa-static.test.js', 'tests/state.test.js', 'tests/summary.test.js', 'tests/theme-engine.test.js',
+  'tests/visuals.test.js']);
 const pass = Number(tests.output.match(/^# pass (\d+)$/m)?.[1] ?? 0);
 const fail = Number(tests.output.match(/^# fail (\d+)$/m)?.[1] ?? 0);
 const skipped = Number(tests.output.match(/^# skipped (\d+)$/m)?.[1] ?? 0);

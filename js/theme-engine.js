@@ -143,14 +143,16 @@ export const LIGHTNING_TRACKS = Object.freeze({
   terminal: []
 });
 
+function meanDelay(level) {
+  return LIGHTNING.slowDelayS + (LIGHTNING.fastDelayS - LIGHTNING.slowDelayS) * clamp01(level);
+}
+
 export function strikeDelay(level, rand = Math.random) {
-  const k = clamp01(level);
-  const mean = LIGHTNING.slowDelayS + (LIGHTNING.fastDelayS - LIGHTNING.slowDelayS) * k;
-  return mean * (0.7 + 0.6 * rand());
+  return meanDelay(level) * (0.7 + 0.6 * rand());
 }
 
 export function createBoltTrack() {
-  return { nextAt: null, flashes: 0 };
+  return { nextAt: null, lastAt: null, flashes: 0 };
 }
 
 /**
@@ -160,10 +162,14 @@ export function createBoltTrack() {
  * dropping the track's rhythm.
  */
 export function updateBoltTrack(track, tS, level, limiter, rand = Math.random) {
-  if (track.nextAt === null) { track.nextAt = tS + strikeDelay(level, rand) * 0.5; return false; }
+  if (track.nextAt === null) { track.lastAt = tS; track.nextAt = tS + strikeDelay(level, rand) * 0.5; return false; }
+  // A strike booked while intensity was low must not keep the scene waiting
+  // once it rises: never wait longer than the current level's longest gap.
+  track.nextAt = Math.min(track.nextAt, track.lastAt + meanDelay(level) * 1.3);
   if (tS < track.nextAt) return false;
   if (!limiter.request(tS * 1000)) return false;
   track.flashes += 1;
+  track.lastAt = tS;
   track.nextAt = tS + strikeDelay(level, rand);
   return true;
 }

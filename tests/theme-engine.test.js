@@ -106,3 +106,15 @@ test('more intensity means more strikes and more branches, never a faster cap', 
   assert.ok(count(1) > count(0.5) && count(0.5) > count(0));
   assert.ok(boltBranches(1) > boltBranches(0.5) && boltBranches(0.5) >= boltBranches(0));
 });
+
+test('lightning responds when intensity jumps — a slow booking is pulled in', () => {
+  const limiter = createFlashLimiter();
+  const track = createBoltTrack();
+  const hi = () => 0.999;                       // longest possible gap at whatever level
+  updateBoltTrack(track, 0, 0, limiter, hi);    // booked at level 0: up to ~5 s away
+  let struckAt = null;
+  for (let f = 1; f <= 30 * 10 && struckAt === null; f += 1) {
+    if (updateBoltTrack(track, f / 30, 1, limiter, hi)) struckAt = f / 30;
+  }
+  assert.ok(struckAt !== null && struckAt <= 1.2 * 1.3 + 0.05, `first strike at max intensity came at ${struckAt}s`);
+});

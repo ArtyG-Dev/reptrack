@@ -1356,7 +1356,8 @@ export function getDiagnostics() {
     spin,
     rotationSpeed: rotationSpeed(shown.k),
     intensity: shown.k,
-    flashLog: [...flashLog],
+    flashLog: [...flashLog],         // ms of scene clock, the same clock as `clock`
+    clock,
     backingStore: usingGL() ? { ...glDims } : { ...dims },
     activity: { ...activity },
     boltFlashes: boltTrack.flashes,  // the flicker-hazard cap under test

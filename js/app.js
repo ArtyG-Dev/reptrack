@@ -111,6 +111,10 @@ function wireTheme() {
 function pushActivity() {
   const { glow, frostHint, streakLevel, streakFraction, monthPercent } = state.activityVisual();
   backdrop.setActivity({ glow, frostHint, streakLevel, streakFraction, monthPercent });
+  // The saved Fractal colours — applied on boot, after Reset colours in Settings
+  // and after a JSON import. Not while the full-screen view is open: there the
+  // user's live drag is the truth, saved when they leave.
+  if (!backdrop.getDiagnostics().fullView) backdrop.setTint(state.getState().settings.fractalColour);
 }
 
 async function registerServiceWorker() {

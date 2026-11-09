@@ -11,7 +11,9 @@
  */
 
 import * as backdrop from './backdrop.js';
+import * as state from './state.js';
 import { el } from './ui.js';
+import { TINT } from './theme-engine.js';
 
 const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal' };
 const DRAGGABLE = new Set(['kemet', 'forge', 'terminal']);   // all through the one shared orbit
@@ -23,6 +25,11 @@ let root = null;
 let openFor = null;          // skin name while open
 let pushedHistory = false;
 let returnFocusId = null;
+let tintAtOpen = null;       // Fractal colours when the view opened, to save only a real change
+
+/* Fractal is the one scene where dragging does not move the view at all: it
+ * recolours (backdrop.tintBy → theme-engine TINT). */
+const RECOLOUR = 'fractal';
 
 export function skinLabel(skin) {
   return NAMES[skin] || 'theme';
@@ -46,19 +53,37 @@ function build() {
     class: 'btn graphic-btn', id: 'graphic-close', type: 'button', 'aria-label': 'Close full-screen graphic',
     onclick: () => close_()
   }, '✕');
+  const reset = el('button', {
+    class: 'btn graphic-btn', id: 'graphic-reset-colours', type: 'button', hidden: true,
+    onclick: () => backdrop.setTint(TINT.default)
+  }, 'Reset colours');
+  const hint = el('div', { class: 'graphic-hint', id: 'graphic-hint', hidden: true },
+    el('p', { text: 'Drag sideways to change colour, up and down for warmth.' }),
+    el('button', { class: 'btn graphic-btn', id: 'graphic-hint-dismiss', type: 'button', onclick: () => dismissHint() }, 'Got it')
+  );
   root = el('div', { class: 'graphic-view', id: 'graphic-view', role: 'dialog', 'aria-modal': 'true', hidden: true },
     stage,
-    el('div', { class: 'graphic-bar' }, toggle, close),
+    el('div', { class: 'graphic-bar' }, toggle, el('div', { class: 'graphic-actions' }, reset, close)),
+    hint,
     level
   );
   document.body.append(root);
 
   wireDrag(stage);
-  root.addEventListener('keydown', onKey);
+  // On the document, not the dialog: pressing on the scene moves focus to the
+  // page body, and Esc / the arrow keys must still work after a drag.
+  document.addEventListener('keydown', (event) => { if (openFor) onKey(event); });
   addEventListener('popstate', () => { if (openFor) { pushedHistory = false; close_(); } });
   document.addEventListener('fullscreenchange', () => {
     if (openFor && !document.fullscreenElement && root.dataset.fullscreen === '1') close_();
   });
+}
+
+function dismissHint() {
+  const hint = document.getElementById('graphic-hint');
+  if (!hint || hint.hidden) return;
+  hint.hidden = true;
+  if (document.activeElement?.id === 'graphic-hint-dismiss') document.getElementById('graphic-close').focus();
 }
 
 function toggleLevel(force) {
@@ -84,7 +109,13 @@ function wireDrag(stage) {
   stage.addEventListener('pointermove', (event) => {
     if (!start) return;
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP_PX) start.moved = true;
-    if (DRAGGABLE.has(openFor)) backdrop.dragBy(event.clientX - last.x, event.clientY - last.y);
+    const dx = event.clientX - last.x;
+    const dy = event.clientY - last.y;
+    if (DRAGGABLE.has(openFor)) backdrop.dragBy(dx, dy);
+    else if (openFor === RECOLOUR && start.moved) {
+      backdrop.tintBy(dx / (innerWidth || 1), dy / (innerHeight || 1));
+      dismissHint();                       // they've found it
+    }
     last = { x: event.clientX, y: event.clientY };
   });
   const end = () => {
@@ -107,8 +138,14 @@ function onKey(event) {
     backdrop.release();
     return;
   }
+  if (openFor === RECOLOUR && nudge) {     // ← → hue, ↑ ↓ warmth (↑ warms, as dragging up does)
+    event.preventDefault();
+    const t = backdrop.getTint();
+    backdrop.setTint({ hue: t.hue + nudge[0] * TINT.keyHue, warmth: t.warmth - nudge[1] * TINT.keyWarmth });
+    return;
+  }
   if (event.key === 'Tab') {                 // keep focus inside the dialog
-    const focusable = [...root.querySelectorAll('button')];
+    const focusable = [...root.querySelectorAll('button')].filter((b) => !b.hidden && !b.closest('[hidden]'));
     const i = focusable.indexOf(document.activeElement);
     const next = event.shiftKey ? (i <= 0 ? focusable.length - 1 : i - 1) : (i + 1) % focusable.length;
     event.preventDefault();
@@ -134,6 +171,14 @@ export function open(skin, { returnFocus = 'view-graphic' } = {}) {
   root.setAttribute('aria-label', `${skinLabel(skin)} graphic, full screen`);
   root.dataset.skin = skin;
   root.hidden = false;
+
+  const recolour = skin === RECOLOUR;
+  document.getElementById('graphic-reset-colours').hidden = !recolour;
+  tintAtOpen = recolour ? backdrop.getTint() : null;
+  // First time only: say what dragging does here, since it is not what it does elsewhere.
+  const showHint = recolour && !state.getState().settings.fractalHintSeen;
+  document.getElementById('graphic-hint').hidden = !showHint;
+  if (showHint) state.rememberSetting({ fractalHintSeen: true }).catch(() => {});
   document.documentElement.dataset.graphicView = '1';
   for (const sel of SHELL) document.querySelector(sel)?.setAttribute('inert', '');
 
@@ -159,6 +204,13 @@ function close_() {
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   root.dataset.fullscreen = '0';
   if (pushedHistory) { pushedHistory = false; history.back(); }
+  // Fractal colours are remembered when leaving the view, and used everywhere
+  // the theme appears — the Today view included.
+  if (tintAtOpen) {
+    const t = backdrop.getTint();
+    if (t.hue !== tintAtOpen.hue || t.warmth !== tintAtOpen.warmth) state.updateSettings({ fractalColour: t }).catch(() => {});
+    tintAtOpen = null;
+  }
   document.getElementById(returnFocusId)?.focus();
 }
 

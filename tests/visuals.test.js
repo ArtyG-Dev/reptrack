@@ -692,4 +692,166 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     assert.equal(changedFraction(home, await frame(page)), 0, 'pixel-identical to the default frame');
     await context.close();
   });
+  /* ---------- Fractal: drag to recolour ---------- */
+
+  const tintOf = async (page) => (await diag(page)).tint;
+  const meanRGB = (px) => { let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < px.length; i += 16) { r += px[i]; g += px[i + 1]; b += px[i + 2]; n += 1; } return [r / n, g / n, b / n]; };
+  async function swipe(page, dx, dy, from = [196, 426]) {
+    await page.mouse.move(from[0], from[1]);
+    await page.mouse.down();
+    await page.mouse.move(from[0] + dx, from[1] + dy, { steps: 12 });
+    await page.mouse.up();
+  }
+
+  test('Fractal: horizontal drag turns the hue (wrapping), vertical drag sets warmth (clamped) — and nothing rotates', async () => {
+    const { context, page } = await open('fractal', { context: { reducedMotion: 'reduce' } });
+    await intensity(page, 1);
+    await page.click('#view-graphic');
+    await page.click('#graphic-hint-dismiss');
+    const W = VIEWPORT.width;
+    const f0 = await frame(page);
+
+    await swipe(page, W / 4, 0, [40, 426]);
+    const t1 = await tintOf(page);
+    const turned = t1.hue / (2 * Math.PI);
+    assert.ok(Math.abs(turned - 0.25) < 0.03, `a quarter-width drag is a quarter turn (${turned.toFixed(3)}), give or take the tap slop`);
+    assert.equal(t1.warmth, 0);
+    const f1 = await frame(page);
+    assert.ok(changedFraction(f0, f1) > 0.2, 'the colours visibly changed');
+    assert.deepEqual((await diag(page)).orbit, { yaw: 0, pitch: 0 }, 'recolour only — no rotate, pan or zoom');
+    assert.equal((await diag(page)).scene.fractal.half, (await (async () => { await page.evaluate(() => window.__backdrop.readPixels()); return (await diag(page)).scene.fractal.half; })()), 'zoom untouched');
+
+    // Wrap: two full widths more bring the hue back to the same place.
+    await swipe(page, W - 20, 0, [10, 426]);
+    await swipe(page, W - 20, 0, [10, 426]);
+    const t2 = await tintOf(page);
+    assert.ok(t2.hue >= 0 && t2.hue < 2 * Math.PI, 'hue stays on the wheel');
+
+    // Warmth: up warms — the picture shifts toward red — and stops at +1; down cools and stops at −1.
+    await page.evaluate(() => window.__backdrop.setTint({ hue: 0, warmth: 0 }));
+    const neutral = meanRGB(await frame(page));
+    await swipe(page, 0, -200);
+    const warm = await tintOf(page);
+    const warmRGB = meanRGB(await frame(page));
+    assert.ok(warm.warmth > 0.3, `dragging up warms (${warm.warmth.toFixed(2)})`);
+    assert.ok(warmRGB[0] - warmRGB[2] > neutral[0] - neutral[2] + 5, 'and the frame leans red');
+    await swipe(page, 0, -800);
+    assert.equal((await tintOf(page)).warmth, 1, 'clamped at warmest');
+    await swipe(page, 0, 700, [196, 100]);             // below the button bar
+    await swipe(page, 0, 700, [196, 100]);
+    assert.equal((await tintOf(page)).warmth, -1, 'clamped at coolest');
+    const coolRGB = meanRGB(await frame(page));
+    assert.ok(coolRGB[2] - coolRGB[0] > neutral[2] - neutral[0] + 5, 'and the frame leans blue');
+
+    // A tap is not a drag: the colours never jump.
+    const before = await tintOf(page);
+    await page.mouse.click(300, 300);
+    assert.deepEqual(await tintOf(page), before);
+    await context.close();
+  });
+
+  test('Fractal colours are remembered: across full-screen exits, a reload, and in the Today view', async () => {
+    const { context, page } = await open('fractal');
+    await page.click('#view-graphic');
+    await page.click('#graphic-hint-dismiss');
+    await swipe(page, 120, -150);
+    const chosen = await tintOf(page);
+    assert.ok(chosen.hue > 0 && chosen.warmth > 0);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#graphic-view', { state: 'hidden' });
+    assert.deepEqual(await tintOf(page), chosen, 'the Today view shows them straight away');
+    await page.click('#view-graphic');
+    assert.deepEqual(await tintOf(page), chosen, 'and re-entering full screen keeps them');
+    await page.keyboard.press('Escape');
+
+    await page.waitForFunction(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => { const g = req.result.transaction('settings').objectStore('settings').get('fractalColour'); g.onsuccess = () => resolve(Boolean(g.result)); };
+    }), null, { timeout: 5000 });
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'fractal');
+    const after = await tintOf(page);
+    assert.ok(Math.abs(after.hue - chosen.hue) < 1e-9 && Math.abs(after.warmth - chosen.warmth) < 1e-9, 'a reload keeps them, in the Today view');
+    assert.equal((await diag(page)).fullView, false);
+
+    // The JSON export carries them.
+    await page.click('#tab-settings');
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#export-json')]);
+    const chunks = [];
+    for await (const c of await download.createReadStream()) chunks.push(c);
+    const backup = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const saved = backup.settings.find((r) => r.key === 'fractalColour').value;
+    assert.ok(Math.abs(saved.hue - chosen.hue) < 1e-9, 'exported');
+
+    // Reset in Settings.
+    await page.click('#set-reset-fractal-colours');
+    await page.waitForFunction(() => { const t = window.__backdrop.getDiagnostics().tint; return t.hue === 0 && t.warmth === 0; }, null, { timeout: 3000 });
+    // Reset in full screen.
+    await page.click('#tab-today');
+    await page.click('#view-graphic');
+    await swipe(page, 100, -100);
+    assert.notDeepEqual(await tintOf(page), { hue: 0, warmth: 0 });
+    await page.click('#graphic-reset-colours');
+    assert.deepEqual(await tintOf(page), { hue: 0, warmth: 0 }, 'Reset colours restores the theme default');
+    await context.close();
+  });
+
+  test('Esc closes the full-screen view even after a drag has taken focus off its buttons', async () => {
+    const { context, page } = await open('kemet');
+    await page.click('#view-graphic');
+    await swipe(page, 80, 0);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#graphic-view', { state: 'hidden' });
+    await context.close();
+  });
+
+  test('Fractal: the hint shows once, the arrow keys recolour, and the overlay text has a dark backing', async () => {
+    const { context, page } = await open('fractal');
+    await page.click('#view-graphic');
+    assert.equal(await page.$eval('#graphic-hint', (n) => n.hidden), false, 'shown the first time');
+    assert.match(await page.textContent('#graphic-hint'), /Drag sideways to change colour, up and down for warmth/);
+    await page.click('#graphic-hint-dismiss');
+    await page.keyboard.press('Escape');
+    await page.click('#view-graphic');
+    assert.equal(await page.$eval('#graphic-hint', (n) => n.hidden), true, 'and never again');
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'fractal');
+    await page.click('#view-graphic');
+    assert.equal(await page.$eval('#graphic-hint', (n) => n.hidden), true, 'not even after a reload');
+
+    await page.focus('#graphic-close');
+    const t0 = await tintOf(page);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowUp');
+    const t1 = await tintOf(page);
+    assert.ok(Math.abs(t1.hue - t0.hue - Math.PI / 12) < 1e-9, '→ turns the hue 15°');
+    assert.ok(Math.abs(t1.warmth - t0.warmth - 0.1) < 1e-9, '↑ warms by a tenth');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowDown');
+    const t2 = await tintOf(page);
+    assert.ok(Math.abs(t2.hue - t0.hue) < 1e-9 && Math.abs(t2.warmth - t0.warmth) < 1e-9, '← and ↓ undo them');
+
+    const backing = await page.$eval('#graphic-level', (n) => (getComputedStyle(n).backgroundColor.match(/[\d.]+/g) || []).map(Number));
+    assert.ok(backing.length >= 3 && (backing[3] ?? 1) >= 0.85 && backing[0] + backing[1] + backing[2] < 120, `the level text sits on a dark backing (${backing})`);
+    await context.close();
+  });
+
+  test('Fractal contrast sweep: text over the Today view holds 4.5:1 at 4 hues × 3 warmths × 2 intensities', async () => {
+    const { context, page } = await open('fractal', { query: '&static=1' });
+    const failures = [];
+    let worst = Infinity;
+    for (const k of [0, 1]) {
+      await intensity(page, k);
+      for (const hueDeg of [0, 90, 180, 270]) {
+        for (const warmth of [-1, 0, 1]) {
+          await page.evaluate(([h, w]) => window.__backdrop.setTint({ hue: (h * Math.PI) / 180, warmth: w }), [hueDeg, warmth]);
+          const r = await worstTextContrast(page);
+          worst = Math.min(worst, r.worst);
+          if (r.worst < 4.5) failures.push(`hue ${hueDeg}° warmth ${warmth} intensity ${k}: "${r.where}" ${r.worst.toFixed(2)}:1`);
+        }
+      }
+    }
+    assert.deepEqual(failures, [], `worst ${worst.toFixed(2)}:1`);
+    await context.close();
+  });
 });

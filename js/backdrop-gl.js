@@ -315,7 +315,20 @@ void main() { float d = length(gl_PointCoord - 0.5); o = vec4(mix(uSpark, uHot, 
 
 /* ---------- Fractal ---------- */
 
-const BLOOM_FS = `${HEAD}
+const TINT_GLSL = `
+// The user's colours (theme-engine TINT): hue turns the palette round the grey
+// axis; warmth leans it red-orange-yellow (+) or blue-cyan-violet (−).
+uniform float uHue, uWarmth;
+vec3 tinted(vec3 c) {
+  const vec3 k = vec3(0.57735027);
+  float ca = cos(uHue), sa = sin(uHue);
+  c = c * ca + cross(k, c) * sa + k * dot(k, c) * (1.0 - ca);
+  vec3 lean = uWarmth > 0.0 ? vec3(1.3, 1.0, 0.6) : vec3(0.65, 0.95, 1.35);
+  return max(mix(c, c * lean, abs(uWarmth)), 0.0);
+}
+`;
+
+const BLOOM_FS = `${HEAD}${TINT_GLSL}
 in vec2 vUv;
 uniform vec3 uA, uB, uBase;
 uniform float uTime, uAspect, uLift;
@@ -324,16 +337,17 @@ void main() {
   vec2 p = vUv * vec2(uAspect, 1.0);
   float s = uTime * 0.0785;
   vec3 col = uBase;
-  col = blob(col, uA, p, vec2((0.30 + sin(s) * 0.11) * uAspect, 0.80 + cos(s * 0.83) * 0.07), 0.45, 0.6 * uLift);
-  col = blob(col, uB, p, vec2((0.74 + sin(s + 1.7) * 0.09) * uAspect, 0.66 + cos(s * 0.83 + 2.1) * 0.10), 0.40, 0.6 * uLift);
-  col = blob(col, uA, p, vec2((0.18 + sin(s + 3.4) * 0.07) * uAspect, 0.52 + cos(s * 0.83 + 4.2) * 0.12), 0.28, 0.5 * uLift);
+  vec3 a = tinted(uA), b = tinted(uB);
+  col = blob(col, a, p, vec2((0.30 + sin(s) * 0.11) * uAspect, 0.80 + cos(s * 0.83) * 0.07), 0.45, 0.6 * uLift);
+  col = blob(col, b, p, vec2((0.74 + sin(s + 1.7) * 0.09) * uAspect, 0.66 + cos(s * 0.83 + 2.1) * 0.10), 0.40, 0.6 * uLift);
+  col = blob(col, a, p, vec2((0.18 + sin(s + 3.4) * 0.07) * uAspect, 0.52 + cos(s * 0.83 + 4.2) * 0.12), 0.28, 0.5 * uLift);
   o = vec4(col, 1.0);
 }`;
 
 /* highp is mandatory in WebGL2 fragment shaders (GLSL ES 3.00), so float32
  * precision is guaranteed; ZOOM.minHalf keeps ~20 ulps per pixel at the
  * deepest zoom, which is where float32 Mandelbrots start to block up. */
-const MANDEL_FS = `${HEAD}
+const MANDEL_FS = `${HEAD}${TINT_GLSL}
 in vec2 vUv;
 uniform vec2 uCentre;
 uniform float uHalf, uAspect, uIter, uTime, uSat, uFeather;
@@ -357,7 +371,7 @@ void main() {
     vec3 w = 0.5 + 0.5 * cos(6.28318 * (ph + vec3(0.0, 0.33, 0.67)));
     vec3 pal = (uA * w.x + uB * w.y + uInk * w.z) / (w.x + w.y + w.z);
     float edge = clamp(log(max(mu, 1.0)) / log(uIter), 0.0, 1.0);
-    col = mix(pal, uInk, smoothstep(0.8, 1.0, edge) * 0.7);     // filaments nearest the set run hottest
+    col = tinted(mix(pal, uInk, smoothstep(0.8, 1.0, edge) * 0.7));   // filaments nearest the set run hottest
     col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, uSat);
     a = smoothstep(0.08, 0.6, edge);                             // far exterior is clear, so no hard rectangle
   } else {
@@ -1006,7 +1020,9 @@ export function createGLBackdrop(canvas) {
   function fractal(f) {
     const P = f.palette;
     blend(null);
-    r.bloom.use().rgb('uA', P.bloomA).rgb('uB', P.bloomB).rgb('uBase', P.base).f('uTime', f.t).f('uAspect', size.w / size.h).f('uLift', 0.55 + 0.45 * f.glow);
+    const hue = f.tint?.hue ?? 0;
+    const warmth = f.tint?.warmth ?? 0;
+    r.bloom.use().f('uHue', hue).f('uWarmth', warmth).rgb('uA', P.bloomA).rgb('uB', P.bloomB).rgb('uBase', P.base).f('uTime', f.t).f('uAspect', size.w / size.h).f('uLift', 0.55 + 0.45 * f.glow);
     fullscreen();
 
     const y0 = Math.round(((f.band[0] + 1) / 2) * size.h);
@@ -1018,11 +1034,11 @@ export function createGLBackdrop(canvas) {
     const half = startHalf * (ZOOM.minHalf / startHalf) ** zoom * (1 + 0.03 * Math.sin(f.t * 0.1));
     const shrink = half / startHalf;
     const centre = ZOOM.target.map((v, i) => v + (ZOOM.start[i] - v) * shrink);
-    info.fractal = { half, iterations: Math.round(ZOOM.minIter + (ZOOM.maxIter - ZOOM.minIter) * f.k), saturation: 0.35 + 0.65 * f.k };
+    info.fractal = { hue, warmth, half, iterations: Math.round(ZOOM.minIter + (ZOOM.maxIter - ZOOM.minIter) * f.k), saturation: 0.35 + 0.65 * f.k };
 
     gl.viewport(0, y0, size.w, h);
     blend('alpha');
-    r.mandel.use().f('uCentre', centre[0], centre[1]).f('uHalf', half).f('uAspect', aspect)
+    r.mandel.use().f('uHue', hue).f('uWarmth', warmth).f('uCentre', centre[0], centre[1]).f('uHalf', half).f('uAspect', aspect)
       .f('uIter', info.fractal.iterations).f('uTime', f.t).f('uSat', info.fractal.saturation)
       .f('uFeather', f.full ? 0.001 : 0.5).rgb('uA', P.bloomA).rgb('uB', P.bloomB).rgb('uInk', P.ink).rgb('uBase', P.base);
     fullscreen();

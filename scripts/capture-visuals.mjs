@@ -152,6 +152,40 @@ try {
     await shoot(page, name);
     await context.close();
   }
+
+  /* Terminal look-around at its clamps; Fractal recoloured. */
+  {
+    const { context, page } = await openFull('terminal', { reduced: true });
+    await setLevel(page, 6, 0.6);
+    await page.click('#view-graphic');
+    await page.click('#graphic-level-toggle');
+    for (const [name, dx, dy] of [['left', -700, 0], ['right', 700, 0], ['up', 0, -600], ['down', 0, 600], ['corner', 700, -600]]) {
+      await page.mouse.move(196, 426);
+      await page.mouse.down();
+      await page.mouse.move(196 + dx, 426 + dy, { steps: 10 });
+      await shoot(page, `terminal-orbit-${name}`);              // held at the clamp, mid-drag
+      await page.mouse.up();
+    }
+    await shoot(page, 'terminal-orbit-centre');
+    await context.close();
+  }
+  {
+    const { context, page } = await openFull('fractal', { reduced: true });
+    await setLevel(page, 10, 1);
+    await page.click('#view-graphic');
+    if (await page.$eval('#graphic-hint', (n) => !n.hidden)) await shoot(page, 'fractal-colour-hint');
+    await page.click('#graphic-hint-dismiss').catch(() => {});
+    await page.click('#graphic-level-toggle');
+    for (const [h, w] of [[0, 0], [90, 0], [180, 0], [270, 0], [0, 1], [0, -1]]) {
+      await page.evaluate(([hh, ww]) => window.__backdrop.setTint({ hue: (hh * Math.PI) / 180, warmth: ww }), [h, w]);
+      await shoot(page, `fractal-colour-h${h}-w${w}`);
+    }
+    await page.evaluate(() => window.__backdrop.setTint({ hue: Math.PI / 2, warmth: 0.6 }));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await shoot(page, 'fractal-colour-today');                  // the chosen colours, in the normal Today view
+    await context.close();
+  }
 } finally {
   await browser.close();
   if (local) await new Promise((resolve) => local.server.close(resolve));

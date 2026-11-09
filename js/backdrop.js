@@ -35,7 +35,8 @@
 import {
   createFlashLimiter, intensity, approach, rotationSpeed,
   createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle, orbitHome, ORBIT_STYLE,
-  createPlateRack, setRackTarget, snapRack, stepRack, rackPlates, rackSettled, platesForLevel
+  createPlateRack, setRackTarget, snapRack, stepRack, rackPlates, rackSettled, platesForLevel,
+  TINT, normaliseTint, tintDrag
 } from './theme-engine.js';
 import { createGLBackdrop } from './backdrop-gl.js';
 
@@ -161,6 +162,7 @@ const orbit = createOrbit();          // the user's drag — the one shared hand
  * settle (persisted by app.js), so a level gained between visits is shown
  * going on once, the next time Forge is opened. */
 let rack = createPlateRack();
+let tint = { ...TINT.default };      // Fractal colours: { hue, warmth } — see theme-engine TINT
 let platesSeen = null;
 let platesSettledReport = null;      // callback(level) once the rack settles on a new level
 let lastReportedPlates = null;
@@ -1127,6 +1129,7 @@ function draw() {
       k: shown.k,
       spin,
       orbit: { yaw: orbit.yaw, pitch: orbit.pitch },
+      tint,
       plates: rackPlates(rack),
       band: glBand(),
       full: fullView,
@@ -1365,6 +1368,22 @@ export function setFullView(flag) {
  * held, auto-rotation stops; on release the offset eases back as the scene's
  * own rotation resumes. Under reduced motion a drag still turns the held frame
  * — the user is choosing that motion — but nothing eases or auto-rotates. */
+/** The Fractal's colours. Changing colour is not a flash: it never goes near
+ *  the flash limiter, and it redraws a held (reduced-motion) frame at once. */
+export function setTint(next) {
+  tint = normaliseTint(next);
+  if (isStatic() || !raf) draw();
+}
+
+/** A drag's movement as fractions of the screen — relative, so nothing jumps. */
+export function tintBy(dxFrac, dyFrac) {
+  setTint(tintDrag(tint, dxFrac, dyFrac));
+}
+
+export function getTint() {
+  return { ...tint };
+}
+
 function orbitStyle() {
   return ORBIT_STYLE[skin] ?? ORBIT_STYLE.kemet;
 }
@@ -1417,6 +1436,7 @@ export function getDiagnostics() {
     fullView,
     dragging: orbit.dragging,
     orbit: { yaw: orbit.yaw, pitch: orbit.pitch },
+    tint: { ...tint },
     plates: { target: [...rack.target], seated: [...rack.seated], moving: rack.moving ? { ...rack.moving } : null, settled: rackSettled(rack) },
     spin,
     rotationSpeed: rotationSpeed(shown.k),

@@ -127,6 +127,21 @@ set, unmirrored and with no boxes (right).
 
 <img src="docs/screenshots/terminal-katakana.jpg" width="150" alt="Terminal with half-width katakana, some mirrored"> <img src="docs/screenshots/terminal-latin-fallback.jpg" width="150" alt="Terminal falling back to Latin when katakana cannot be drawn">
 
+## Terminal look-around and Fractal recolouring
+
+**Terminal: drag looks around inside the field**, clamped at ±40° yaw and ±25° pitch, and
+eases back to straight-on when you let go. These shots are held at each clamp: left, right,
+looking down, looking up, a corner, and back at centre. The glyphs are point sprites, so they
+always face you and stay readable at every angle.
+
+<img src="docs/screenshots/terminal-orbit-left.jpg" width="130" alt="Terminal looking 40° left"> <img src="docs/screenshots/terminal-orbit-right.jpg" width="130" alt="Terminal looking 40° right"> <img src="docs/screenshots/terminal-orbit-up.jpg" width="130" alt="Terminal at the pitch clamp, looking down"> <img src="docs/screenshots/terminal-orbit-down.jpg" width="130" alt="Terminal at the pitch clamp, looking up"> <img src="docs/screenshots/terminal-orbit-corner.jpg" width="130" alt="Terminal at both clamps"> <img src="docs/screenshots/terminal-orbit-centre.jpg" width="130" alt="Terminal back at centre">
+
+**Fractal: drag recolours.** Sideways turns the hue (0°, 90°, 180°, 270°) and up/down sets
+warmth (warmest, coolest). The first time, a hint says so. The chosen colours carry into the
+normal Today view (last shot: a fresh profile, so the set is fully zoomed out).
+
+<img src="docs/screenshots/fractal-colour-hint.jpg" width="130" alt="The first-use hint"> <img src="docs/screenshots/fractal-colour-h0-w0.jpg" width="130" alt="Hue 0°"> <img src="docs/screenshots/fractal-colour-h90-w0.jpg" width="130" alt="Hue 90°"> <img src="docs/screenshots/fractal-colour-h180-w0.jpg" width="130" alt="Hue 180°"> <img src="docs/screenshots/fractal-colour-h270-w0.jpg" width="130" alt="Hue 270°"> <img src="docs/screenshots/fractal-colour-h0-w1.jpg" width="130" alt="Warmest"> <img src="docs/screenshots/fractal-colour-h0-w-1.jpg" width="130" alt="Coolest"> <img src="docs/screenshots/fractal-colour-today.jpg" width="130" alt="Chosen colours in the Today view">
+
 ## What the tests prove from real pixels
 
 Screenshots show what it looks like. These assertions show it is true every time, and they
@@ -149,6 +164,8 @@ run on every `npm test` (`tests/visuals.test.js`, plus the pixel tests in
 | Kemet base | From below, the base faces the camera; the inscription runs left to right, upright and centred; the base is solid; it is hidden in the default view |
 | Forge turntable | Over ~1 s of scene time Kemet's heading rises and Forge's falls, Forge stays under the cap, and the bar's end stays at world height 0 as it swings round |
 | Terminal katakana | Katakana where a font draws them, Latin when it is forced unavailable, and a mirror split of about 50% fixed per glyph lifetime |
+| Terminal look-around | A long drag stops exactly at ±40° / ±25°, the view moves, it eases home after release, and under reduced motion it snaps home to a pixel-identical default frame |
+| Fractal recolouring | A quarter-width drag is a quarter turn of hue; it wraps; up warms (frame leans red) and stops at +1, down cools (leans blue) and stops at −1; a tap changes nothing; nothing rotates or zooms; colours survive exit, re-entry and reload, show in Today, export in JSON, and reset in both places; the hint shows once; arrow keys work; the contrast sweep (4 hues × 3 warmths × 2 intensities) holds 4.5:1 |
 | Forge plates | Plates per level match the table (Today and full screen), the bar ends never clip, plate colours stay > 60 RGB apart at heat 0 and 1, slide-on and fade-off are seen mid-animation, and a level gained between visits replays once |
 | Full-screen view | Focus moves in and returns to **View**; Esc, ✕ and browser back all close it (back stays in the app); a fixed overlay covers the viewport without the Fullscreen API; drag rotates Kemet/Forge, holds auto-rotation and resumes it on release |
 

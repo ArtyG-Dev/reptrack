@@ -145,7 +145,14 @@ export function render(container) {
 
     el('div', { class: 'field row', style: 'margin-top:14px' }, pauseToggle,
       el('label', { for: 'set-pause-activity', style: 'margin:0', text: 'Pause activity effects' })),
-    el('p', { class: 'small muted', style: 'margin:0', text: 'Holds the Forge and Fractal skins where they are — for illness, injury, holidays, or a planned deload. Your training history is kept exactly as it is, and you can switch this back off whenever you like.' })
+    el('p', { class: 'small muted', style: 'margin:0', text: 'Holds the Forge and Fractal skins where they are — for illness, injury, holidays, or a planned deload. Your training history is kept exactly as it is, and you can switch this back off whenever you like.' }),
+
+    el('div', { class: 'field row', style: 'margin-top:14px' },
+      el('button', {
+        class: 'btn', id: 'set-reset-fractal-colours', type: 'button',
+        onclick: async () => { await state.updateSettings({ fractalColour: { hue: 0, warmth: 0 } }); toast('Fractal colours reset.'); }
+      }, 'Reset Fractal colours')),
+    el('p', { class: 'small muted', style: 'margin:0', text: 'In the Fractal theme’s full-screen view, dragging changes its colours. This puts them back to the theme’s own.' })
   ));
 
   /* --- data --- */
@@ -169,7 +176,7 @@ export function render(container) {
   containerRef.append(el('div', { class: 'card stack' },
     el('h3', { text: 'Your data' }),
     el('p', { class: 'small muted', text: 'Everything lives in this browser on this device. There is no account and nothing is uploaded, so an export is your only backup.' }),
-    el('button', { class: 'btn btn-primary btn-block', type: 'button', onclick: doExport }, 'Export backup (JSON)'),
+    el('button', { class: 'btn btn-primary btn-block', id: 'export-json', type: 'button', onclick: doExport }, 'Export backup (JSON)'),
     el('div', { class: 'field' }, el('label', { for: 'import-file', text: 'Import a backup' }), fileInput),
     el('button', {
       class: 'btn btn-danger btn-block', type: 'button',

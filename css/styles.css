@@ -684,6 +684,29 @@ textarea { min-height: 84px; resize: vertical; }
   pointer-events: none;
 }
 .graphic-level[hidden] { display: none; }
+.graphic-actions { display: flex; gap: 8px; }
+.graphic-btn[hidden] { display: none; }
+/* The first-use hint carries the same dark scrim as the level label, so it
+ * reads over any colours the user has dragged the fractal to. */
+.graphic-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(320px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--glass) / var(--glass-alpha));
+  color: var(--text);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.graphic-hint p { margin: 0; }
+.graphic-hint[hidden] { display: none; }
 [data-graphic-view="1"] .app-bar,
 [data-graphic-view="1"] #main,
 [data-graphic-view="1"] .tabbar,

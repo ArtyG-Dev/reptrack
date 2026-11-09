@@ -87,6 +87,16 @@ the Today screen appears.
   shows Latin letters A–F instead, it couldn't draw katakana and fell back on purpose. Tell
   me, because that would be unusual on Android.
 
+**Two more:**
+
+- **Terminal:** open it full screen and drag around. It's like turning your head inside the
+  stream, and it stops before you see past its edges. Let go: it glides back to straight-on.
+  The characters stay upright and readable the whole time.
+- **Fractal:** open it full screen. The first time, a hint explains the gesture. Drag
+  sideways (the colours cycle round) and up/down (warmer or cooler). Close it and reopen:
+  the colours are kept. Back on Today, the background uses them too. **Settings → Reset
+  Fractal colours** puts them back.
+
 ### What to watch for
 
 | Observation | Meaning |

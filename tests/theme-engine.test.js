@@ -5,6 +5,7 @@ import {
   createFlashLimiter, maxInWindow, FLASH,
   createBoltTrack, updateBoltTrack, LIGHTNING_TRACKS, boltBranches,
   createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle, orbitHome, ORBIT_STYLE,
+  TINT, normaliseTint, tintDrag,
   PLATE_TABLE, PLATE_SIZES, SLEEVE, PLATE_MOTION, platesForLevel, plateLayout,
   createPlateRack, setRackTarget, stepRack, rackPlates, rackSettled, snapRack
 } from '../js/theme-engine.js';
@@ -272,4 +273,24 @@ test('terminal look-around is clamped at ±40° yaw / ±25° pitch, and reversin
   assert.deepEqual([o.yaw, o.pitch], [0, 0]);
   assert.equal(ORBIT_STYLE.terminal.stillRelease, 'home');
   assert.equal(ORBIT_STYLE.kemet.limits, null, 'Kemet and Forge stay unclamped');
+});
+
+test('fractal colours: one screen width is a full turn of hue and wraps; warmth is clamped to ±1', () => {
+  const full = (t) => t.hue / (2 * Math.PI);
+  let t = { ...TINT.default };
+  t = tintDrag(t, 0.25, 0);
+  assert.ok(Math.abs(full(t) - 0.25) < 1e-12);
+  t = tintDrag(t, 1, 0);
+  assert.ok(Math.abs(full(t) - 0.25) < 1e-9, 'a whole screen width comes back round');
+  t = tintDrag(t, -0.5, 0);
+  assert.ok(Math.abs(full(t) - 0.75) < 1e-9, 'and it wraps backwards too');
+  t = tintDrag(t, 0, -0.25);
+  assert.ok(Math.abs(t.warmth - 0.5) < 1e-12, 'dragging up warms');
+  t = tintDrag(t, 0, -9);
+  assert.equal(t.warmth, 1, 'clamped at warmest');
+  t = tintDrag(t, 0, 9);
+  assert.equal(t.warmth, -1, 'clamped at coolest');
+  assert.deepEqual(normaliseTint(null), { hue: 0, warmth: 0 });
+  assert.deepEqual(normaliseTint({ hue: 'red', warmth: 7 }), { hue: 0, warmth: 1 });
+  assert.deepEqual(tintDrag({ hue: 1, warmth: 0.2 }, 0, 0), { hue: 1, warmth: 0.2 }, 'no movement, no change — a tap cannot jump the colours');
 });

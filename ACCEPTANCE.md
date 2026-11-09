@@ -288,6 +288,23 @@ Per `docs/FOLLOWUP_PROMPT_KEMET_BASE_FORGE_SPIN_TERMINAL_KATAKANA.md`. Each chan
 | 129 | Pushed, cache bumped, live re-verified | Live files byte-identical to `f6f81a5`, SW `/reptrack/` with `reptrack-shell-v6`; on the live site the Kemet base reads correctly from below, Kemet +0.734 / Forge −0.734 rad/s, Terminal on katakana, no console errors. `DEPLOYMENT.md` → "Live verification" | ✅ |
 | 130 | `MANUAL_TEST.md` on-phone checks for all three | Check 2 → "Three more quick looks" | ✅ |
 
+## Added after the Terminal look-around / Fractal recolour update
+
+Per `docs/FOLLOWUP_PROMPT_TERMINAL_ORBIT_FRACTAL_COLOUR.md`. Each change committed separately.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 131 | Terminal: shared handler, clamped ±40° / ±25°, billboarded and legible at the extremes, eases back (snaps under reduced motion) | `ORBIT_STYLE.terminal` in `theme-engine.js`; `theme-engine.test.js` clamp test; `visuals.test.js` → clamp stops, ease home, reduced-motion snap to a pixel-identical frame; screenshots at every clamp. Point-sprite glyphs are screen-aligned by construction (`DECISIONS.md` #86) | ✅ |
+| 132 | Fractal: horizontal → hue (wraps), vertical → warmth (−1…+1); no rotate/pan/zoom | `tintDrag()` unit test; `visuals.test.js` → hue/warmth/clamp/wrap, orbit and zoom unchanged | ✅ |
+| 133 | Colours persist across exits and reloads, apply in Today, travel in JSON export/import, reset in both places | `visuals.test.js` → "Fractal colours are remembered…"; `db.test.js` export/import round-trip | ✅ |
+| 134 | Hint once, arrow keys, overlay backing | `visuals.test.js` → "the hint shows once, the arrow keys recolour, and the overlay text has a dark backing" | ✅ |
+| 135 | Contrast sweep (4 hues × 3 warmths × 2 intensities) in Today | `visuals.test.js` → all 24 combinations ≥ 4.5:1 against real pixels; no scrim change needed | ✅ |
+| 136 | Screenshots in `docs/screenshots/` and `VISUALS.md` | "Terminal look-around and Fractal recolouring" | ✅ |
+| 137 | CPU re-measured | Terminal app JS +0.9%, Fractal +0.8%, both PASS | ✅ headless / ⚠️ device |
+| 138 | Existing suite green | See measured run in the commit | ✅ |
+| 139 | Pushed, cache bumped, live re-verified | `reptrack-shell-v7`. `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
+| 140 | `MANUAL_TEST.md` on-phone checks | Check 2 → "Two more" | ✅ |
+
 ## Build constraints
 
 | Constraint | Verification | Status |

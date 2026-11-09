@@ -71,6 +71,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // The streak level whose Forge plates the user last watched settle, so a
   // level gained between visits is shown going on once (js/backdrop.js).
   forgePlatesSeenLevel: null,
+  // Fractal colours chosen by dragging in the full-screen view (theme-engine
+  // TINT), and whether the one-time "drag to recolour" hint has been shown.
+  fractalColour: { hue: 0, warmth: 0 },
+  fractalHintSeen: false,
   // Set once state.init() has merged any starter exercises added to
   // exercises-seed.js after this install's dictionary was first created —
   // see the backfill note in state.js. Never re-checked after that, so a

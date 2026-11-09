@@ -363,3 +363,39 @@ export function rackPlates(rack) {
   }
   return plates;
 }
+
+/* ---------- Fractal: drag to recolour ---------- */
+
+/**
+ * The user's Fractal colours: `hue` (radians, wraps) rotates the whole palette
+ * round the colour wheel, `warmth` (−1 coolest … +1 warmest, clamped) tints it.
+ * Applied as a transform on the existing palette in the shader, not a new one,
+ * so progress still drives vividness, detail and zoom exactly as before.
+ *
+ * Driven by drag *movement*, never position, so a tap or the start of a new
+ * drag can never make the colours jump. One full screen width is one full turn
+ * of hue; one full screen height is the whole warmth range (up warms).
+ */
+export const TINT = Object.freeze({
+  default: Object.freeze({ hue: 0, warmth: 0 }),
+  keyHue: Math.PI / 12,        // an arrow key: 15° of hue…
+  keyWarmth: 0.1               // …or a tenth of the warmth range
+});
+
+const TAU = Math.PI * 2;
+const wrapTau = (a) => ((a % TAU) + TAU) % TAU;
+
+/** Accepts anything (a saved setting, an imported backup) and returns a valid tint. */
+export function normaliseTint(tint) {
+  const hue = Number(tint?.hue);
+  const warmth = Number(tint?.warmth);
+  return {
+    hue: Number.isFinite(hue) ? wrapTau(hue) : 0,
+    warmth: Number.isFinite(warmth) ? Math.min(Math.max(warmth, -1), 1) : 0
+  };
+}
+
+/** dxFrac / dyFrac are the drag movement as fractions of the screen width / height. */
+export function tintDrag(tint, dxFrac, dyFrac) {
+  return normaliseTint({ hue: tint.hue + dxFrac * TAU, warmth: tint.warmth - dyFrac * 2 });
+}

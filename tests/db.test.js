@@ -298,3 +298,13 @@ test('importing an older backup fills sessionType instead of leaving it missing'
   assert.equal(byId.imp_2.sessionType, 'pt', 'an existing value is kept');
   assert.equal(byId.imp_2.attendance, 'attended');
 });
+
+test('the Fractal colours travel in the JSON export and come back on import', async () => {
+  await db.saveSettings({ fractalColour: { hue: 2.5, warmth: -0.4 } });
+  const backup = await db.exportAll();
+  assert.deepEqual(backup.settings.find((r) => r.key === 'fractalColour')?.value, { hue: 2.5, warmth: -0.4 });
+  await db.importAll(JSON.parse(JSON.stringify({ ...backup, settings: backup.settings.map((r) => (r.key === 'fractalColour' ? r : r)) })));
+  assert.deepEqual((await db.getSettings()).fractalColour, { hue: 2.5, warmth: -0.4 });
+  await db.wipeAll();
+  assert.deepEqual((await db.getSettings()).fractalColour, { hue: 0, warmth: 0 }, 'and default to the theme’s own');
+});

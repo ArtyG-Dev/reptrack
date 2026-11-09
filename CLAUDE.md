@@ -128,6 +128,11 @@ Details that look redundant and are not:
   plates last settled on screen. A higher level next time Forge opens slides the new plates
   on once; a lower one just shows the right plates. Written by `state.rememberSetting()`,
   which does not notify subscribers, because nothing displays it.
+- **`settings.fractalColour`** (default `{ hue: 0, warmth: 0 }`) and
+  **`settings.fractalHintSeen`** (default `false`) — the Fractal colours chosen by dragging in
+  its full-screen view (`TINT` / `tintDrag()` in `theme-engine.js`; hue in radians, wraps;
+  warmth −1…1, clamped), saved when the view closes and applied by `app.js` on every state
+  change except while the view is open. Reset in Settings and in the view itself.
 - **`settings.panelState`** — `{ [scope]: { [category]: boolean } }`, `scope` is
   `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
   `state.setPanelExpanded()`, which also supply the "most recently used category starts
@@ -233,6 +238,11 @@ and a drag applied there is invisible (DECISIONS #82).
 on release under reduced motion; Terminal is a look-around *inside* the field, clamped to
 ±40° yaw / ±25° pitch, easing home over ~1 s and snapping home under reduced motion. Fractal
 is not in it: dragging there recolours (below), it never moves the view.
+
+**Fractal recolouring** is not an orbit: `backdrop.tintBy(dxFrac, dyFrac)` turns the hue
+(a full screen width = one turn) and sets warmth (up warms), applied by `tinted()` in the
+Fractal shaders as a transform on the existing palette. Never let it touch zoom, iterations
+or the lightning colour.
 
 **Auto-rotation axes** are constants in `theme-engine.js`. Kemet spins `+1` about the
 vertical axis; `FORGE_AUTO_ROTATION = { axis: 'vertical', direction: -1 }` turns the bar

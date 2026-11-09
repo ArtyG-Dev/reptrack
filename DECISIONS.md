@@ -1278,3 +1278,41 @@ Two things the clamp needed that it didn't obviously need:
 screen-aligned, so a katakana never turns edge-on whatever the view. They still sample the
 same cached atlas, mirrored row included. Data velocity, the katakana mix, the Latin
 fallback and the flash limiter are untouched.
+
+### 87. Fractal: drag recolours (hue and warmth), remembered everywhere
+
+In the Fractal's full-screen view a drag changes **which colours** are used and never moves
+the view (no rotate, pan or zoom). Horizontal movement turns the hue: one screen width is a
+full turn, and it wraps. Vertical movement sets warmth from −1 to +1: up warms, it's
+clamped, and it doesn't wrap. It is driven by *movement*, so a tap or the start of a new
+drag can never jump the colours, and a press only starts recolouring once it travels past
+the tap slop. The arrow keys do the same in steps of 15° of hue and 0.1 of warmth.
+
+**A transform, not a new palette.** `tinted()` in the bloom and Mandelbrot shaders rotates
+the existing colours about the grey axis and leans them warm or cool. Progress still drives
+saturation, iterations, zoom and detail exactly as before. The inside of the set is untouched,
+and so is the lightning colour, which is drawn separately. A colour change never goes near
+the flash limiter. The luminance-bounding pass still clamps every pixel.
+
+**Memory.** `settings.fractalColour` (`{ hue, warmth }`, default `{ 0, 0 }`) is saved when the
+full-screen view closes, and only if it changed. `app.js` applies the saved value on boot and
+after every state change, which is how **Reset Fractal colours** in Settings and a JSON
+**import** take effect with no extra wiring. It skips this while the full-screen view is open,
+where the user's live drag is the truth. The export already carries every settings row, so
+the colours travel in backups with no format change (`db.test.js` round-trips them).
+
+**The first-use hint** ("Drag sideways to change colour, up and down for warmth") shows the
+first time the Fractal opens full screen, and `settings.fractalHintSeen` is set when it
+shows. It is dismissed with *Got it*, or by simply starting to recolour.
+
+**Contrast:** the sweep the brief asked for (hues 0/90/180/270° × warmth −1/0/+1 × intensity 0
+and 1, measured against real pixels behind every text element on Today) passes all 24
+combinations at ≥ 4.5:1. The bounding pass already caps luminance whatever the hue, so the
+glass scrim did not need strengthening, and the user's colour range is not limited.
+
+**A bug found on the way:** Esc (and the arrow keys) only worked while focus was inside the
+dialog. Pressing on the scene moves focus to the page body, so after any drag, Esc did
+nothing. Keys are now handled at document level while the view is open. This affected Kemet
+and Forge too, and has its own test.
+
+The 2D fallback renderer is not tinted. It only runs without WebGL2.

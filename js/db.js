@@ -6,7 +6,8 @@
  *   exercises  { id, name, aliases[], muscleGroup, category, mode,
  *                isCustom, isBodyweight }                                     key: id, index by_name
  *   sessions   { id, dateISO, startTs, endTs, durationSec, notes,
- *                lastModified, visibility }                                   key: id, index by_date
+ *                lastModified, visibility, sessionType,
+ *                className, instructor, location, attendance }              key: id, index by_date
  *   sets       { id, sessionId, exerciseId, dateISO, order, weight, unit,
  *                reps, rpe, holdSeconds, side, isPR, lastModified, visibility } key: id, indexes by_session / by_exercise
  *   runs       { id, dateISO, distance, distanceUnit, durationSec, notes,
@@ -27,10 +28,18 @@
  * needed for this — no index changed, only optional fields on existing stores.
  *
  * Reserved for Phase 2 (do not create yet): nutrition { id, dateISO, kcal, protein, carbs, fat, note }
+ *
+ * Reserved for class / PT attendance (schema only — nothing reads these yet;
+ * see docs/PHASE_ROADMAP.md): `sessionType` is 'gym' | 'run' | 'class' | 'pt'
+ * and defaults to 'gym'; `className`, `instructor`, `location` and
+ * `attendance` ('attended' | 'missed' | 'cancelled') default to null. Version 2
+ * of the database exists only to stamp `sessionType` onto sessions written
+ * before it — every one of those is a gym session, since runs live in their
+ * own store.
  */
 
 export const DB_NAME = 'reptrack';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 export const SCHEMA_VERSION = 1;
 
 export const STORES = Object.freeze({
@@ -108,6 +117,17 @@ export function openDB() {
         ru.createIndex('by_date', 'dateISO', { unique: false });
 
         db.createObjectStore(STORES.settings, { keyPath: 'key' });
+      }
+      if (event.oldVersion >= 1 && event.oldVersion < 2) {
+        // v1 → v2: give every existing session its type and the reserved
+        // attendance fields. Runs are a separate store, so all of them are gym.
+        const cursorReq = req.transaction.objectStore(STORES.sessions).openCursor();
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (!cursor) return;
+          cursor.update(withSessionDefaults(cursor.value));
+          cursor.continue();
+        };
       }
     };
     req.onsuccess = () => {
@@ -268,8 +288,23 @@ export async function deleteExercise(exerciseId) {
 
 /* ---------- sessions ---------- */
 
+export const SESSION_TYPES = Object.freeze(['gym', 'run', 'class', 'pt']);
+
+/** Fills the class/PT fields on a session that predates them. Never
+ *  overwrites a value that is already there. */
+export function withSessionDefaults(session) {
+  return {
+    ...session,
+    sessionType: SESSION_TYPES.includes(session.sessionType) ? session.sessionType : 'gym',
+    className: session.className ?? null,
+    instructor: session.instructor ?? null,
+    location: session.location ?? null,
+    attendance: session.attendance ?? null
+  };
+}
+
 export function makeSession({ dateISO = todayISO(), startTs = Date.now(), notes = '' } = {}) {
-  return { id: uid('ses'), dateISO, startTs, endTs: null, durationSec: 0, notes, lastModified: Date.now(), visibility: PRIVATE };
+  return withSessionDefaults({ id: uid('ses'), dateISO, startTs, endTs: null, durationSec: 0, notes, lastModified: Date.now(), visibility: PRIVATE });
 }
 
 export async function startSession(input) {
@@ -440,7 +475,7 @@ export async function importAll(data, { mode = 'replace' } = {}) {
   if (mode === 'replace') await wipeAll();
 
   await putMany(STORES.exercises, data.exercises);
-  await putMany(STORES.sessions, data.sessions);
+  await putMany(STORES.sessions, data.sessions.map(withSessionDefaults));   // older backups predate sessionType
   await putMany(STORES.sets, data.sets);
   if (Array.isArray(data.runs)) await putMany(STORES.runs, data.runs);
   if (Array.isArray(data.settings)) await putMany(STORES.settings, data.settings);

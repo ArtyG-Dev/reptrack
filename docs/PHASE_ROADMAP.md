@@ -63,6 +63,35 @@ Four phases. Each is shippable on its own. The hard architectural decisions live
 
 ---
 
+## Later build — class & PT attendance (spec; schema reserved, nothing built)
+
+The data hook already exists so this needs no migration: every `Session` carries
+`sessionType` (`gym | run | class | pt`, default `gym`) and the optional, currently
+unused `className`, `instructor`, `location` and `attendance`
+(`attended | missed | cancelled`). Database version 2 stamped `gym` onto every session
+recorded before the field existed. Nothing user-facing reads any of it yet.
+
+When this is built:
+
+- **Logging.** From Today, "Log a class" / "Log a PT session" opens the existing confirm
+  sheet with: name (class name, or "PT"), instructor or trainer, location, duration, and
+  attended / missed / cancelled. Same rule as everything else — nothing commits without
+  that confirmation. Voice can come later via a new intent in `parser.js`.
+- **Counting toward progress.** An *attended* class or PT session is a training day, so it
+  counts toward `streakLevel` and `monthPercent` exactly as a gym session or run does —
+  `consistency.trainingDays()` gains one filter (`attendance !== 'missed' && attendance
+  !== 'cancelled'`) and nothing else in the metric changes.
+- **A cancelled class is never a lapse.** Cancelled is something that happened *to* the
+  user. It must not count as a training day, and it must not count against them either:
+  frost, the glow and both metrics treat that date as if nothing were logged — never as a
+  miss. A *missed* class is recorded for the user's own reference only and is equally
+  invisible to every visual (the activity visuals never speak — see `CLAUDE.md`).
+- **Weekly summary.** `summary.js` gains an "Attendance" block: classes and PT sessions
+  attended this week, by name, with duration. Missed and cancelled are listed only if the
+  user turns that on, and are never totalled into a "missed N" line.
+- **Diary.** Class/PT sessions appear on the calendar like any other session, with the
+  class name in place of the exercise list.
+
 ## Security & compliance checklist (Phase 4 gate)
 
 - [ ] Auth with hashed+salted credentials; no plaintext secrets; secure session tokens.

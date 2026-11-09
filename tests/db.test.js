@@ -247,3 +247,54 @@ test('ids are unique and dates format as YYYY-MM-DD', () => {
   assert.equal(ids.size, 500);
   assert.equal(db.todayISO(new Date(2026, 0, 5)), '2026-01-05');
 });
+
+test('new sessions carry sessionType "gym" and null attendance fields — schema only, nothing reads them', async () => {
+  const session = await db.startSession({ dateISO: '2026-11-01' });
+  const [stored] = (await db.getAll('sessions')).filter((x) => x.id === session.id);
+  assert.equal(stored.sessionType, 'gym');
+  for (const key of ['className', 'instructor', 'location', 'attendance']) assert.equal(stored[key], null, key);
+});
+
+test('a version-1 database migrates: existing sessions become gym, sets and runs untouched', async () => {
+  // Build a genuine v1 database by hand — the schema as it shipped before this field.
+  db._resetConnection();
+  await new Promise((resolve, reject) => {
+    const req = indexedDB.open(db.DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const h = req.result;
+      h.createObjectStore('exercises', { keyPath: 'id' }).createIndex('by_name', 'name');
+      h.createObjectStore('sessions', { keyPath: 'id' }).createIndex('by_date', 'dateISO');
+      const sets = h.createObjectStore('sets', { keyPath: 'id' });
+      sets.createIndex('by_session', 'sessionId');
+      sets.createIndex('by_exercise', 'exerciseId');
+      h.createObjectStore('runs', { keyPath: 'id' }).createIndex('by_date', 'dateISO');
+      h.createObjectStore('settings', { keyPath: 'key' });
+      const t = req.transaction;
+      t.objectStore('sessions').put({ id: 'old_1', dateISO: '2025-01-02', startTs: 1, endTs: 2, durationSec: 1, notes: 'legacy', lastModified: 1, visibility: 'private' });
+      t.objectStore('runs').put({ id: 'run_1', dateISO: '2025-01-03', distance: 5, distanceUnit: 'km', durationSec: 1500, notes: '', lastModified: 1, visibility: 'private' });
+    };
+    req.onsuccess = () => { req.result.close(); resolve(); };
+    req.onerror = () => reject(req.error);
+  });
+
+  const handle = await db.openDB();
+  assert.equal(handle.version, 2);
+  const [session] = await db.getAll('sessions');
+  assert.equal(session.sessionType, 'gym');
+  assert.equal(session.attendance, null);
+  assert.equal(session.notes, 'legacy', 'nothing else about the record changed');
+  const [run] = await db.getAll('runs');
+  assert.equal(run.sessionType, undefined, 'runs are their own store and are not touched');
+});
+
+test('importing an older backup fills sessionType instead of leaving it missing', async () => {
+  await db.importAll({
+    app: 'reptrack', schemaVersion: 1, exercises: [], sets: [],
+    sessions: [{ id: 'imp_1', dateISO: '2025-02-02', startTs: 1, endTs: 2, durationSec: 1, notes: '', visibility: 'private' },
+      { id: 'imp_2', dateISO: '2025-02-03', startTs: 1, endTs: 2, durationSec: 1, notes: '', visibility: 'private', sessionType: 'pt', attendance: 'attended' }]
+  });
+  const byId = Object.fromEntries((await db.getAll('sessions')).map((x) => [x.id, x]));
+  assert.equal(byId.imp_1.sessionType, 'gym');
+  assert.equal(byId.imp_2.sessionType, 'pt', 'an existing value is kept');
+  assert.equal(byId.imp_2.attendance, 'attended');
+});

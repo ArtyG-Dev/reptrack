@@ -56,6 +56,25 @@ Fractal and Kemet do the most per-pixel work, so watch those hardest. If the pho
 WebGL2 (rare on anything from the last six years), the skins quietly fall back to the
 previous flat 2D versions — that is the designed behaviour, not a fault.
 
+**Forge, specifically (about a minute):** open Forge, tap **View**, and drag the barbell
+around both ways. Drag sideways to swing it end-on so you look straight down the bar, and up
+or down to flip it over. Let go: it should drift smoothly back and carry on turning by
+itself, not snap. Then check the plates against your level. Show the level label at the
+bottom (tap the scene, or **Show level**), and the plates on each side should match this
+table, identical on both sides:
+
+| Level | Per side, inner → outer |
+|---|---|
+| 0 | bare bar |
+| 1 / 2 / 3 | one green / one blue / one red |
+| 4 / 5 | red + green / red + blue |
+| 6 / 7 | 2 red / 2 red + blue |
+| 8 / 9 | 3 red / 3 red + blue |
+| 10 | 4 red, filling the sleeve up to the end collar |
+
+If you levelled up since you last had Forge open, the new plates should slide on once as
+the Today screen appears.
+
 ### What to watch for
 
 | Observation | Meaning |
@@ -65,6 +84,8 @@ previous flat 2D versions — that is the designed behaviour, not a fault.
 | The background visibly freezes the instant the mic starts listening, and resumes after | ✅ Pass — this is the auto-pause working |
 | The phone feels warm, or the battery drops noticeably faster than usual during a session | ❌ Over budget — tell me which skin and I'll simplify it (render the Today view below 2× pixels, cap Fractal's iterations lower, fewer particles, or drop the blur to a plain scrim on small screens) |
 | **View** fills the screen, drag turns Kemet/Forge, and **back** returns to Today inside the app | ✅ Pass |
+| Forge turns end-on and flips under your finger, and its plates match the table for your level | ✅ Pass |
+| The barbell barely moves when dragged, or the plate count is wrong | ❌ Tell me your level and what you see |
 | Back leaves the app, or the view gets stuck open | ❌ Tell me the phone and Chrome version |
 | Lightning ever looks like a strobe — rapid flashing rather than separate strikes | ❌ Stop and tell me. It is capped in code at 3 flashes per second, so this would be a bug |
 | Any stutter while scrolling, or the keyboard/mic feeling laggy | ❌ Same — tell me which skin |

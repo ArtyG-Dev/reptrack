@@ -320,6 +320,14 @@ export async function updateSettings(patch) {
   return state.settings;
 }
 
+/** Saves bookkeeping that no view displays (e.g. which Forge plates were last
+ *  seen) without notifying subscribers — a re-render would be pure waste, and
+ *  would re-push the activity values mid-animation. */
+export async function rememberSetting(patch) {
+  state.settings = await store.saveSettings(patch);
+  return state.settings;
+}
+
 /* ---------- activity-responsive visuals (Forge / Fractal skins) ---------- */
 
 function activityInput() {

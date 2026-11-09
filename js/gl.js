@@ -112,6 +112,10 @@ export function translation(x, y, z) {
   return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]);
 }
 
+export function scaling(x, y, z) {
+  return new Float32Array([x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1]);
+}
+
 /** Squeezes clip space vertically into [y0, y1] of NDC, so a camera framed for
  *  the "feature band" lands in that band while anything taller (the halo)
  *  still draws above it instead of being clipped by a viewport. */

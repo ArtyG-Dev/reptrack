@@ -170,6 +170,12 @@
   --backdrop-heat-a: #8a3a12;
   --backdrop-heat-b: #c9701f;
   --backdrop-heat-c: #f0c25e;
+  /* Competition plate colours by size (red / blue / green), shaded down to sit in
+   * the forge palette. Plates take only a warm wash of the heat glow, so these
+   * stay distinguishable when the bar is white-hot (visuals.test.js checks it). */
+  --backdrop-plate-red: #b23b2e;
+  --backdrop-plate-blue: #3d64b8;
+  --backdrop-plate-green: #3f9254;
 
   --frost-edge: #8fb6c8;
   --frost-sheen: rgba(198, 226, 238, .2);

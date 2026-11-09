@@ -15,9 +15,8 @@ import { el } from './ui.js';
 
 const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal' };
 const DRAGGABLE = new Set(['kemet', 'forge']);
-const DRAG_RADIANS_PER_PX = 0.012;
 const TAP_SLOP_PX = 6;
-const KEY_ROTATE_RADIANS = 0.15;
+const KEY_NUDGE_PX = 14;          // an arrow key turns the scene as far as a 14px drag
 const SHELL = ['.app-bar', '#main', '.tabbar', '.skip-link'];
 
 let root = null;
@@ -70,28 +69,29 @@ function toggleLevel(force) {
   toggle.textContent = show ? 'Hide level' : 'Show level';
 }
 
-/** Drag rotates Kemet/Forge (auto-rotation resumes on release); a tap anywhere
- *  on the scene shows or hides the level overlay. */
+/** Drag turns Kemet and Forge about both axes through the one shared orbit
+ *  (theme-engine.js, via backdrop.grab/dragBy/release) — nothing here knows
+ *  which scene it is turning. A tap anywhere shows or hides the level overlay. */
 function wireDrag(stage) {
   let start = null;
-  let lastX = 0;
+  let last = null;
   stage.addEventListener('pointerdown', (event) => {
     start = { x: event.clientX, y: event.clientY, moved: false };
-    lastX = event.clientX;
+    last = { x: event.clientX, y: event.clientY };
     stage.setPointerCapture?.(event.pointerId);
-    if (DRAGGABLE.has(openFor)) backdrop.setDragging(true);
+    if (DRAGGABLE.has(openFor)) backdrop.grab();
   });
   stage.addEventListener('pointermove', (event) => {
     if (!start) return;
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP_PX) start.moved = true;
-    if (DRAGGABLE.has(openFor)) backdrop.rotateBy((event.clientX - lastX) * DRAG_RADIANS_PER_PX);
-    lastX = event.clientX;
+    if (DRAGGABLE.has(openFor)) backdrop.dragBy(event.clientX - last.x, event.clientY - last.y);
+    last = { x: event.clientX, y: event.clientY };
   });
   const end = () => {
     if (!start) return;
     if (!start.moved) toggleLevel();
     start = null;
-    backdrop.setDragging(false);
+    if (DRAGGABLE.has(openFor)) backdrop.release();
   };
   stage.addEventListener('pointerup', end);
   stage.addEventListener('pointercancel', end);
@@ -99,9 +99,12 @@ function wireDrag(stage) {
 
 function onKey(event) {
   if (event.key === 'Escape') { event.preventDefault(); close_(); return; }
-  if (DRAGGABLE.has(openFor) && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+  const nudge = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+  if (DRAGGABLE.has(openFor) && nudge) {
     event.preventDefault();
-    backdrop.rotateBy(event.key === 'ArrowLeft' ? -KEY_ROTATE_RADIANS : KEY_ROTATE_RADIANS);
+    backdrop.grab();
+    backdrop.dragBy(nudge[0] * KEY_NUDGE_PX, nudge[1] * KEY_NUDGE_PX);
+    backdrop.release();
     return;
   }
   if (event.key === 'Tab') {                 // keep focus inside the dialog
@@ -151,7 +154,7 @@ function close_() {
   root.hidden = true;
   delete document.documentElement.dataset.graphicView;
   for (const sel of SHELL) document.querySelector(sel)?.removeAttribute('inert');
-  backdrop.setDragging(false);
+  backdrop.release();
   backdrop.setFullView(false);
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   root.dataset.fullscreen = '0';

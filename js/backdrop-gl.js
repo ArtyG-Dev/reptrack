@@ -15,8 +15,8 @@
  * is no text over the graphic, so the ceiling is lifted (see `ceiling`).
  */
 
-import { compile, vao, target, perspective, multiply, rotationX, rotationY, translation, bandMatrix, project, strokeNDC } from './gl.js';
-import { createBoltTrack, updateBoltTrack, boltBranches, haloStages, smoothstep, LIGHTNING_TRACKS, LIGHTNING } from './theme-engine.js';
+import { compile, vao, target, perspective, multiply, rotationX, rotationY, translation, scaling, bandMatrix, project, strokeNDC } from './gl.js';
+import { createBoltTrack, updateBoltTrack, boltBranches, haloStages, smoothstep, LIGHTNING_TRACKS, LIGHTNING, PLATE_SIZES, SLEEVE } from './theme-engine.js';
 
 const FOV = (30 * Math.PI) / 180;
 const PYRAMID_H = 1.25;
@@ -234,8 +234,8 @@ const BARBELL_FS = `${HEAD}
 in vec3 vN;
 in vec3 vObj;
 flat in float vPart;
-uniform vec3 uIron, uGlow, uEmber, uHeatA, uHeatB, uHeatC, uInk;
-uniform float uHeatT, uMonth, uClarity, uHeat;
+uniform vec3 uIron, uGlow, uEmber, uHeatA, uHeatB, uHeatC, uInk, uPlate;
+uniform float uHeatT, uMonth, uClarity, uHeat, uAlpha;
 vec3 ramp(float t) {
   t = clamp(t, 0.0, 1.0) * 3.0;
   if (t < 1.0) return mix(uHeatA, uHeatB, t);
@@ -249,19 +249,28 @@ void main() {
   float spec = pow(max(dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)), 0.0), 22.0);
   float rim = pow(1.0 - abs(n.z), 2.0);
   vec3 iron = mix(uIron, uEmber, uHeat * 0.45);
-  vec3 col = iron * (0.5 + 1.1 * diff) + uGlow * (spec * (0.3 + 0.6 * uClarity) + rim * (0.12 + 0.4 * uClarity));
   float ang = atan(vObj.z, vObj.y);
   float rr = length(vObj.yz);
-  if (vPart > 1.5) {
-    float rings = smoothstep(0.08, 0.0, abs(fract(rr * 8.0) - 0.5) - 0.38);
-    float spokes = smoothstep(0.12, 0.0, abs(sin(ang * 3.0))) * step(0.14, rr) * step(rr, 0.42);
-    col = mix(col, iron * 0.35, max(rings * 0.6, spokes * 0.8));
+  // Plates are drawn from a unit cylinder, so rr runs 0 (hub) → 1 (rim).
+  bool plate = vPart > 1.5;
+  vec3 body = plate && rr > 0.2 ? uPlate : iron;
+  vec3 col = body * (0.5 + 1.1 * diff) + uGlow * (spec * (0.3 + 0.6 * uClarity) + rim * (0.12 + 0.4 * uClarity));
+  if (plate) {
+    float rings = smoothstep(0.03, 0.0, abs(fract(rr * 5.0) - 0.5) - 0.44) * step(0.2, rr);
+    float spokes = smoothstep(0.12, 0.0, abs(sin(ang * 3.0))) * step(0.2, rr) * step(rr, 0.6);
+    col = mix(col, body * 0.45, max(rings * 0.5, spokes * 0.55));
+    // A dark seam where each plate meets the next, so a stack of identical
+    // plates still reads as a countable stack rather than one thick block.
+    float seam = 1.0 - smoothstep(0.0, 0.14, min(vObj.x, 1.0 - vObj.x));
+    col *= 1.0 - 0.6 * seam * step(0.2, rr);
   } else if (vPart < 0.5) {
     col *= 0.8 + 0.35 * step(0.5, fract(ang * 1.9 + vObj.x * 12.0)) * step(abs(vObj.x), 0.85);
   }
-  float carry = vPart < 0.5 ? 1.0 : (vPart < 1.5 ? 0.85 : 0.7);
+  // Heat follows monthPercent on the steel. The plates take only a warm wash,
+  // so their colours still read when the bar is white-hot.
+  float carry = vPart < 0.5 ? 1.0 : (plate ? 0.1 : 0.85);
   col = mix(col, ramp(uHeatT) * (0.9 + 0.3 * diff), uMonth * carry * (0.5 + 0.45 * uHeatT));
-  o = vec4(col, 1.0);
+  o = vec4(col, uAlpha);
 }`;
 
 const EMBER_VS = `#version 300 es
@@ -456,18 +465,25 @@ function cylinder(out, x0, x1, r, part, seg = 40) {
   }
 }
 
+/** The bar, sleeves and collars — everything but the plates, which are
+ *  drawn one by one from `plateMesh()` so they can be loaded with the level. */
+const SLEEVE_TIP = SLEEVE.end + 0.075;
 function barbellMesh() {
   const out = [];
   cylinder(out, -1.02, 1.02, 0.045, 0);
   for (const s of [-1, 1]) {
     const span = (a, b) => (s < 0 ? [-b, -a] : [a, b]);
-    cylinder(out, ...span(1.02, 1.78), 0.075, 1);
-    cylinder(out, ...span(1.0, 1.06), 0.12, 1);
-    cylinder(out, ...span(1.08, 1.21), 0.62, 2, 56);
-    cylinder(out, ...span(1.23, 1.33), 0.5, 2, 48);
-    cylinder(out, ...span(1.35, 1.43), 0.36, 2);
-    cylinder(out, ...span(1.45, 1.5), 0.11, 1);
+    cylinder(out, ...span(1.02, SLEEVE_TIP), 0.075, 1);
+    cylinder(out, ...span(1.0, 1.06), 0.12, 1);                      // inner collar
+    cylinder(out, ...span(SLEEVE.end + 0.002, SLEEVE.end + 0.052), 0.105, 1);   // end collar
   }
+  return new Float32Array(out);
+}
+
+/** One plate: a unit cylinder along +x, scaled to size when drawn. */
+function plateMesh() {
+  const out = [];
+  cylinder(out, 0, 1, 1, 2, 56);
   return new Float32Array(out);
 }
 
@@ -543,6 +559,7 @@ export function createGLBackdrop(canvas) {
   const MAKERS = {
     pyramidMesh: () => vao(gl, pyramidMesh(), [[0, 3], [1, 3], [2, 2], [3, 1]]),
     barbellMesh: () => vao(gl, barbellMesh(), [[0, 3], [1, 3], [2, 1]]),
+    plateMesh: () => vao(gl, plateMesh(), [[0, 3], [1, 3], [2, 1]]),
     seeds: () => vao(gl, Float32Array.from({ length: PARTICLES }, (_, i) => i), [[0, 1]]),
     glyphs: () => vao(gl, glyphColumns(), [[0, 4]]),
     lines: () => vao(gl, new Float32Array(6), [[0, 3]], gl.DYNAMIC_DRAW),
@@ -678,18 +695,22 @@ export function createGLBackdrop(canvas) {
     fullscreen();
 
     const cam = camera(f, f.full ? { targetY: 0.82, needH: 1.3, needW: 1.75, tilt: 0.42 } : { targetY: 0.5, needH: 1.16, needW: 1.85, tilt: 0.42 });
+    // The user's drag (theme-engine orbit) turns the whole scene in world space;
+    // the pyramid's own auto-rotation is about its vertical axis inside that.
+    const orbit = multiply(rotationX(f.orbit.pitch), rotationY(f.orbit.yaw));
+    const vp = multiply(cam.vp, orbit);
     const model = rotationY(f.spin);
-    const mvp = multiply(cam.vp, model);
+    const mvp = multiply(vp, model);
 
     gl.enable(gl.DEPTH_TEST);
-    r.pyramid.use().m4('uMVP', mvp).m4('uModel', model).fv('uTier', f.tierGlow).f('uFrac', f.level).f('uK', f.k).f('uTime', f.t)
+    r.pyramid.use().m4('uMVP', mvp).m4('uModel', multiply(orbit, model)).fv('uTier', f.tierGlow).f('uFrac', f.level).f('uK', f.k).f('uTime', f.t)
       .rgb('uStone', P.stone).rgb('uGold', P.gold).rgb('uGoldHot', P.goldHot).rgb('uGlyph', P.glyph).rgb('uArc', P.arc);
     gl.bindVertexArray(r.pyramidMesh.va);
     gl.drawArrays(gl.TRIANGLES, 0, r.pyramidMesh.count);
     gl.depthMask(false);
 
     blend('add');
-    const apex = project(cam.vp, [0, PYRAMID_H, 0]);
+    const apex = project(vp, [0, PYRAMID_H, 0]);
     const bandPx = ((f.band[1] - f.band[0]) / 2) * size.h;
     const bloomR = (bandPx * (0.18 + 0.22 * f.k)) / size.h;
     sprite(P.haloHot, apex, (bloomR * size.h) / size.w, bloomR, 0.08 + 0.42 * f.k * f.k);
@@ -697,7 +718,7 @@ export function createGLBackdrop(canvas) {
     const ringR = RING_R * (1 + 0.08 * stage.brighten);
     if (stage.presence > 0.001) {
       const breathe = 0.9 + 0.1 * Math.sin(f.t * 0.35);
-      r.ring.use().m4('uMVP', cam.vp).f('uR', ringR).f('uY', RING_Y).f('uTime', f.t).rgb('uHalo', P.halo).rgb('uHaloHot', P.haloHot)
+      r.ring.use().m4('uMVP', vp).f('uR', ringR).f('uY', RING_Y).f('uTime', f.t).rgb('uHalo', P.halo).rgb('uHaloHot', P.haloHot)
         .f('uStrength', stage.presence * (0.35 + 0.3 * stage.brighten + 0.35 * stage.strike) * breathe);
       gl.bindVertexArray(r.empty);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -705,7 +726,7 @@ export function createGLBackdrop(canvas) {
       // Sparks: the 25/50/90% staging sets how many and how far they travel;
       // overall intensity scales both on top.
       const count = stage.presence * (24 + 46 * stage.brighten + 80 * stage.strike) * (0.6 + 0.4 * f.k);
-      r.spark.use().m4('uMVP', cam.vp).f('uTime', f.t).f('uCount', count).f('uTravel', 0.3 + 0.5 * stage.brighten + 0.7 * stage.strike)
+      r.spark.use().m4('uMVP', vp).f('uTime', f.t).f('uCount', count).f('uTravel', 0.3 + 0.5 * stage.brighten + 0.7 * stage.strike)
         .f('uSpill', 1 + 0.6 * stage.strike).f('uPx', size.h * 1.4).f('uY', RING_Y).f('uR', ringR)
         .rgb('uColor', P.haloHot).f('uStrength', 0.9);
       gl.bindVertexArray(r.seeds.va);
@@ -746,7 +767,8 @@ export function createGLBackdrop(canvas) {
         return { points, branches: branchesFrom(points, boltBranches(f.k), f.rand, () => face(front(), f.rand() * 1.4 - 0.7, 0.2 + f.rand() * 0.6)), core: P.haloHot, glow: P.arc, peak: (0.5 + 0.5 * f.k) * stage.presence };
       });
     }
-    drawBolts(f, (p) => project(cam.vp, p));
+    drawBolts(f, (p) => project(vp, p));
+    info.kemet = { apex, base: project(vp, [1, 0, 1]) };
     gl.depthMask(true);
     gl.disable(gl.DEPTH_TEST);
   }
@@ -754,10 +776,14 @@ export function createGLBackdrop(canvas) {
   function forge(f) {
     const P = f.palette;
     const cam = camera(f, f.full ? { targetY: 0.1, needH: 1.0, needW: 2.4, tilt: 0.16 } : { targetY: 0.05, needH: 0.8, needW: 2.45, tilt: 0.16 });
-    const yaw = rotationY(-0.42);
+    // World-space drag offset first, then the fixed three-quarter view, then
+    // the bar's own slow roll about its long axis.
+    const orbit = multiply(rotationX(f.orbit.pitch), rotationY(f.orbit.yaw));
+    const yaw = multiply(orbit, rotationY(-0.42));
     const model = multiply(yaw, rotationX(f.spin));
     const mv = multiply(cam.view, model);
-    const centre = project(cam.vp, [0, 0, 0]);
+    const vpYaw = multiply(cam.vp, yaw);
+    const centre = project(vpYaw, [0, 0, 0]);
     const monthGlow = smoothstep(0.15, 0.30, f.month);   // the 2D renderer's thresholds, unchanged
     const heatT = Math.min(Math.max((f.month - 0.22) / (0.95 - 0.22), 0), 1);
 
@@ -769,28 +795,59 @@ export function createGLBackdrop(canvas) {
     fullscreen();
 
     gl.enable(gl.DEPTH_TEST);
-    r.barbell.use().m4('uMVP', multiply(cam.proj, mv)).m4('uMV', mv)
+    const steel = r.barbell.use().m4('uMVP', multiply(cam.proj, mv)).m4('uMV', mv)
       .rgb('uIron', P.iron).rgb('uGlow', P.glow).rgb('uEmber', P.ember).rgb('uHeatA', P.heatA).rgb('uHeatB', P.heatB).rgb('uHeatC', P.heatC).rgb('uInk', P.ink)
-      .f('uHeatT', heatT).f('uMonth', monthGlow).f('uClarity', f.level).f('uHeat', f.heat);
+      .rgb('uPlate', P.iron).f('uHeatT', heatT).f('uMonth', monthGlow).f('uClarity', f.level).f('uHeat', f.heat).f('uAlpha', 1);
     gl.bindVertexArray(r.barbellMesh.va);
     gl.drawArrays(gl.TRIANGLES, 0, r.barbellMesh.count);
+
+    // Plates: the same list on both sides, mirrored, so the bar is never
+    // lopsided. A plate sliding off fades, so it is drawn last and blended.
+    const drawPlate = (p, side) => {
+      const x = side > 0 ? p.x0 : -p.x1;
+      const m = multiply(model, multiply(translation(x, 0, 0), scaling(p.x1 - p.x0, p.radius, p.radius)));
+      const pmv = multiply(cam.view, m);
+      steel.m4('uMVP', multiply(cam.proj, pmv)).m4('uMV', pmv).rgb('uPlate', P[PLATE_SIZES[p.size].token]).f('uAlpha', p.alpha);
+      gl.drawArrays(gl.TRIANGLES, 0, r.plateMesh.count);
+    };
+    gl.bindVertexArray(r.plateMesh.va);
+    const plates = f.plates || [];
+    for (const p of plates) if (p.alpha >= 1) { drawPlate(p, 1); drawPlate(p, -1); }
+    const fading = plates.filter((p) => p.alpha < 1);
+    if (fading.length) {
+      blend('alpha');
+      gl.depthMask(false);
+      for (const p of fading) { drawPlate(p, 1); drawPlate(p, -1); }
+      gl.depthMask(true);
+    }
     gl.disable(gl.DEPTH_TEST);
+
+    // For tests: the bar's ends on screen, and a point on each seated plate's
+    // rim that faces the camera, to sample its colour.
+    const rimPoint = (p) => {
+      const a = Math.PI / 3;
+      return project(multiply(cam.vp, model), [(p.x0 + p.x1) / 2, p.radius * 0.96 * Math.cos(a), p.radius * 0.96 * Math.sin(a)]);
+    };
+    info.forge = {
+      ends: [project(vpYaw, [-SLEEVE_TIP, 0, 0]), project(vpYaw, [SLEEVE_TIP, 0, 0])],
+      plates: plates.map((p) => ({ size: p.size, alpha: p.alpha, moving: p.moving, rim: rimPoint(p) }))
+    };
 
     blend('add');
     if (monthGlow > 0) {
-      const ends = [project(cam.vp, [-1.9, 0, 0]), project(cam.vp, [1.9, 0, 0])];
+      const ends = [project(vpYaw, [-1.9, 0, 0]), project(vpYaw, [1.9, 0, 0])];
       const rx = Math.abs(ends[1][0] - ends[0][0]) * 0.55;
       const ramp = heatT < 1 / 3 ? P.heatA : heatT < 2 / 3 ? P.heatB : P.heatC;
       sprite(ramp, centre, rx, rx * (size.w / size.h) * 0.35, 0.18 * monthGlow * (0.5 + heatT), 2.2);
     }
     const count = 22 + 170 * f.k;
-    r.ember.use().m4('uMVP', multiply(cam.vp, yaw)).f('uTime', f.t).f('uCount', count).f('uRise', 0.6 + 1.6 * f.k).f('uPx', size.h * 1.4)
+    r.ember.use().m4('uMVP', vpYaw).f('uTime', f.t).f('uCount', count).f('uRise', 0.6 + 1.6 * f.k).f('uPx', size.h * 1.4)
       .rgb('uSpark', P.spark).rgb('uHot', heatT > 0.5 ? P.heatC : P.heatB).f('uStrength', 0.55 + 0.6 * f.k);
     gl.bindVertexArray(r.seeds.va);
     gl.drawArrays(gl.POINTS, 0, PARTICLES);
 
     // Heat haze above the bar, only once it is genuinely hot.
-    const top = project(cam.vp, [0, 0.62, 0]);
+    const top = project(vpYaw, [0, 0.62, 0]);
     const uvTop = (top[1] + 1) / 2;
     return { haze: monthGlow * Math.min(Math.max((f.k - 0.5) / 0.45, 0), 1), hazeRect: [0.04, (centre[1] + 1) / 2, 0.96, Math.min(1, uvTop + 0.12)] };
   }

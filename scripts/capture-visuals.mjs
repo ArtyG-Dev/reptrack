@@ -63,6 +63,49 @@ try {
       await context.close();
     }
   }
+
+  /* Forge plates: levels 0/3/6/10, cool and white-hot, in a held (reduced
+   * motion) frame so each shot shows exactly its level's plates; the mixed
+   * colours at heat 1; one slide-on caught mid-way; and a drag. */
+  const shoot = async (page, name) => {
+    await page.screenshot({ path: join(outDir, `${name}.jpg`), type: 'jpeg', quality: 85 });
+    console.log(`  ${name}`);
+  };
+  const setLevel = (page, lv, mp) => page.evaluate(([l, m]) => window.__backdrop.setActivity({ glow: l / 10, streakLevel: l, streakFraction: l / 10, monthPercent: m }), [lv, mp]);
+  {
+    const context = await browser.newContext({ viewport: VIEWPORT, reducedMotion: 'reduce' });
+    const page = await context.newPage();
+    await page.goto(`${base}index.html?theme=forge`, { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'forge', null, { timeout: 15000 });
+    await page.click('#view-graphic');
+    await page.click('#graphic-level-toggle');                 // hide the label: the plates are the subject
+    for (const [mp, heat] of [[0, 'cool'], [1, 'hot']]) {
+      for (const lv of [0, 3, 6, 10]) { await setLevel(page, lv, mp); await shoot(page, `forge-plates-L${lv}-${heat}`); }
+    }
+    for (const lv of [4, 5, 9]) { await setLevel(page, lv, 1); await shoot(page, `forge-plates-L${lv}-hot`); }
+    await setLevel(page, 6, 0.3);
+    await shoot(page, 'forge-drag-before');
+    await page.mouse.move(150, 500);
+    await page.mouse.down();
+    await page.mouse.move(200, 420, { steps: 5 });
+    await page.mouse.up();
+    await shoot(page, 'forge-drag-after');
+    await context.close();
+  }
+  {
+    const context = await browser.newContext({ viewport: VIEWPORT });
+    const page = await context.newPage();
+    await page.goto(`${base}index.html?theme=forge`, { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'forge', null, { timeout: 15000 });
+    await page.click('#view-graphic');
+    await page.click('#graphic-level-toggle');
+    await setLevel(page, 3, 0.3);
+    await page.waitForTimeout(800);
+    await setLevel(page, 4, 0.3);                               // a small plate slides on
+    await page.waitForFunction(() => { const m = window.__backdrop.getDiagnostics().plates.moving; return m && m.dir === 'on' && m.t > 0.3 && m.t < 0.7; }, null, { timeout: 5000, polling: 16 });
+    await shoot(page, 'forge-plates-sliding-on');
+    await context.close();
+  }
 } finally {
   await browser.close();
   if (local) await new Promise((resolve) => local.server.close(resolve));

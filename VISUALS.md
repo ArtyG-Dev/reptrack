@@ -45,6 +45,27 @@ Cold iron at 0, still clearly a barbell. The bar and plates heat dull red, then 
 yellow, then white-hot as `monthPercent` climbs, using the existing thresholds. Embers get
 denser and rise faster, and heat haze shimmers above the bar near the top of the range.
 
+### Forge plates: `streakLevel` loads the bar
+
+The bar starts bare and gains plates in matching pairs as the level rises, using the table
+in `MANUAL_TEST.md` Check 2. Heat still follows `monthPercent`, so plates and heat are two
+independent layers. These are held reduced-motion frames, so each shows exactly its level.
+
+| | Level 0 | Level 3 | Level 6 | Level 10 |
+|---|---|---|---|---|
+| **Cool** (month 0%) | <img src="docs/screenshots/forge-plates-L0-cool.jpg" width="150" alt="Forge level 0, cool: bare bar"> | <img src="docs/screenshots/forge-plates-L3-cool.jpg" width="150" alt="Forge level 3, cool: one red plate per side"> | <img src="docs/screenshots/forge-plates-L6-cool.jpg" width="150" alt="Forge level 6, cool: two red plates per side"> | <img src="docs/screenshots/forge-plates-L10-cool.jpg" width="150" alt="Forge level 10, cool: four red plates per side"> |
+| **White-hot** (month 100%) | <img src="docs/screenshots/forge-plates-L0-hot.jpg" width="150" alt="Forge level 0, white-hot"> | <img src="docs/screenshots/forge-plates-L3-hot.jpg" width="150" alt="Forge level 3, white-hot"> | <img src="docs/screenshots/forge-plates-L6-hot.jpg" width="150" alt="Forge level 6, white-hot"> | <img src="docs/screenshots/forge-plates-L10-hot.jpg" width="150" alt="Forge level 10, white-hot"> |
+
+The colours stay distinct on a white-hot bar: red + green (level 4), red + blue (5), three
+red + blue (9).
+
+<img src="docs/screenshots/forge-plates-L4-hot.jpg" width="150" alt="Forge level 4, white-hot: red and green plates"> <img src="docs/screenshots/forge-plates-L5-hot.jpg" width="150" alt="Forge level 5, white-hot: red and blue plates"> <img src="docs/screenshots/forge-plates-L9-hot.jpg" width="150" alt="Forge level 9, white-hot: three red and one blue plate">
+
+A plate caught mid-slide (level 3 → 4: the small green plate going on), and a drag in the
+full-screen view (before, after):
+
+<img src="docs/screenshots/forge-plates-sliding-on.jpg" width="150" alt="A small green plate sliding onto the sleeve mid-animation"> <img src="docs/screenshots/forge-drag-before.jpg" width="150" alt="Forge before a drag"> <img src="docs/screenshots/forge-drag-after.jpg" width="150" alt="Forge after a drag: tilted end-over">
+
 ## Fractal: GPU Mandelbrot, zooming toward Seahorse Valley
 
 | | Today | Full screen |
@@ -103,6 +124,8 @@ run on every `npm test` (`tests/visuals.test.js`, plus the pixel tests in
 | It scales with progress | Kemet/Forge get brighter with the level; the month layer moves on its own; Fractal's zoom, iterations, saturation and edge detail all rise; Terminal carries more light |
 | WebGL2 unavailable → the old 2D skins, never blank | `webgl2` forced unavailable: the 2D renderer animates and the frame is not blank |
 | Context loss recovers | `WEBGL_lose_context` hands over to 2D (still animating), and restore brings the 3D scene back |
+| Drag turns both 3D scenes visibly | One shared orbit. A drag changes >2% of the frame; right moves the near side right; up tilts the near end up and the far end down. It holds while dragging, eases back after release, and stays put under reduced motion |
+| Forge plates | Plates per level match the table (Today and full screen), the bar ends never clip, plate colours stay > 60 RGB apart at heat 0 and 1, slide-on and fade-off are seen mid-animation, and a level gained between visits replays once |
 | Full-screen view | Focus moves in and returns to **View**; Esc, ✕ and browser back all close it (back stays in the app); a fixed overlay covers the viewport without the Fullscreen API; drag rotates Kemet/Forge, holds auto-rotation and resumes it on release |
 
 ## CPU, measured honestly

@@ -1120,3 +1120,68 @@ gain went up (1.1 → 1.5) so the sparser 0 state stays readable. Measured over 
 bright-glyph coverage goes 0.24% → 0.99% → 4.77% across 0 / 0.5 / 1. The bounding pass still
 clamps every pixel and the scene has no lightning, so neither the contrast proof nor the
 flash cap is touched.
+
+### 82. Why Forge drag-to-rotate "did nothing", and the plates that now load with the level
+
+**Root cause, measured before fixing.** None of the three suspects in the brief. The drag
+handler was not keyed to Kemet: the same 100px drag moved both scenes' rotation angle by
+the same 1.20 rad. Forge simply applied that angle about the **barbell's own long axis**
+(`rotationX(f.spin)`), the axis it auto-rotates around. A barbell is almost perfectly
+symmetric about that axis, so a 69° turn changed **0.11%** of the screen (the plate spokes
+and grip knurl), against **6.5%** for the same drag on Kemet. The handler also only read
+horizontal movement, so turning it end-on or flipping it was impossible. The previous
+test checked the rotation *number*, which did change, rather than the picture, so it passed.
+
+**Fix: one shared orbit in `theme-engine.js`.** Drag is now a world-space yaw (horizontal)
+and pitch (vertical) offset applied *on top of* each scene's own auto-rotation, so any
+scene turns the way the finger moves, whatever axis it spins on. While held, auto-rotation
+stops. On release the offset eases back along the shortest path (τ 0.45 s) while
+auto-rotation resumes. Under reduced motion a drag still turns the held frame, because the
+user chose that motion, but nothing eases or auto-rotates afterwards. `graphic-view.js` has
+one pointer path for both themes, and arrow keys (now including Up/Down) go through the
+same three calls. Kemet behaves slightly differently from before: a horizontal drag used to
+be folded permanently into its spin, and now eases back too, to match Forge. No pinch-zoom:
+Kemet never had it.
+
+The tests now assert pixels and on-screen positions. A drag must change >2% of the frame,
+dragging right must move the near side right, and dragging up must tilt the near end up
+and the far end down.
+
+**Plates (`streakLevel` → per-side plates, per the brief's table).** The level 1–3 swaps
+(small → medium → large) were kept. In screenshots they read naturally as "heavier", so the
+fallback to one-pair-per-level was not needed. Further choices:
+
+- **Colours:** large red, medium blue, small green. The competition convention runs red /
+  blue / yellow / green / white by weight, and with three sizes I skipped yellow, which
+  reads poorly next to a yellow-hot bar. They are `--backdrop-plate-*` tokens, so the
+  contrast tests cover them, and the bounding pass still clamps every pixel. Plates take
+  only a 10% wash of the heat glow (steel takes 100%), which is what keeps them
+  distinguishable when the bar is white-hot. `visuals.test.js` samples their rendered rims
+  at heat 0 and 1.
+- **Countable stacks:** identical plates side by side merged into one block, so each plate
+  has a dark seam at its faces.
+- **Fit:** the sleeve is sized from the table. Level 10 (four large) ends 0.003 units short
+  of the end collar.
+- **Motion:** one plate moves at a time, as on a real bar. An outer plate comes off before an
+  inner one changes, and new plates go on inner-first. On: 0.6 s slide from past the sleeve
+  end, easing into its seat. Off: 0.9 s, fading as it slides out, with no frame-to-frame
+  jump. Voice recognition and a hidden page pause it (the loop stops); reduced motion snaps
+  to the right plates.
+- **Between visits:** `settings.forgePlatesSeenLevel` remembers the level whose plates last
+  settled on screen. If the level is higher next time Forge opens, the new plates go on in
+  front of the user once. If it is *lower*, the bar just shows the right plates: replaying a
+  lapse as plates coming off would be exactly the punishment the theme exists to avoid. An
+  install that predates the setting (`null`) starts in place. The save goes through a new
+  `state.rememberSetting()`, which does not notify subscribers. A test caught
+  `updateSettings()` here: it re-rendered every view and re-pushed the activity values in
+  the middle of an animation.
+- **Heat and plates are independent layers.** A fully loaded cool bar and a lightly loaded
+  white-hot one are both shown in `VISUALS.md`. Pause activity effects freezes the level,
+  and therefore the plates.
+- **The 2D fallback is unchanged** (fixed plates, no orbit). It only runs without WebGL2 or
+  during a lost context. Extending it is straightforward if wanted, but it was left out to
+  keep the change to what was asked.
+
+Forge's "brighter as the level climbs" assertion now uses total light instead of the peak.
+Plates cover part of the brightest steel, so the peak can dip slightly (539 → 530) while
+total light nearly triples (26 → 42 → 71).

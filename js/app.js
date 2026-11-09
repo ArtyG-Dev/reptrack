@@ -89,6 +89,11 @@ function wireTheme() {
   const settings = state.getState().settings;
 
   backdrop.mount(document.getElementById('backdrop'), document.getElementById('backdrop-gl'));
+  // Forge plates: remember the level whose plates were last seen settle, so a
+  // level gained between visits goes on in front of the user next time.
+  backdrop.setPlatesMemory(settings.forgePlatesSeenLevel ?? null, (level) => {
+    state.rememberSetting({ forgePlatesSeenLevel: level }).catch(() => {});
+  });
   backdrop.setReduceEffects(Boolean(settings.reduceBackgroundEffects) || params.get('static') === '1');
 
   const override = params.get('theme');

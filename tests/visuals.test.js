@@ -355,25 +355,225 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     await context.close();
   });
 
-  test('drag rotates Kemet and Forge; auto-rotation holds while dragging and resumes on release', async () => {
+  /* ---------- Forge plates ---------- */
+
+  const TABLE = { 0: [], 3: ['large'], 4: ['large', 'small'], 5: ['large', 'medium'], 6: ['large', 'large'], 10: ['large', 'large', 'large', 'large'] };
+  async function level(page, lv, month = 0) {
+    await page.evaluate(([l, m]) => window.__backdrop.setActivity({ glow: l / 10, streakLevel: l, streakFraction: l / 10, monthPercent: m }), [lv, month]);
+  }
+
+  /** Fraction of pixels that changed visibly between two readPixels() frames. */
+  const changedFraction = (a, b) => {
+    let changed = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 24) changed += 1;
+    }
+    return changed / (a.length / 4);
+  };
+  const frame = (page) => page.evaluate(() => Array.from(window.__backdrop.readPixels().data));
+
+  test('drag visibly turns both Kemet and Forge, about both axes, through the one shared handler', async () => {
+    // The live bug: the drag reached Forge, but was applied about the bar's
+    // own long axis — a barbell looks the same from every angle around that,
+    // so it "turned" by 69° and changed 0.11% of the pixels. This asserts the
+    // picture, not the angle.
+    for (const theme of ['kemet', 'forge']) {
+      const { context, page } = await open(theme, { context: { reducedMotion: 'reduce' } });   // a held frame: only the drag can move it
+      await page.evaluate(() => window.__backdrop.setActivity({ glow: 0.6, streakLevel: 6, streakFraction: 0.6, monthPercent: 0.3 }));
+      await page.click('#view-graphic');
+      await page.waitForSelector('#graphic-view:not([hidden])');
+      const where = () => page.evaluate((t) => {
+        const s = window.__backdrop.getDiagnostics().scene[t];
+        return t === 'forge' ? { right: s.ends[1], left: s.ends[0] } : { right: s.base, left: s.apex };
+      }, theme);
+
+      const before = await frame(page);
+      const p0 = await where();
+      await page.mouse.move(150, 500);
+      await page.mouse.down();
+      // A small turn first: far enough to measure, short of carrying the near
+      // side round past the point that faces the camera.
+      await page.mouse.move(170, 500, { steps: 2 });            // right
+      const p1 = await where();
+      await page.mouse.move(170, 440, { steps: 6 });            // then straight up: pitch only
+      const p2 = await where();
+      await page.mouse.up();
+      const after = await frame(page);
+
+      assert.ok(p1.right[0] > p0.right[0] + 0.02, `${theme}: dragging right should move the near side right (${p0.right[0].toFixed(3)} → ${p1.right[0].toFixed(3)})`);
+      if (theme === 'forge') {
+        assert.ok(p2.right[1] - p2.left[1] > p1.right[1] - p1.left[1] + 0.05, `forge: dragging up should tilt the near end of the bar up and the far end down — it turns about the horizontal axis too (${(p1.right[1] - p1.left[1]).toFixed(3)} → ${(p2.right[1] - p2.left[1]).toFixed(3)})`);
+      } else {
+        assert.ok(p2.right[1] > p1.right[1] + 0.02, `kemet: dragging up should lift the front corner — it turns about the horizontal axis too (${p1.right[1].toFixed(3)} → ${p2.right[1].toFixed(3)})`);
+      }
+      const changed = changedFraction(before, after);
+      assert.ok(changed > 0.02, `${theme}: the drag changed only ${(changed * 100).toFixed(2)}% of the picture — it must visibly turn`);
+      await context.close();
+    }
+  });
+
+  test('auto-rotation holds while dragging, eases back after release, and resumes', async () => {
     for (const theme of ['kemet', 'forge']) {
       const { context, page } = await open(theme);
       await page.click('#view-graphic');
       await page.waitForSelector('#graphic-view:not([hidden])');
-      const start = (await diag(page)).spin;
-      await page.mouse.move(150, 400);
+      await page.mouse.move(150, 500);
       await page.mouse.down();
-      await page.mouse.move(250, 400, { steps: 5 });
-      const held = (await diag(page)).spin;
-      assert.ok(Math.abs(held - start) > 0.8, `${theme}: a 100px drag should turn the scene (${start} → ${held})`);
+      await page.mouse.move(250, 430, { steps: 5 });
+      const held = await diag(page);
       await page.waitForTimeout(400);
-      assert.ok(Math.abs((await diag(page)).spin - held) < 1e-9, `${theme}: no auto-rotation while held`);
-      assert.equal((await diag(page)).dragging, true);
+      const stillHeld = await diag(page);
+      assert.equal(stillHeld.dragging, true);
+      assert.ok(Math.abs(stillHeld.spin - held.spin) < 1e-9, `${theme}: no auto-rotation while held`);
+      assert.deepEqual(stillHeld.orbit, held.orbit, `${theme}: the view stays where the finger holds it`);
       await page.mouse.up();
-      await page.waitForTimeout(400);
-      assert.ok(Math.abs((await diag(page)).spin - held) > 1e-6, `${theme}: auto-rotation resumes on release`);
-      assert.equal(await page.$eval('#graphic-level', (n) => n.hidden), false, 'a drag is not a tap');
+      await page.waitForTimeout(300);
+      const easing = await diag(page);
+      await page.waitForTimeout(2500);
+      const settled = await diag(page);
+      const size = (o) => Math.hypot(o.yaw, o.pitch);
+      assert.ok(size(easing.orbit) < size(held.orbit) && size(easing.orbit) > 0, `${theme}: easing back, not snapping`);
+      assert.ok(size(settled.orbit) < 0.02, `${theme}: back to its own rotation`);
+      assert.ok(Math.abs(settled.spin - held.spin) > 1e-3, `${theme}: auto-rotation resumed`);
       await context.close();
     }
   });
+
+  test('under reduced motion a drag still turns the scene, but nothing eases or auto-rotates', async () => {
+    const { context, page } = await open('forge', { context: { reducedMotion: 'reduce' } });
+    await level(page, 6);
+    await page.click('#view-graphic');
+    const a = await frame(page);
+    await page.mouse.move(150, 500);
+    await page.mouse.down();
+    await page.mouse.move(240, 420, { steps: 4 });
+    await page.mouse.up();
+    const b = await frame(page);
+    assert.ok(changedFraction(a, b) > 0.02, 'the user chose this motion, so it happens');
+    const s1 = await page.screenshot();
+    await page.waitForTimeout(800);
+    const s2 = await page.screenshot();
+    assert.ok(s1.equals(s2), 'no easing back and no auto-rotation afterwards');
+    assert.ok(Math.hypot((await diag(page)).orbit.yaw, (await diag(page)).orbit.pitch) > 0.5, 'the view stays where it was left');
+    await context.close();
+  });
+
+  test('the bar carries the plates for its level, symmetrically, and level 10 fits with no clipping', async () => {
+    for (const full of [false, true]) {
+      const { context, page } = await open('forge', { context: { reducedMotion: 'reduce' } });
+      if (full) await page.click('#view-graphic');
+      for (const lv of [0, 3, 6, 10]) {
+        await level(page, lv);
+        const d = await diag(page);
+        await page.evaluate(() => window.__backdrop.readPixels());     // make sure scene info is from this level's frame
+        const scene = (await diag(page)).scene.forge;
+        assert.deepEqual(d.plates.seated, TABLE[lv], `level ${lv}: plates per side`);
+        assert.deepEqual(scene.plates.map((p) => p.size), TABLE[lv], `level ${lv}: what was drawn (each side draws this same list, mirrored)`);
+        for (const [x, y] of scene.ends) {
+          assert.ok(Math.abs(x) < 0.98 && Math.abs(y) < 0.98, `level ${lv}${full ? ' full screen' : ''}: the bar end at (${x.toFixed(2)}, ${y.toFixed(2)}) is clipped`);
+        }
+      }
+      await context.close();
+    }
+  });
+
+  test('plate colours stay distinguishable at heat 0 and when the bar is white-hot', async () => {
+    const { context, page } = await open('forge', { context: { reducedMotion: 'reduce' } });
+    await page.click('#view-graphic');
+    for (const month of [0, 1]) {
+      for (const [lv, [a, b]] of [[4, ['large', 'small']], [5, ['large', 'medium']]]) {
+        await level(page, lv, month);
+        const sample = await page.evaluate(() => {
+          const { data, width, height } = window.__backdrop.readPixels();
+          const plates = window.__backdrop.getDiagnostics().scene.forge.plates;
+          return plates.map((p) => {
+            const x = Math.round((p.rim[0] + 1) / 2 * width);
+            const y = Math.round((1 - p.rim[1]) / 2 * height);
+            const px = [0, 0, 0];
+            for (let dy = -1; dy <= 1; dy += 1) for (let dx = -1; dx <= 1; dx += 1) {
+              const i = ((y + dy) * width + (x + dx)) * 4;
+              for (let c = 0; c < 3; c += 1) px[c] += data[i + c] / 9;
+            }
+            return { size: p.size, px };
+          });
+        });
+        const [pa, pb] = [sample.find((s) => s.size === a).px, sample.find((s) => s.size === b).px];
+        const dist = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]);
+        assert.ok(dist > 60, `heat ${month}, level ${lv}: ${a} ${pa.map(Math.round)} vs ${b} ${pb.map(Math.round)} differ by only ${dist.toFixed(0)}`);
+      }
+    }
+    await context.close();
+  });
+
+  test('a level-up slides a plate on; a level easing down slides one off gently', async () => {
+    const { context, page } = await open('forge');
+    await level(page, 3);
+    await page.waitForTimeout(300);
+    await level(page, 4);                                          // + a small plate
+    const seen = [];
+    for (let i = 0; i < 30; i += 1) {
+      const d = await diag(page);
+      if (d.plates.moving) seen.push(`${d.plates.moving.dir} ${d.plates.moving.size} ${d.plates.moving.t > 0 && d.plates.moving.t < 1 ? 'mid' : ''}`);
+      if (d.plates.settled) break;
+      await page.waitForTimeout(60);
+    }
+    assert.ok(seen.some((s) => s.startsWith('on small mid')), `a slide-on should be seen in progress: ${seen.join(', ')}`);
+    assert.deepEqual((await diag(page)).plates.seated, ['large', 'small']);
+
+    await level(page, 3);                                          // eases down: the small plate comes off
+    const alphas = [];
+    for (let i = 0; i < 30; i += 1) {
+      await page.evaluate(() => window.__backdrop.readPixels());
+      const d = await diag(page);
+      const moving = d.scene.forge.plates.find((p) => p.moving === 'off');
+      if (moving) alphas.push(moving.alpha);
+      if (d.plates.settled) break;
+      await page.waitForTimeout(60);
+    }
+    assert.ok(alphas.length >= 3 && alphas.some((a) => a > 0.2 && a < 0.9), `the plate fades out gradually: ${alphas.map((a) => a.toFixed(2)).join(' ')}`);
+    assert.deepEqual((await diag(page)).plates.seated, ['large']);
+    await context.close();
+  });
+
+  test('a level gained between visits is shown going on once, next time Forge opens', async () => {
+    const context = await browser.newContext({ viewport: VIEWPORT });
+    const page = await context.newPage();
+    await page.goto(`${base}?theme=forge`, { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'forge');
+    // Ten consecutive training days (level 8+) and plates last seen at level 3.
+    await page.evaluate(async () => {
+      const iso = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toLocaleDateString('en-CA'); };
+      await new Promise((resolve, reject) => {
+        const req = indexedDB.open('reptrack');
+        req.onsuccess = () => {
+          const tx = req.result.transaction(['sessions', 'settings'], 'readwrite');
+          for (let i = 0; i < 14; i += 1) {
+            const dateISO = iso(i);
+            const ts = new Date(`${dateISO}T18:00:00`).getTime();
+            tx.objectStore('sessions').put({ id: `seed_${i}`, dateISO, startTs: ts, endTs: ts + 3600_000, durationSec: 3600, notes: '', lastModified: ts, visibility: 'private', sessionType: 'gym' });
+          }
+          tx.objectStore('settings').put({ key: 'forgePlatesSeenLevel', value: 3 });
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        };
+      });
+    });
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'forge');
+    const first = await diag(page);
+    assert.ok(first.activity.streakLevel > 3, 'sanity: the seeded history is above level 3');
+    assert.ok(!first.plates.settled, 'the newly earned plates are going on, not just appearing');
+    await page.waitForFunction(() => window.__backdrop.getDiagnostics().plates.settled, null, { timeout: 15000 });
+    const saved = await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => { const g = req.result.transaction('settings').objectStore('settings').get('forgePlatesSeenLevel'); g.onsuccess = () => resolve(g.result?.value); };
+    }));
+    assert.equal(saved, first.activity.streakLevel, 'the level is remembered once its plates have been seen');
+
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'forge');
+    assert.equal((await diag(page)).plates.settled, true, 'shown once — not again on the next open');
+    await context.close();
+  });
+
 });

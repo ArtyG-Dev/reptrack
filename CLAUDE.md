@@ -124,6 +124,10 @@ Details that look redundant and are not:
   them yet.** Version 2 exists only to stamp `gym` on sessions written before the field; runs
   are their own store, so they are untouched. `db.withSessionDefaults()` is also applied on
   import, so an older backup arrives complete. `SCHEMA_VERSION` (the backup format) stayed 1.
+- **`settings.forgePlatesSeenLevel`** (default `null`) — the streak level whose Forge
+  plates last settled on screen. A higher level next time Forge opens slides the new plates
+  on once; a lower one just shows the right plates. Written by `state.rememberSetting()`,
+  which does not notify subscribers, because nothing displays it.
 - **`settings.panelState`** — `{ [scope]: { [category]: boolean } }`, `scope` is
   `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
   `state.setPanelExpanded()`, which also supply the "most recently used category starts
@@ -217,6 +221,19 @@ and frequency, never a rate past the cap.
 
 **Rotation** is capped at one revolution per 8 s (`ROTATION.maxRadPerS`), whatever the
 intensity. Drag in the full-screen view is the user's hand and is not capped.
+
+**Drag-to-rotate is one shared orbit** (`createOrbit`/`orbitDrag`/`orbitRelease`/
+`orbitSettle`): a world-space yaw (horizontal drag) and pitch (vertical drag) offset applied
+*on top of* the scene's own auto-rotation, easing back on release. A scene must apply it as
+`rotationX(f.orbit.pitch) · rotationY(f.orbit.yaw)` before its own model rotation. Never
+feed the drag into the scene's auto-rotation angle: Forge spins about the bar's long axis,
+and a drag applied there is invisible (DECISIONS #82).
+
+**Forge plates.** `PLATE_TABLE` maps `streakLevel` to the plates per side, `plateLayout()`
+places them on the sleeve (`SLEEVE` is sized so level 10 just fills it), and a plate rack
+(`createPlateRack`/`stepRack`/`rackPlates`) moves one plate at a time: outer plates off
+before inner ones change, new ones on inner-first. `backdrop.js` owns the rack.
+`settings.forgePlatesSeenLevel` lets a level gained between visits be shown going on once.
 
 ## Consistency score
 

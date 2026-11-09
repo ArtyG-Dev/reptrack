@@ -68,6 +68,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   reduceBackgroundEffects: false,
   pauseActivityEffects: false,
   activityPausedAt: null,
+  // The streak level whose Forge plates the user last watched settle, so a
+  // level gained between visits is shown going on once (js/backdrop.js).
+  forgePlatesSeenLevel: null,
   // Set once state.init() has merged any starter exercises added to
   // exercises-seed.js after this install's dictionary was first created —
   // see the backfill note in state.js. Never re-checked after that, so a

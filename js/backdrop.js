@@ -32,7 +32,11 @@
  *      contrast proof. tests/contrast.test.js enforces both.
  */
 
-import { createFlashLimiter, intensity, approach, rotationSpeed } from './theme-engine.js';
+import {
+  createFlashLimiter, intensity, approach, rotationSpeed,
+  createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle,
+  createPlateRack, setRackTarget, snapRack, stepRack, rackPlates, rackSettled, platesForLevel
+} from './theme-engine.js';
 import { createGLBackdrop } from './backdrop-gl.js';
 
 const FPS = 30;
@@ -56,7 +60,7 @@ const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet']);
 export const SKIN_TOKENS = Object.freeze({
   terminal: ['base', 'ink', 'grid', 'stream', 'stream-2'],
   fractal: ['base', 'ink', 'bloom-a', 'bloom-b'],
-  forge: ['base', 'ink', 'glow', 'iron', 'ember', 'spark', 'heat-a', 'heat-b', 'heat-c'],
+  forge: ['base', 'ink', 'glow', 'iron', 'ember', 'spark', 'heat-a', 'heat-b', 'heat-c', 'plate-red', 'plate-blue', 'plate-green'],
   kemet: ['base', 'ink', 'star', 'halo', 'halo-hot', 'sky', 'stone', 'gold', 'gold-hot', 'glyph', 'arc']
 });
 
@@ -152,7 +156,14 @@ let glCanvas = null;
 let glr = null;
 let glDims = { w: 0, h: 0 };
 let fullView = false;                // the full-screen graphic view (js/views/graphic.js)
-let dragging = false;
+const orbit = createOrbit();          // the user's drag — the one shared handler (theme-engine.js)
+/* Forge plates. `platesSeen` is the level whose plates the user last watched
+ * settle (persisted by app.js), so a level gained between visits is shown
+ * going on once, the next time Forge is opened. */
+let rack = createPlateRack();
+let platesSeen = null;
+let platesSettledReport = null;      // callback(level) once the rack settles on a new level
+let lastReportedPlates = null;
 let spin = 0;                        // radians; integrated from rotationSpeed(), or the user's drag
 // What is on screen, eased toward `activity` so nothing snaps (theme-engine approach()).
 let shown = { level: 0, month: 0, glow: 0.5, heat: 0, k: 0 };
@@ -250,7 +261,10 @@ function readPalette() {
     gold: read('--backdrop-gold', '#6d5a24'),
     goldHot: read('--backdrop-gold-hot', '#8f7530'),
     glyph: read('--backdrop-glyph', '#3d7d85'),
-    arc: read('--backdrop-arc', '#7a5cc4')
+    arc: read('--backdrop-arc', '#7a5cc4'),
+    plateRed: read('--backdrop-plate-red', '#a8392c'),
+    plateBlue: read('--backdrop-plate-blue', '#3a5fae'),
+    plateGreen: read('--backdrop-plate-green', '#3f8a4f')
   };
 }
 
@@ -1112,6 +1126,8 @@ function draw() {
       heat: shown.heat,
       k: shown.k,
       spin,
+      orbit: { yaw: orbit.yaw, pitch: orbit.pitch },
+      plates: rackPlates(rack),
       band: glBand(),
       full: fullView,
       dpr: glDims.w / Math.max(window.innerWidth || 1, 1),
@@ -1149,7 +1165,9 @@ function settleShown(dt) {
   const t = targets();
   for (const key of Object.keys(t)) shown[key] = dt === null ? t[key] : approach(shown[key], t[key], dt);
   shown.k = intensity({ streakLevel: shown.level * STREAK_LEVELS, monthPercent: shown.month });
-  if (dt !== null && !dragging) spin = (spin + rotationSpeed(shown.k) * dt) % (Math.PI * 2);
+  if (dt !== null && !orbit.dragging) spin = (spin + rotationSpeed(shown.k) * dt) % (Math.PI * 2);
+  if (dt !== null) { orbitSettle(orbit, dt); stepRack(rack, dt); }
+  reportPlates();
 }
 
 function loop(timestamp) {
@@ -1189,6 +1207,7 @@ function sync() {
   if (isStatic()) {
     stopLoop();
     snapTiers();
+    snapRack(rack);                        // reduced motion: the right plates, in place, no sliding
     settleShown(null);
     draw();                                // exactly one frame, held
     return;
@@ -1284,8 +1303,38 @@ export function setActivity({ glow = 0.5, frostHint = 0, streakLevel = 0, streak
     streakFraction: Math.min(Math.max(streakFraction, 0), 1),
     monthPercent: Math.min(Math.max(monthPercent, 0), 1)
   };
-  if (snapOnNextActivity) { snapOnNextActivity = false; settleShown(null); }   // open on the real values, not a ramp up from zero
+  setRackTarget(rack, platesForLevel(activity.streakLevel));
+  if (snapOnNextActivity) {
+    snapOnNextActivity = false;
+    // Open on the real values, not a ramp up from zero — except the plates: a
+    // level gained since they were last seen goes on in front of the user,
+    // once. A level lost in between is simply shown; a lapse is never replayed
+    // as plates coming off.
+    if (platesSeen !== null && platesSeen < activity.streakLevel && !isStatic()) {
+      rack = createPlateRack(platesForLevel(platesSeen));
+      setRackTarget(rack, platesForLevel(activity.streakLevel));
+    } else {
+      snapRack(rack);
+    }
+    settleShown(null);
+  }
   if (isStatic()) sync();                  // keep the held frame current
+}
+
+function reportPlates() {
+  if (snapOnNextActivity) return;           // no real activity yet — nothing has been seen
+  if (skin !== 'forge' || !platesSettledReport || !rackSettled(rack)) return;
+  if (activity.streakLevel === lastReportedPlates) return;
+  lastReportedPlates = activity.streakLevel;
+  platesSeen = activity.streakLevel;
+  platesSettledReport(activity.streakLevel);
+}
+
+/** app.js: the level whose plates were last seen settle, and where to save the next one. */
+export function setPlatesMemory(level, onSettled) {
+  platesSeen = Number.isInteger(level) ? level : null;
+  lastReportedPlates = platesSeen;
+  platesSettledReport = onSettled;
 }
 
 /** Speech recognition is starting/finishing — the backdrop gets out of the way. */
@@ -1307,18 +1356,26 @@ export function stop() {
  *  60fps allowed. Every pause rule still applies — shouldRun() is unchanged. */
 export function setFullView(flag) {
   fullView = Boolean(flag);
+  Object.assign(orbit, createOrbit());     // the Today view always shows the scene's own framing
   dims = { w: 0, h: 0 };                   // 2D fallback reseeds for the new framing
   sync();
 }
 
-/** Drag-to-rotate (Kemet, Forge). While held, auto-rotation stops; releasing
- *  resumes it from wherever the user left it. */
-export function setDragging(flag) {
-  dragging = Boolean(flag);
+/* Drag-to-rotate, for every 3D scene alike (theme-engine.js → orbit). While
+ * held, auto-rotation stops; on release the offset eases back as the scene's
+ * own rotation resumes. Under reduced motion a drag still turns the held frame
+ * — the user is choosing that motion — but nothing eases or auto-rotates. */
+export function grab() {
+  orbitGrab(orbit);
 }
 
-export function rotateBy(radians) {
-  spin = (spin + radians) % (Math.PI * 2);
+export function dragBy(dxPx, dyPx = 0) {
+  orbitDrag(orbit, dxPx, dyPx);
+  if (isStatic() || !raf) draw();
+}
+
+export function release() {
+  orbitRelease(orbit);
   if (isStatic()) draw();
 }
 
@@ -1351,7 +1408,9 @@ export function getDiagnostics() {
     fpsCap: fullView ? FULL_VIEW_FPS : FPS,
     renderer: usingGL() ? 'webgl2' : '2d',
     fullView,
-    dragging,
+    dragging: orbit.dragging,
+    orbit: { yaw: orbit.yaw, pitch: orbit.pitch },
+    plates: { target: [...rack.target], seated: [...rack.seated], moving: rack.moving ? { ...rack.moving } : null, settled: rackSettled(rack) },
     spin,
     rotationSpeed: rotationSpeed(shown.k),
     intensity: shown.k,

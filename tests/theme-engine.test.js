@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {
   intensity, approach, rotationSpeed, ROTATION, haloStages,
   createFlashLimiter, maxInWindow, FLASH,
-  createBoltTrack, updateBoltTrack, LIGHTNING_TRACKS, boltBranches
+  createBoltTrack, updateBoltTrack, LIGHTNING_TRACKS, boltBranches,
+  createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle,
+  PLATE_TABLE, PLATE_SIZES, SLEEVE, PLATE_MOTION, platesForLevel, plateLayout,
+  createPlateRack, setRackTarget, stepRack, rackPlates, rackSettled, snapRack
 } from '../js/theme-engine.js';
 
 /** Deterministic PRNG so a failure reproduces. */
@@ -117,4 +120,120 @@ test('lightning responds when intensity jumps — a slow booking is pulled in', 
     if (updateBoltTrack(track, f / 30, 1, limiter, hi)) struckAt = f / 30;
   }
   assert.ok(struckAt !== null && struckAt <= 1.2 * 1.3 + 0.05, `first strike at max intensity came at ${struckAt}s`);
+});
+
+/* ---------- drag-to-rotate ---------- */
+
+test('drag turns about both axes; release eases back the short way; nothing moves while held', () => {
+  const o = createOrbit();
+  orbitGrab(o);
+  orbitDrag(o, 100, -50);
+  assert.ok(o.yaw > 1 && o.pitch < -0.5, 'horizontal → yaw, vertical → pitch');
+  const held = { ...o };
+  orbitSettle(o, 1);
+  assert.deepEqual({ ...o }, held, 'no easing while the finger is down');
+
+  orbitDrag(o, 400, 0);                      // well past a half turn
+  orbitRelease(o);
+  assert.ok(Math.abs(o.yaw) <= Math.PI && Math.abs(o.pitch) <= Math.PI, 'folded into (−π, π] so it eases back the short way');
+  let last = Math.hypot(o.yaw, o.pitch);
+  for (let i = 0; i < 60; i += 1) {
+    orbitSettle(o, 1 / 30);
+    const now = Math.hypot(o.yaw, o.pitch);
+    assert.ok(now <= last + 1e-12, 'eases monotonically, never overshoots');
+    last = now;
+  }
+  assert.ok(last < 0.05, `back to the scene's own rotation after 2 s (left ${last})`);
+});
+
+/* ---------- Forge plates ---------- */
+
+test('the plate table is exactly the brief\'s, inner → outer, per side', () => {
+  const expected = [
+    [], ['small'], ['medium'], ['large'], ['large', 'small'], ['large', 'medium'],
+    ['large', 'large'], ['large', 'large', 'medium'], ['large', 'large', 'large'],
+    ['large', 'large', 'large', 'medium'], ['large', 'large', 'large', 'large']
+  ];
+  assert.deepEqual(PLATE_TABLE.map((r) => [...r]), expected);
+  assert.deepEqual(platesForLevel(-2), []);
+  assert.deepEqual(platesForLevel(42), expected[10]);
+  assert.deepEqual(platesForLevel(6.4), expected[6]);
+});
+
+test('every level fits the sleeve, and level 10 just fills it', () => {
+  for (let level = 0; level <= 10; level += 1) {
+    const layout = plateLayout(platesForLevel(level));
+    for (let i = 1; i < layout.length; i += 1) assert.ok(layout[i].x0 >= layout[i - 1].x1, `level ${level}: plates overlap`);
+    if (layout.length) assert.ok(layout.at(-1).x1 <= SLEEVE.end, `level ${level} runs past the end collar`);
+  }
+  const full = plateLayout(platesForLevel(10)).at(-1).x1;
+  assert.ok(SLEEVE.end - full < 0.01, `level 10 should just fill the sleeve (${(SLEEVE.end - full).toFixed(3)} spare)`);
+});
+
+test('competition colours by size: red, blue, green', () => {
+  assert.deepEqual([PLATE_SIZES.large.token, PLATE_SIZES.medium.token, PLATE_SIZES.small.token], ['plateRed', 'plateBlue', 'plateGreen']);
+  assert.ok(PLATE_SIZES.large.radius > PLATE_SIZES.medium.radius && PLATE_SIZES.medium.radius > PLATE_SIZES.small.radius);
+});
+
+/** Run a rack to completion, recording each move. */
+function runRack(rack, seconds = 10) {
+  const moves = [];
+  for (let f = 0; f < seconds * 60; f += 1) {
+    stepRack(rack, 1 / 60);
+    const m = rack.moving;
+    if (m && (!moves.length || moves.at(-1).t > m.t || moves.at(-1).size !== m.size)) moves.push({ ...m });
+    else if (m) moves.at(-1).t = m.t;
+    if (rackSettled(rack)) break;
+  }
+  return moves;
+}
+
+test('a level-up slides plates on one at a time; a swap takes the old plate off first', () => {
+  const rack = createPlateRack(platesForLevel(2));          // one medium
+  setRackTarget(rack, platesForLevel(5));                    // large + medium
+  const moves = runRack(rack);
+  assert.deepEqual(moves.map((m) => `${m.dir} ${m.size}`), ['off medium', 'on large', 'on medium']);
+  assert.ok(rackSettled(rack));
+  assert.deepEqual(rack.seated, ['large', 'medium']);
+});
+
+test('a plate going on slides in from the sleeve end and seats, in about 0.6 s', () => {
+  const rack = createPlateRack([]);
+  setRackTarget(rack, ['small']);
+  stepRack(rack, 0);                                         // starts the move
+  const start = rackPlates(rack).at(-1);
+  const seat = plateLayout(['small'])[0];
+  assert.ok(start.x0 > SLEEVE.end, 'it starts beyond the end of the sleeve');
+  let mid = null;
+  for (let f = 0; f < 18; f += 1) { stepRack(rack, 1 / 60); mid = rackPlates(rack).at(-1); }
+  assert.ok(mid.x0 < start.x0 && mid.x0 > seat.x0, 'part-way along the sleeve after 0.3 s');
+  for (let f = 0; f < 30; f += 1) stepRack(rack, 1 / 60);
+  assert.ok(rackSettled(rack), `seated within ${PLATE_MOTION.onSeconds + 0.2} s`);
+  assert.equal(rackPlates(rack).at(-1).x0, seat.x0);
+});
+
+test('a level easing down slides the outer plate off gently and fades it — never a jump', () => {
+  const rack = createPlateRack(platesForLevel(4));           // large + small
+  setRackTarget(rack, platesForLevel(3));
+  stepRack(rack, 0);
+  let lastAlpha = 1;
+  let lastX = -Infinity;
+  while (rack.moving) {
+    const p = rackPlates(rack).at(-1);
+    assert.equal(p.size, 'small');
+    assert.ok(p.alpha <= lastAlpha + 1e-12 && p.x0 >= lastX, 'fades and moves outward steadily');
+    assert.ok(lastAlpha - p.alpha < 0.05, 'no sudden drop in a single frame');
+    lastAlpha = p.alpha;
+    lastX = p.x0;
+    stepRack(rack, 1 / 60);
+  }
+  assert.deepEqual(rack.seated, ['large']);
+});
+
+test('snapRack puts the right plates in place at once (reduced motion)', () => {
+  const rack = createPlateRack([]);
+  setRackTarget(rack, platesForLevel(9));
+  snapRack(rack);
+  assert.ok(rackSettled(rack));
+  assert.ok(rackPlates(rack).every((p) => p.alpha === 1 && !p.moving));
 });

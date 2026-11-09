@@ -1198,11 +1198,15 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
       await page.waitForSelector('#start-session');
       await page.waitForFunction((t) => window.__backdrop?.getDiagnostics().skin === t, theme, { timeout: 5000 });
 
+      // Forge now shows its level by loading plates, which cover part of the
+      // brightest steel — so its peak can dip while far more is lit. Total
+      // light is the measure that matches the claim there (see DECISIONS #82).
+      const measure = theme === 'forge' ? backdropAverageBrightness : backdropMaxBrightness;
       const readings = [];
       for (const level of [0, 5, 10]) {
         await forceLevel(page, level);
         await page.waitForTimeout(120);
-        readings.push(await backdropMaxBrightness(page));
+        readings.push(await measure(page));
       }
       const [low, mid, high] = readings;
       assert.ok(low > 15, `${theme}: level 0 must still render something visible, got ${low}`);

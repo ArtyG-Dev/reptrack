@@ -178,3 +178,160 @@ export function updateBoltTrack(track, tS, level, limiter, rand = Math.random) {
 export function boltBranches(level) {
   return Math.round(clamp01(level) * LIGHTNING.maxBranches);
 }
+
+/* ---------- drag-to-rotate (the one handler for every 3D scene) ---------- */
+
+/**
+ * The user's own rotation, held as a world-space yaw/pitch *offset* applied on
+ * top of whatever the scene auto-rotates around. That separation is the point:
+ * Forge auto-rotates about the bar's own long axis, which a barbell is nearly
+ * symmetric about, so feeding a drag into that same angle (the original bug)
+ * turned it invisibly. An offset in world space turns any scene the way the
+ * finger moves — end-on, along the bar, upside down — whatever its own axis.
+ *
+ * Horizontal drag → yaw (about the vertical axis), vertical drag → pitch
+ * (about the horizontal axis). On release both ease back to zero along the
+ * shortest way round while the scene's auto-rotation carries on; under reduced
+ * motion the caller simply never settles it, so the view stays where the user
+ * left it, with no animation.
+ */
+export const ORBIT = Object.freeze({
+  radPerPx: 0.012,
+  settleSeconds: 0.45        // ease-back time constant after release
+});
+
+export function createOrbit() {
+  return { yaw: 0, pitch: 0, dragging: false };
+}
+
+const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+export function orbitGrab(orbit) { orbit.dragging = true; }
+
+export function orbitDrag(orbit, dxPx, dyPx) {
+  orbit.yaw += dxPx * ORBIT.radPerPx;
+  orbit.pitch += dyPx * ORBIT.radPerPx;
+}
+
+/** Ends a drag. Angles are folded into (−π, π] so the ease back is the short way. */
+export function orbitRelease(orbit) {
+  orbit.dragging = false;
+  orbit.yaw = wrapPi(orbit.yaw);
+  orbit.pitch = wrapPi(orbit.pitch);
+}
+
+/** Ease the offset back toward the scene's own rotation. No-op while held. */
+export function orbitSettle(orbit, dt) {
+  if (orbit.dragging) return;
+  orbit.yaw = approach(orbit.yaw, 0, dt, ORBIT.settleSeconds);
+  orbit.pitch = approach(orbit.pitch, 0, dt, ORBIT.settleSeconds);
+  if (Math.abs(orbit.yaw) < 1e-4) orbit.yaw = 0;
+  if (Math.abs(orbit.pitch) < 1e-4) orbit.pitch = 0;
+}
+
+/* ---------- Forge plates (streakLevel → plates on the bar) ---------- */
+
+/** Plate sizes in scene units. Colours follow the competition convention
+ *  (red / blue / green by size), read from --backdrop-plate-* tokens. */
+export const PLATE_SIZES = Object.freeze({
+  large: Object.freeze({ radius: 0.62, width: 0.122, token: 'plateRed' }),
+  medium: Object.freeze({ radius: 0.48, width: 0.095, token: 'plateBlue' }),
+  small: Object.freeze({ radius: 0.34, width: 0.07, token: 'plateGreen' })
+});
+
+/** Per side, inner → outer. Levels 1–3 swap one plate for a bigger one (early
+ *  progress reads as "heavier"); from 4 they add (later progress reads as
+ *  "more"). Always the same list on both sides, so it is never lopsided. */
+export const PLATE_TABLE = Object.freeze([
+  [],
+  ['small'],
+  ['medium'],
+  ['large'],
+  ['large', 'small'],
+  ['large', 'medium'],
+  ['large', 'large'],
+  ['large', 'large', 'medium'],
+  ['large', 'large', 'large'],
+  ['large', 'large', 'large', 'medium'],
+  ['large', 'large', 'large', 'large']
+].map((row) => Object.freeze(row)));
+
+/** Plates seat from the inner collar (`seat`) outward; `end` is the inner face
+ *  of the end collar. Sized so level 10 — four large — just fills it. */
+export const SLEEVE = Object.freeze({ seat: 1.07, gap: 0.008, end: 1.585 });
+
+export function platesForLevel(level) {
+  const i = Math.min(Math.max(Math.round(Number(level) || 0), 0), PLATE_TABLE.length - 1);
+  return [...PLATE_TABLE[i]];
+}
+
+/** Where each plate in a per-side list sits along +x, inner → outer. */
+export function plateLayout(list) {
+  let x = SLEEVE.seat;
+  return list.map((size) => {
+    const { width, radius } = PLATE_SIZES[size];
+    const plate = { size, x0: x, x1: x + width, radius };
+    x += width + SLEEVE.gap;
+    return plate;
+  });
+}
+
+/** One plate moves at a time, like loading a real bar: an outer plate comes
+ *  off before an inner one can change, and new plates go on inner-first. */
+export const PLATE_MOTION = Object.freeze({
+  onSeconds: 0.6,        // slides on from the sleeve end and seats
+  offSeconds: 0.9,       // fades and slides off, gently — a level easing down is never a "loss"
+  slideFrom: 0.25        // how far past the sleeve end a plate starts / finishes, in scene units
+});
+
+export function createPlateRack(list = []) {
+  return { seated: [...list], target: [...list], moving: null };
+}
+
+export function setRackTarget(rack, list) {
+  rack.target = [...list];
+}
+
+/** Reduced motion, a hidden page or a first load: the right plates, in place. */
+export function snapRack(rack) {
+  rack.seated = [...rack.target];
+  rack.moving = null;
+}
+
+export function rackSettled(rack) {
+  return !rack.moving && rack.seated.length === rack.target.length && rack.seated.every((s, i) => s === rack.target[i]);
+}
+
+export function stepRack(rack, dt) {
+  if (rack.moving) {
+    const m = rack.moving;
+    m.t = Math.min(1, m.t + dt / (m.dir === 'on' ? PLATE_MOTION.onSeconds : PLATE_MOTION.offSeconds));
+    if (m.t >= 1) {
+      if (m.dir === 'on') rack.seated.push(m.size);
+      rack.moving = null;
+    }
+    return;
+  }
+  let i = 0;
+  while (i < rack.seated.length && i < rack.target.length && rack.seated[i] === rack.target[i]) i += 1;
+  if (i < rack.seated.length) {
+    rack.moving = { size: rack.seated.pop(), dir: 'off', t: 0 };       // outermost first
+  } else if (i < rack.target.length) {
+    rack.moving = { size: rack.target[i], dir: 'on', t: 0 };
+  }
+}
+
+/** What to draw on one side (+x; the renderer mirrors it): every seated plate,
+ *  plus the moving one at its current offset and opacity. */
+export function rackPlates(rack) {
+  const plates = plateLayout(rack.seated).map((p) => ({ ...p, alpha: 1, moving: null }));
+  const m = rack.moving;
+  if (m) {
+    const [p] = plateLayout([...rack.seated, m.size]).slice(-1);
+    const away = SLEEVE.end + PLATE_MOTION.slideFrom - p.x0;           // distance to just past the sleeve end
+    const shift = m.dir === 'on' ? away * (1 - m.t) ** 3 : away * m.t * m.t;
+    const alpha = m.dir === 'on' ? Math.min(1, m.t * 4) : 1 - m.t;
+    plates.push({ ...p, x0: p.x0 + shift, x1: p.x1 + shift, alpha, moving: m.dir, t: m.t });
+  }
+  return plates;
+}

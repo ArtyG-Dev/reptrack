@@ -253,6 +253,25 @@ growing more frequent and branched with intensity, as this brief asks).
 | 108 | Footprint < 50 MB; Playwright dev-only and not deployed | Measured block above. `pwa-static.test.js` fails the build on any runtime dependency; nothing under `js/` imports Playwright | ✅ |
 | 109 | Pushed, Pages re-verified live, service worker cache bumped | Actions run #23 `success`. Live site `200`; manifest and service worker load from `/reptrack/` (SW scope `/reptrack/`, single cache `reptrack-shell-v3`); deployed files are byte-identical to the commit; WebGL2 running with no console errors; 24 live screenshots in `docs/screenshots/live/`. Details in `DEPLOYMENT.md` → "Live verification" | ✅ |
 
+## Added after the Forge rotation + progressive plates update
+
+Per `docs/FOLLOWUP_PROMPT_FORGE_ROTATE_PLATES.md`.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 110 | Root cause of the missing Forge drag-to-rotate documented | `DECISIONS.md` #82: the drag reached Forge, but was applied about the bar's own long axis, so a 69° turn changed 0.11% of the pixels (Kemet 6.5%). Measured on the live build before fixing | ✅ |
+| 111 | Scripted drag rotates the barbell in the expected direction; auto-rotation resumes after release | `visuals.test.js` → "drag visibly turns both Kemet and Forge…" (pixels and on-screen bar ends) and "auto-rotation holds while dragging, eases back after release, and resumes" | ✅ |
+| 112 | Kemet drag still works; both use one shared handler | Both themes run through the same assertions. `orbit*` in `theme-engine.js` is the only rotation handler, and `graphic-view.js` has one pointer path | ✅ |
+| 113 | Forge at `streakLevel` 0, 3, 6, 10 in `docs/screenshots/` and `VISUALS.md`, symmetrical and matching the table | `forge-plates-L*-cool/hot.jpg`. `visuals.test.js` asserts the seated and drawn plates equal the table at each level; both sides draw the same list, mirrored | ✅ |
+| 114 | Level 10 fits the sleeve with a visible collar, no clipping | `theme-engine.test.js` → "every level fits the sleeve, and level 10 just fills it" (0.003 units spare); `visuals.test.js` asserts the bar ends stay inside the viewport at every level, Today and full screen | ✅ |
+| 115 | Plate colours distinguishable at heat 0 and 1.0 | `visuals.test.js` samples rendered plate rims: red/green and red/blue more than 60 RGB apart at both heats. Screenshots L4/L5/L9-hot | ✅ |
+| 116 | Reduced-motion screenshot shows the correct plates, no animation | All `forge-plates-L*` shots are held reduced-motion frames; `theme-engine.test.js` → `snapRack`; `visuals.test.js` reduced-motion drag test | ✅ |
+| 117 | Simulated level-up slides a plate on; level drop slides one off gently | `visuals.test.js` → "a level-up slides a plate on; a level easing down slides one off gently" (seen mid-move; alpha fades gradually); unit tests pin order and timing; `forge-plates-sliding-on.jpg` | ✅ |
+| 118 | Forge CPU re-measured, within budget | `npm run skins`: app JS +0.9% (was +0.7%), 30 fps; 2D fallback 2.9% | ✅ headless / ⚠️ device — `MANUAL_TEST.md` Check 2 |
+| 119 | Existing acceptance suite green | 258 passing, two consecutive full runs | ✅ |
+| 120 | Pushed, cache bumped, live re-verified | `reptrack-shell-v5`. See `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
+| 121 | `MANUAL_TEST.md` on-phone check for Forge drag and plate count | Check 2 → "Forge, specifically", with the plate table to compare against | ✅ |
+
 ## Build constraints
 
 | Constraint | Verification | Status |

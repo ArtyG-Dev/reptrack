@@ -285,7 +285,7 @@ Per `docs/FOLLOWUP_PROMPT_KEMET_BASE_FORGE_SPIN_TERMINAL_KATAKANA.md`. Each chan
 | 126 | CPU re-measured for Kemet, Forge, Terminal | `npm run skins`: app JS +0.9% each, 30 fps, all PASS | ✅ headless / ⚠️ device |
 | 127 | Full acceptance suite green | 262 passing | ✅ |
 | 128 | Footprint < 50 MB, no font files | 3.499 MB total; system font stacks only. Noto CJK was installed as an OS package on the test machine for screenshots, not in the repo | ✅ |
-| 129 | Pushed, cache bumped, live re-verified | `reptrack-shell-v6`. See `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
+| 129 | Pushed, cache bumped, live re-verified | Live files byte-identical to `f6f81a5`, SW `/reptrack/` with `reptrack-shell-v6`; on the live site the Kemet base reads correctly from below, Kemet +0.734 / Forge −0.734 rad/s, Terminal on katakana, no console errors. `DEPLOYMENT.md` → "Live verification" | ✅ |
 | 130 | `MANUAL_TEST.md` on-phone checks for all three | Check 2 → "Three more quick looks" | ✅ |
 
 ## Build constraints

@@ -157,3 +157,12 @@ host. This session's environment now allows it, so the live files themselves wer
 - On the live site, the same scripted Forge drag that changed **0.11%** of the frame before
   the fix now changes **4.85%**. Level 6 shows two large plates per side. No console errors.
 - `docs/screenshots/live/` re-captured from the deployment, including the Forge plate set.
+
+### Kemet base / Forge turntable / Terminal katakana — commit `f6f81a5`, 2026-11-09
+
+- Live files byte-identical to the commit; service worker scoped to `/reptrack/` with the
+  single cache `reptrack-shell-v6`.
+- On the live site: Kemet's base faces the camera from below with the inscription reading
+  left to right and upright; at full intensity Kemet turns **+0.734 rad/s** and Forge
+  **−0.734 rad/s** (opposite, same capped speed); Terminal is on the `katakana` set. No
+  console errors. `docs/screenshots/live/` re-captured.

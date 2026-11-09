@@ -1210,3 +1210,17 @@ checks it on screen: from below, the base faces the camera, the text's start is 
 end, its top is above its centre, and it is centred. The default camera looks down on the
 pyramid, so the base never faces it in normal Today view (also asserted), and nothing
 changes under reduced motion.
+
+### 84. Forge spins level on a turntable, opposite to Kemet
+
+The old auto-rotation was a slow roll about the bar's own long axis, which a round bar
+barely shows (the same symmetry behind #82). Forge now turns about the vertical axis with
+the bar level, showing front, end-on and back, in the opposite direction to Kemet. Both use
+the shared intensity-scaled speed and the one-turn-per-8-s cap. The axis and direction are
+one constant, `FORGE_AUTO_ROTATION = { axis: 'vertical', direction: -1 }`, beside
+`KEMET_AUTO_ROTATION`; `'tumble'` (end over end) is the documented one-line alternative.
+The forge glow, embers and heat haze are now positioned from the turning bar, so they swing
+round with it rather than staying put while it turns. Drag works as before through the
+shared orbit and eases back into this spin; reduced motion has no auto-rotation (tested).
+`visuals.test.js` compares the two themes over ~1 s: Kemet's heading rises, Forge's falls,
+and the bar's end stays at exactly world height 0 while it swings round.

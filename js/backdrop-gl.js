@@ -15,8 +15,10 @@
  * is no text over the graphic, so the ceiling is lifted (see `ceiling`).
  */
 
-import { compile, vao, target, perspective, multiply, rotationX, rotationY, translation, scaling, bandMatrix, project, strokeNDC } from './gl.js';
-import { createBoltTrack, updateBoltTrack, boltBranches, haloStages, smoothstep, LIGHTNING_TRACKS, LIGHTNING, PLATE_SIZES, SLEEVE } from './theme-engine.js';
+import { compile, vao, target, perspective, multiply, rotationX, rotationY, rotationZ, translation, scaling, bandMatrix, project, strokeNDC } from './gl.js';
+import { createBoltTrack, updateBoltTrack, boltBranches, haloStages, smoothstep, LIGHTNING_TRACKS, LIGHTNING, PLATE_SIZES, SLEEVE, FORGE_AUTO_ROTATION, KEMET_AUTO_ROTATION } from './theme-engine.js';
+
+const AXIS = { vertical: rotationY, tumble: rotationZ, roll: rotationX };
 
 const FOV = (30 * Math.PI) / 180;
 const PYRAMID_H = 1.25;
@@ -758,7 +760,7 @@ export function createGLBackdrop(canvas) {
     // the pyramid's own auto-rotation is about its vertical axis inside that.
     const orbit = multiply(rotationX(f.orbit.pitch), rotationY(f.orbit.yaw));
     const vp = multiply(cam.vp, orbit);
-    const model = rotationY(f.spin);
+    const model = AXIS[KEMET_AUTO_ROTATION.axis](KEMET_AUTO_ROTATION.direction * f.spin);
     const mvp = multiply(vp, model);
 
     gl.enable(gl.DEPTH_TEST);
@@ -836,6 +838,7 @@ export function createGLBackdrop(canvas) {
     info.kemet = {
       apex,
       base: project(vp, [1, 0, 1]),
+      heading: KEMET_AUTO_ROTATION.direction * f.spin,
       inscription: {
         start: project(mvp, [-0.84, 0, 0]),
         end: project(mvp, [0.84, 0, 0]),
@@ -851,13 +854,16 @@ export function createGLBackdrop(canvas) {
   function forge(f) {
     const P = f.palette;
     const cam = camera(f, f.full ? { targetY: 0.1, needH: 1.0, needW: 2.4, tilt: 0.16 } : { targetY: 0.05, needH: 0.8, needW: 2.45, tilt: 0.16 });
-    // World-space drag offset first, then the fixed three-quarter view, then
-    // the bar's own slow roll about its long axis.
+    // World-space drag offset first, then the three-quarter starting view, then
+    // the bar's own auto-rotation (FORGE_AUTO_ROTATION: a level turntable spin,
+    // opposite to Kemet's). The glow, embers and haze follow the bar round as
+    // long as the spin keeps it level.
     const orbit = multiply(rotationX(f.orbit.pitch), rotationY(f.orbit.yaw));
     const yaw = multiply(orbit, rotationY(-0.42));
-    const model = multiply(yaw, rotationX(f.spin));
+    const autoAngle = FORGE_AUTO_ROTATION.direction * f.spin;
+    const model = multiply(yaw, AXIS[FORGE_AUTO_ROTATION.axis](autoAngle));
     const mv = multiply(cam.view, model);
-    const vpYaw = multiply(cam.vp, yaw);
+    const vpYaw = multiply(cam.vp, FORGE_AUTO_ROTATION.axis === 'vertical' ? model : yaw);
     const centre = project(vpYaw, [0, 0, 0]);
     const monthGlow = smoothstep(0.15, 0.30, f.month);   // the 2D renderer's thresholds, unchanged
     const heatT = Math.min(Math.max((f.month - 0.22) / (0.95 - 0.22), 0), 1);
@@ -903,7 +909,10 @@ export function createGLBackdrop(canvas) {
       const a = Math.PI / 3;
       return project(multiply(cam.vp, model), [(p.x0 + p.x1) / 2, p.radius * 0.96 * Math.cos(a), p.radius * 0.96 * Math.sin(a)]);
     };
+    const endWorld = [model[0] * SLEEVE_TIP, model[1] * SLEEVE_TIP, model[2] * SLEEVE_TIP];   // where the right end is, before the camera
     info.forge = {
+      heading: autoAngle,
+      endWorld,
       ends: [project(vpYaw, [-SLEEVE_TIP, 0, 0]), project(vpYaw, [SLEEVE_TIP, 0, 0])],
       plates: plates.map((p) => ({ size: p.size, alpha: p.alpha, moving: p.moving, rim: rimPoint(p) }))
     };

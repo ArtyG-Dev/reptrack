@@ -608,4 +608,47 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     assert.equal(solid, 4, 'the base is solid stone, not hollow');
     await context.close();
   });
+  test('Forge spins level on a turntable, the opposite way to Kemet', async () => {
+    const run = async (theme) => {
+      const { context, page } = await open(theme);
+      await intensity(page, 1);
+      // Let the eased intensity actually arrive (scene time runs slow under CPU rendering).
+      await page.waitForFunction(() => window.__backdrop.getDiagnostics().intensity > 0.95, null, { timeout: 20000 });
+      // Headings are read back-to-back, nothing slow in between: the angle wraps
+      // at 2π, so a long gap could carry it round a whole turn unseen.
+      const read = () => page.evaluate((t) => { window.__backdrop.readPixels(); const d = window.__backdrop.getDiagnostics(); return { scene: d.scene[t], clock: d.clock }; }, theme);
+      const a = await read();
+      const pixelsA = await frame(page);
+      await page.waitForTimeout(1000);
+      const b0 = await read();
+      await page.waitForTimeout(150);
+      const b = await read();
+      const pixelsB = await frame(page);
+      await context.close();
+      return { a: b0, b, pixelsA, pixelsB, first: a };
+    };
+    const kemet = await run('kemet');
+    const forge = await run('forge');
+    const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+    // Angular velocity per second of *scene* time (the backdrop clock), over a
+    // short gap so the shortest-way difference is unambiguous.
+    const rate = (r) => wrap(r.b.scene.heading - r.a.scene.heading) / (r.b.clock - r.a.clock);
+    assert.ok(rate(kemet) > 0.3, `kemet turns positively (${rate(kemet).toFixed(3)} rad/s)`);
+    assert.ok(rate(forge) < -0.3, `forge turns the other way (${rate(forge).toFixed(3)} rad/s)`);
+    assert.ok(Math.abs(rate(forge)) <= ROTATION.maxRadPerS + 1e-6, `and no faster than the shared cap (${rate(forge).toFixed(3)} rad/s)`);
+    for (const s of [forge.first.scene, forge.b.scene]) {
+      assert.ok(Math.abs(s.endWorld[1]) < 1e-6, `the bar stays level — its end never rises or falls (${s.endWorld[1]})`);
+    }
+    assert.ok(Math.hypot(forge.first.scene.endWorld[0] - forge.b.scene.endWorld[0], forge.first.scene.endWorld[2] - forge.b.scene.endWorld[2]) > 0.1, 'the end swings round in the horizontal plane');
+    assert.ok(changedFraction(forge.pixelsA, forge.pixelsB) > 0.02, 'and that is visible on screen');
+  });
+
+  test('reduced motion: Forge does not auto-rotate', async () => {
+    const { context, page } = await open('forge', { context: { reducedMotion: 'reduce' } });
+    await intensity(page, 1);
+    const h1 = (await diag(page)).spin;
+    await page.waitForTimeout(800);
+    assert.equal((await diag(page)).spin, h1);
+    await context.close();
+  });
 });

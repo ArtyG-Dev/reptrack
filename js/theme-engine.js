@@ -60,6 +60,14 @@ export const ROTATION = Object.freeze({
   maxRadPerS: (Math.PI * 2) / 8
 });
 
+/** How Forge turns by itself. Kemet spins +1 about the vertical axis; Forge
+ *  spins the other way on a turntable, bar level, so the two feel different.
+ *  The axis is the one-line switch: 'vertical' (turntable), 'tumble' (end over
+ *  end, about the horizontal axis across the bar) or 'roll' (about the bar's
+ *  own length — near-invisible on a round bar, which is why it was replaced). */
+export const FORGE_AUTO_ROTATION = Object.freeze({ axis: 'vertical', direction: -1 });
+export const KEMET_AUTO_ROTATION = Object.freeze({ axis: 'vertical', direction: 1 });
+
 export function rotationSpeed(level) {
   const k = clamp01(level);
   return ROTATION.minRadPerS + (ROTATION.maxRadPerS - ROTATION.minRadPerS) * k * k;

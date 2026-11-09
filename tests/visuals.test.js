@@ -576,4 +576,36 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     await context.close();
   });
 
+  test('Kemet has a solid base whose inscription reads correctly from below, and is hidden in the default view', async () => {
+    const { context, page } = await open('kemet', { context: { reducedMotion: 'reduce' } });
+    await page.click('#view-graphic');
+    const ins = async () => { await page.evaluate(() => window.__backdrop.readPixels()); return (await diag(page)).scene.kemet.inscription; };
+    assert.equal((await ins()).facing, false, 'the default camera never shows the base');
+
+    // Drag up ~π/2: the underside turns to face the camera.
+    await page.mouse.move(200, 600);
+    await page.mouse.down();
+    await page.mouse.move(200, 469, { steps: 8 });
+    await page.mouse.up();
+    const i = await ins();
+    assert.equal(i.facing, true, 'the base faces the camera from below');
+    assert.ok(i.end[0] - i.start[0] > 0.3, `the text runs left to right — not mirrored (${i.start[0].toFixed(2)} → ${i.end[0].toFixed(2)})`);
+    assert.ok(i.up[1] > i.centre[1] + 0.05, 'and is upright');
+    assert.ok(Math.abs(i.centre[0]) < 0.05, 'centred on the face');
+
+    // Lettering really is drawn: bright, gold-leaning pixels in the text band, and the
+    // base is solid (no sky showing through between the corners).
+    const { gold, solid } = await page.evaluate((c) => {
+      const { data, width, height } = window.__backdrop.readPixels();
+      const px = (nx, ny) => { const x = Math.round((nx + 1) / 2 * width); const y = Math.round((1 - ny) / 2 * height); const k = (y * width + x) * 4; return [data[k], data[k + 1], data[k + 2]]; };
+      let gold = 0;
+      for (let dx = -0.5; dx <= 0.5; dx += 0.01) { const [r, g, b] = px(c[0] + dx, c[1]); if (r > 90 && r > b + 30) gold += 1; }
+      let solid = 0;
+      for (const [ox, oy] of [[-0.35, 0.15], [0.35, 0.15], [-0.35, -0.15], [0.35, -0.15]]) { const [r, g, b] = px(c[0] + ox, c[1] + oy); if (r + g + b > 60) solid += 1; }
+      return { gold, solid };
+    }, i.centre);
+    assert.ok(gold >= 8, `the inscription should be visible along its line (found ${gold} lettered samples)`);
+    assert.equal(solid, 4, 'the base is solid stone, not hollow');
+    await context.close();
+  });
 });

@@ -1185,3 +1185,28 @@ fallback to one-pair-per-level was not needed. Further choices:
 Forge's "brighter as the level climbs" assertion now uses total light instead of the peak.
 Plates cover part of the brightest steel, so the peak can dip slightly (539 → 530) while
 total light nearly triples (26 → 42 → 71).
+
+### 83. Kemet's hollow underside: the base face was never in the mesh
+
+**Cause, checked before fixing:** not culling. Face culling is never enabled anywhere in the
+renderer (no `CULL_FACE`/`cullFace` in the code), and winding therefore never hid anything.
+`pyramidMesh()` simply looped over the **four side faces only**. A pyramid seen from the
+default camera never needed a base, so it was never built. Once drag-to-rotate could flip
+the pyramid, looking up from below showed the inside of the four faces
+(`docs/screenshots/kemet-base-before.jpg`).
+
+**Fix:** a square base (face 4) built from exactly the same four corner vertices as the
+sides, so there is no gap at the edges, with an outward normal straight down. It is lit by
+the same light as the faces, and the light from above leaves it as dark stone under the
+ambient term, as an underside should be. The inscription `RepTrack © ArtyG-Dev` is drawn
+once with a system font stack (no font file) into a cached canvas texture: sharp lettering
+in one channel, a blurred copy in another for the glow. It renders in `--backdrop-gold-hot`
+with a `--backdrop-glyph` (cyan) halo, so it reads as engraved rather than a label.
+
+**Not mirrored, by construction:** the base's u runs along +x and the text's "up" along +z.
+Seen from below (looking up +y), right × up = +x × +z = −y, which points back at the
+viewer, so it is a proper rotation of the page, never a reflection. `visuals.test.js`
+checks it on screen: from below, the base faces the camera, the text's start is left of its
+end, its top is above its centre, and it is centred. The default camera looks down on the
+pyramid, so the base never faces it in normal Today view (also asserted), and nothing
+changes under reduced motion.

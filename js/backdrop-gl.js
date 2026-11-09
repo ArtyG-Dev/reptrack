@@ -127,6 +127,7 @@ flat in float vFace;
 uniform float uTier[10];
 uniform float uFrac, uK, uTime;
 uniform vec3 uStone, uGold, uGoldHot, uGlyph, uArc;
+uniform sampler2D uInscription;
 float glyph(vec2 p, float r) {
   p -= 0.5;
   float k = fract(r * 7.0);
@@ -136,6 +137,19 @@ float glyph(vec2 p, float r) {
   return step(abs(p.x), 0.06) * step(abs(p.y), 0.3) + step(abs(p.y + 0.18), 0.06) * step(abs(p.x), 0.2);
 }
 void main() {
+  if (vFace > 3.5) {
+    // The base: dark stone, lit like the faces, with the maker's mark engraved
+    // in gold and a soft cyan glow around it. Text band is 4:1, centred.
+    float diffB = max(dot(normalize(vN), normalize(vec3(-0.45, 0.55, 0.75))), 0.0);
+    vec3 col = uStone * (0.55 + 0.75 * diffB) * 0.8;
+    vec2 t = vec2((vUv.x - 0.08) / 0.84, (vUv.y - 0.5) / 0.21 + 0.5);
+    vec2 ink = all(greaterThanEqual(t, vec2(0.0))) && all(lessThanEqual(t, vec2(1.0))) ? texture(uInscription, t).rg : vec2(0.0);
+    col = mix(col, uGlyph, ink.g * 0.6);
+    col = mix(col, uGoldHot * 1.15, ink.r);
+    float edge = smoothstep(0.035, 0.0, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
+    o = vec4(mix(col, uArc, edge * 0.5), 1.0);
+    return;
+  }
   float h = clamp(vUv.y, 0.0, 0.9999);
   float u = vUv.x / max(1.0 - h, 0.02);
   int tier = int(floor(h * 10.0));
@@ -448,7 +462,51 @@ function pyramidMesh() {
     const nn = n.map((v) => v / len);
     out.push(...a, ...nn, -1, 0, k, ...b, ...nn, 1, 0, k, ...apex, ...nn, 0, 1, k);
   }
+  /* The base (face 4): the same four corners as the sides, so there is no
+   * seam, normal straight down. Its uv carries the inscription: u runs with
+   * +x and the text's "up" runs with +z — which, seen from below (looking up
+   * the +y axis), is a proper rotation of the page, never a mirror image. */
+  const down = [0, -1, 0];
+  const uv = ([x, , z]) => [(x + 1) / 2, (1 - z) / 2];
+  for (const tri of [[c[0], c[3], c[2]], [c[0], c[2], c[1]]]) {
+    for (const v of tri) out.push(...v, ...down, ...uv(v), 4);
+  }
   return new Float32Array(out);
+}
+
+/** "RepTrack © ArtyG-Dev", drawn once with a system font stack (no font file)
+ *  into two channels: red is the sharp lettering, green a blurred copy for the
+ *  engraved glow. Cached as a texture for the life of the context. */
+const INSCRIPTION = 'RepTrack \u00a9 ArtyG-Dev';
+function inscriptionTexture(gl) {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, c.width, c.height);
+  let size = 120;
+  const font = (px) => `600 ${px}px system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`;
+  g.font = font(size);
+  size = Math.floor(size * Math.min(1, (c.width * 0.9) / g.measureText(INSCRIPTION).width));
+  g.font = font(size);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.filter = 'blur(10px)';
+  g.fillStyle = '#00ff00';
+  g.fillText(INSCRIPTION, c.width / 2, c.height / 2);
+  g.filter = 'none';
+  g.globalCompositeOperation = 'lighter';   // a texture channel merge, not a draw to the screen
+  g.fillStyle = '#ff0000';
+  g.fillText(INSCRIPTION, c.width / 2, c.height / 2);
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return tex;
 }
 
 /** A capped cylinder along X. Layout: position, normal, part. */
@@ -563,7 +621,8 @@ export function createGLBackdrop(canvas) {
     seeds: () => vao(gl, Float32Array.from({ length: PARTICLES }, (_, i) => i), [[0, 1]]),
     glyphs: () => vao(gl, glyphColumns(), [[0, 4]]),
     lines: () => vao(gl, new Float32Array(6), [[0, 3]], gl.DYNAMIC_DRAW),
-    atlas: () => glyphAtlas(gl)
+    atlas: () => glyphAtlas(gl),
+    inscription: () => inscriptionTexture(gl)
   };
 
   function build() {
@@ -703,7 +762,10 @@ export function createGLBackdrop(canvas) {
     const mvp = multiply(vp, model);
 
     gl.enable(gl.DEPTH_TEST);
-    r.pyramid.use().m4('uMVP', mvp).m4('uModel', multiply(orbit, model)).fv('uTier', f.tierGlow).f('uFrac', f.level).f('uK', f.k).f('uTime', f.t)
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, r.inscription);
+    gl.activeTexture(gl.TEXTURE0);
+    r.pyramid.use().i('uInscription', 1).m4('uMVP', mvp).m4('uModel', multiply(orbit, model)).fv('uTier', f.tierGlow).f('uFrac', f.level).f('uK', f.k).f('uTime', f.t)
       .rgb('uStone', P.stone).rgb('uGold', P.gold).rgb('uGoldHot', P.goldHot).rgb('uGlyph', P.glyph).rgb('uArc', P.arc);
     gl.bindVertexArray(r.pyramidMesh.va);
     gl.drawArrays(gl.TRIANGLES, 0, r.pyramidMesh.count);
@@ -768,7 +830,20 @@ export function createGLBackdrop(canvas) {
       });
     }
     drawBolts(f, (p) => project(vp, p));
-    info.kemet = { apex, base: project(vp, [1, 0, 1]) };
+    // For tests: where the inscription's start, end and "up" land on screen,
+    // and whether the base faces the camera (its down-normal, in view space).
+    const towardCamera = multiply(cam.view, multiply(orbit, model));
+    info.kemet = {
+      apex,
+      base: project(vp, [1, 0, 1]),
+      inscription: {
+        start: project(mvp, [-0.84, 0, 0]),
+        end: project(mvp, [0.84, 0, 0]),
+        up: project(mvp, [0, 0, 0.4]),             // the text's top edge is toward +z
+        centre: project(mvp, [0, 0, 0]),
+        facing: -towardCamera[6] > 0.5           // view-space z of the (0,-1,0) normal
+      }
+    };
     gl.depthMask(true);
     gl.disable(gl.DEPTH_TEST);
   }

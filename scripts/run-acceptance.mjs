@@ -68,8 +68,8 @@ const rows = [
   ['Lighthouse — Best practices', scores['best-practices'] ?? 'n/a', true],
   ['Lighthouse — SEO', scores.seo ?? 'n/a', true],
   ...(skins ? ['terminal', 'fractal', 'forge', 'kemet'].map((skin) => [
-    `Skin CPU — ${THEME_LABELS[skin]} (main thread, over baseline)`,
-    `${skins.runs[skin].animated.cpuPercent}% total, +${skins.runs[skin].overBaselinePercent}% vs Light · ${skins.runs[skin].animated.fps} fps`,
+    `Skin CPU — ${THEME_LABELS[skin]} (${skins.runs[skin].animated.renderer}; see note below)`,
+    `app JS +${skins.runs[skin].overBaselinePercent}% vs Light · main thread ${skins.runs[skin].animated.cpuPercent}% incl. waiting on SwiftShader · GPU proc ${skins.runs[skin].animated.gpuProcessPercent ?? 'n/a'}% (CPU-emulated) · ${skins.runs[skin].animated.fps} fps · 2D fallback ${skins.runs[skin].fallback2d.cpuPercent}%`,
     skins.runs[skin].withinBudget
   ]) : []),
   ['App shell size', `${footprint?.shell.mb ?? '?'} MB`, true],

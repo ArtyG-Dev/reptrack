@@ -560,14 +560,20 @@ export function createGLBackdrop(canvas) {
     size = { w: 0, h: 0 };
   }
 
-  /** Multisampled colour+depth for the scene, resolved into a texture the
-   *  bounding pass reads. MSAA is what keeps pyramid and plate edges clean. */
-  function ensureTargets(w, h) {
-    if (size.w === w && size.h === h && r.resolve) return;
+  /** The scene target the bounding pass reads. Below 2× device pixels it is
+   *  multisampled (4×) and resolved, which is what keeps pyramid and plate
+   *  edges clean; at 2× the pixels are already small enough that MSAA would
+   *  quadruple the fill bandwidth on exactly the phones where it costs most,
+   *  for edges nobody can see — so it renders straight into the target. */
+  function ensureTargets(w, h, dpr) {
+    const want = dpr >= 1.75 ? 0 : Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0);
+    if (size.w === w && size.h === h && r.resolve && size.samples === want) return;
     r.resolve?.free();
-    if (r.ms) { gl.deleteFramebuffer(r.ms.fbo); gl.deleteRenderbuffer(r.ms.colour); gl.deleteRenderbuffer(r.ms.depth); }
+    if (r.ms) { gl.deleteFramebuffer(r.ms.fbo); gl.deleteRenderbuffer(r.ms.colour); gl.deleteRenderbuffer(r.ms.depth); r.ms = null; }
     r.resolve = target(gl, w, h);
-    const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0);
+    size = { w, h, samples: want };
+    if (!want) return;
+    const samples = want;
     const fbo = gl.createFramebuffer();
     const colour = gl.createRenderbuffer();
     const depth = gl.createRenderbuffer();
@@ -580,7 +586,6 @@ export function createGLBackdrop(canvas) {
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     r.ms = { fbo, colour, depth };
-    size = { w, h };
   }
 
   try { build(); } catch (error) {
@@ -796,10 +801,12 @@ export function createGLBackdrop(canvas) {
     const y0 = Math.round(((f.band[0] + 1) / 2) * size.h);
     const h = Math.max(1, Math.round(((f.band[1] - f.band[0]) / 2) * size.h));
     const zoom = f.k ** 1.3;
-    const half = ZOOM.startHalf * (ZOOM.minHalf / ZOOM.startHalf) ** zoom * (1 + 0.03 * Math.sin(f.t * 0.1));
-    const shrink = half / ZOOM.startHalf;
-    const centre = ZOOM.target.map((v, i) => v + (ZOOM.start[i] - v) * shrink);
     const aspect = size.w / h;
+    // At zero the whole set must fit, which a narrow portrait view decides by width.
+    const startHalf = Math.max(ZOOM.startHalf, 1.6 / aspect);
+    const half = startHalf * (ZOOM.minHalf / startHalf) ** zoom * (1 + 0.03 * Math.sin(f.t * 0.1));
+    const shrink = half / startHalf;
+    const centre = ZOOM.target.map((v, i) => v + (ZOOM.start[i] - v) * shrink);
     info.fractal = { half, iterations: Math.round(ZOOM.minIter + (ZOOM.maxIter - ZOOM.minIter) * f.k), saturation: 0.35 + 0.65 * f.k };
 
     gl.viewport(0, y0, size.w, h);
@@ -869,23 +876,25 @@ export function createGLBackdrop(canvas) {
 
   return {
     gl,
-    resize(w, h) { if (r && !gl.isContextLost()) ensureTargets(w, h); },
+    resize() {},                        // targets follow the canvas size in render()
     /** Draw one frame. `f` is everything backdrop.js knows; see its draw(). */
     render(f) {
       if (!r || gl.isContextLost()) return false;
       const scene = SCENES[f.skin];
       if (!scene) return false;
-      ensureTargets(canvas.width, canvas.height);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, r.ms.fbo);
+      ensureTargets(canvas.width, canvas.height, f.dpr);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, (r.ms || r.resolve).fbo);
       gl.viewport(0, 0, size.w, size.h);
       gl.clearColor(f.palette.base[0] / 255, f.palette.base[1] / 255, f.palette.base[2] / 255, 1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const extra = scene(f) || {};
       gl.disable(gl.BLEND);
 
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, r.ms.fbo);
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, r.resolve.fbo);
-      gl.blitFramebuffer(0, 0, size.w, size.h, 0, 0, size.w, size.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      if (r.ms) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, r.ms.fbo);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, r.resolve.fbo);
+        gl.blitFramebuffer(0, 0, size.w, size.h, 0, 0, size.w, size.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
       const ceiling = f.full ? 1 : lum(f.palette.ink) * 0.995;

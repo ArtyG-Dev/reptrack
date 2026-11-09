@@ -728,6 +728,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     assert.equal(await page.getAttribute('html', 'data-theme'), 'neon', 'applies without a reload');
 
     await page.reload({ waitUntil: 'load' });
+    await page.waitForSelector('#set-theme');   // booted (it reloads onto Settings): the saved theme is applied then, not at 'load'
     assert.equal(await page.getAttribute('html', 'data-theme'), 'neon', 'the choice persists');
 
     await context.close();

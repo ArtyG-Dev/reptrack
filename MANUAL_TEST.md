@@ -31,21 +31,30 @@ Then confirm the parsed set appears (60 kg × 10) and tap **Save**.
 
 ---
 
-## Check 2: the animated skins on a real phone
+## Check 2: the 3D skins and the full-screen view on a real phone (one pass, ~5 minutes)
 
-`npm run skins` measures each skin at 2–3% of one core — but that is headless Chromium on a
-desktop CPU, and it only counts main-thread work. It cannot see the GPU cost of the frosted
-glass blur, which on a phone is plausibly the bigger half. So the budget in the brief
-(~5% CPU on a mid-range Android, no meaningful battery hit over a session) is only really
-answerable here.
+Since the WebGL2 pass the skins draw on the phone's GPU. Nothing headless can measure that:
+`npm run skins` runs on a machine with **no GPU**, where WebGL2 is emulated on the CPU, so it
+can only prove the app's own JavaScript is cheap (under 1% of a core) — not that the GPU work
+is. The budget in the brief (~5% CPU on a mid-range Android, the phone not heating up) is only
+answerable here. See `VISUALS.md` for what each skin should look like at each level.
 
 1. On the phone, **Settings → Theme → Kemet**. Then **Forge**, **Fractal**, **Terminal**.
-2. For each: leave it on the Today tab for ~30 seconds and just watch.
-3. Then do one real thing — start a session and log a set by voice.
+2. For each: leave it on the Today tab for ~30 seconds and just watch. It should move
+   smoothly — the pyramid and barbell turning, the fractal breathing, the glyphs falling.
+3. Tap **View** (bottom right of the Today cards). The graphic fills the screen with the
+   level shown at the bottom. On Kemet and Forge, drag sideways to turn it; let go and it
+   carries on by itself. Tap the scene once — the level label hides; tap again to bring it
+   back.
+4. Press the **Android back button (or back gesture)**. You should be back on Today, still
+   in RepTrack — not dropped out of the app. Open **View** again and leave via **✕** too.
+5. Then do one real thing — start a session and log a set by voice.
 
-Kemet is the one to watch hardest: the pyramid, its ten tiers and the arcs crawling over it
-are the most drawing any skin does. Fractal's Mandelbrot is computed once when the theme
-loads, so a brief hitch *on switching to it* is expected and fine; a sustained one is not.
+Do the whole pass on one charge and keep a hand on the back of the phone: **after five
+minutes across the four skins it should not feel warmer than it does browsing the web.**
+Fractal and Kemet do the most per-pixel work, so watch those hardest. If the phone has no
+WebGL2 (rare on anything from the last six years), the skins quietly fall back to the
+previous flat 2D versions — that is the designed behaviour, not a fault.
 
 ### What to watch for
 
@@ -54,7 +63,10 @@ loads, so a brief hitch *on switching to it* is expected and fine; a sustained o
 | Scrolling and tapping stay as smooth as they are on Light | ✅ Pass |
 | The background is a slow drift/glow — no flicker, no strobe, nothing sharp | ✅ Pass — it should be barely noticeable |
 | The background visibly freezes the instant the mic starts listening, and resumes after | ✅ Pass — this is the auto-pause working |
-| The phone feels warm, or the battery drops noticeably faster than usual during a session | ❌ Over budget — tell me which skin and I'll simplify it (fewer particles, lower backing-store resolution, or drop the blur to a plain scrim on small screens) |
+| The phone feels warm, or the battery drops noticeably faster than usual during a session | ❌ Over budget — tell me which skin and I'll simplify it (render the Today view below 2× pixels, cap Fractal's iterations lower, fewer particles, or drop the blur to a plain scrim on small screens) |
+| **View** fills the screen, drag turns Kemet/Forge, and **back** returns to Today inside the app | ✅ Pass |
+| Back leaves the app, or the view gets stuck open | ❌ Tell me the phone and Chrome version |
+| Lightning ever looks like a strobe — rapid flashing rather than separate strikes | ❌ Stop and tell me. It is capped in code at 3 flashes per second, so this would be a bug |
 | Any stutter while scrolling, or the keyboard/mic feeling laggy | ❌ Same — tell me which skin |
 
 Also worth a quick look while you're in there:
@@ -94,8 +106,10 @@ Also worth a quick look while you're in there:
 
 **Check 2 — skins:**
 
-- **Pass** → the device half of criterion #34 is recorded against the headless numbers.
+- **Pass** → the device half of criterion #34 and of the 3D-visuals CPU line is recorded
+  against the headless numbers.
 - **Warm or stuttering** → I simplify the offending skin rather than shipping it as-is,
-  which is what the brief asks for. In order of what I'd try: halve the particle count,
-  drop the canvas backing store another step, then replace `backdrop-filter` with an opaque
-  scrim below a screen-width threshold. The skin stays; the cost comes down.
+  which is what the brief asks for. In order of what I'd try: render the Today view (where
+  92% glass covers most of it) at 1× instead of 2× device pixels, lower Fractal's iteration
+  cap, halve the particle counts, then replace `backdrop-filter` with an opaque scrim below a
+  screen-width threshold. The skin stays; the cost comes down.

@@ -29,6 +29,9 @@ progression, weekly summary. Phases 2–4 (nutrition, multi-user, auth/social) a
    edit sheet in `views/today.js`.
 6. **All storage goes through `js/store.js`.** Nothing but `store.js` may import `db.js`.
    Enforced by test.
+7. **No more than 3 flashes in any 1-second window (WCAG 2.3.1).** Every lightning effect,
+   in either renderer, requests its flash through the one limiter in `js/theme-engine.js`.
+   Enforced by test, in node and in real Chromium, for every theme at maximum intensity.
 
 ---
 
@@ -50,7 +53,12 @@ js/
   progression.js        1RM/hold-duration scoring, PR detection, progression nudge (pure)
   summary.js            weekly plain-text summary, reps- and hold-mode rows (pure)
   consistency.js        consistency score, streak level, month percent, frost (pure)
-  backdrop.js           the animated-skin canvas: 30fps cap, auto-pause, static mode
+  backdrop.js           the animated-skin loop: 30fps cap (60 full screen), auto-pause, static
+                        mode, eased values; picks WebGL2 or the 2D fallback renderers in here
+  backdrop-gl.js        the four WebGL2 scenes + the luminance-bounding pass
+  gl.js                 hand-rolled WebGL2 core: programs, buffers, targets, matrices, lines
+  theme-engine.js       intensity driver, flash limiter, lightning scheduling, rotation cap (pure)
+  graphic-view.js       the full-screen graphic view (View button on Today)
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
   ui.js                 element builder, toasts, <dialog> sheets, disclosure, share/download
   exercises-seed.js     starter exercise dictionary + CATEGORIES suggestion list
@@ -66,17 +74,19 @@ tests/                  node:test — unit, IndexedDB (fake-indexeddb) and Playw
 ```
 
 **Dependency direction:** `views/* → state.js → store.js → db.js`. Pure helpers
-(`parser`, `progression`, `summary`, `chart`, `consistency`) depend on nothing but each
-other. `backdrop.js` is a leaf: `app.js` and `views/settings.js` push into it, and it reads
-nothing back out of the app — every colour it draws comes from CSS custom properties.
+(`parser`, `progression`, `summary`, `chart`, `consistency`, `theme-engine`) depend on
+nothing but each other. `backdrop.js` (with `backdrop-gl.js → gl.js` beneath it) is a leaf:
+`app.js`, `views/settings.js` and `graphic-view.js` push into it, and it reads nothing back
+out of the app — every colour it draws comes from CSS custom properties.
 
 ---
 
-## Data model (IndexedDB `reptrack`, version 1)
+## Data model (IndexedDB `reptrack`, version 2)
 
 ```
 Exercise  { id, name, aliases[], muscleGroup, category, mode, isCustom, isBodyweight }
-Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility }
+Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility,
+            sessionType, className, instructor, location, attendance }
 SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
             holdSeconds, side, isPR, lastModified, visibility }
 Run       { id, dateISO, distance, distanceUnit, durationSec, notes, lastModified, visibility }
@@ -108,6 +118,12 @@ Details that look redundant and are not:
   its exercise's mode itself. `progression.recordScore()` is the one place that branch
   lives; everything downstream (PRs, "best set", the chart series) uses its output and
   doesn't need to know the difference.
+- **`Session.sessionType`** (`gym | run | class | pt`, default `gym`) and **`className`,
+  `instructor`, `location`, `attendance`** (`attended | missed | cancelled`, default `null`)
+  are reserved for the class/PT build specified in `docs/PHASE_ROADMAP.md`. **Nothing reads
+  them yet.** Version 2 exists only to stamp `gym` on sessions written before the field; runs
+  are their own store, so they are untouched. `db.withSessionDefaults()` is also applied on
+  import, so an older backup arrives complete. `SCHEMA_VERSION` (the backup format) stayed 1.
 - **`settings.panelState`** — `{ [scope]: { [category]: boolean } }`, `scope` is
   `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
   `state.setPanelExpanded()`, which also supply the "most recently used category starts
@@ -169,6 +185,38 @@ answer is to not use speech recognition at all, which the tap-to-text fallback a
 supports as a complete alternative path.
 
 ---
+
+## Theme engine — one intensity, one flash gate
+
+`js/theme-engine.js` — pure, clock-free, covered by `tests/theme-engine.test.js`. Every
+animated skin reads its shared effects from one number:
+
+```
+intensity = clamp(0.6 × streakLevel / 10  +  0.4 × monthPercent, 0, 1)
+```
+
+The streak is weighted more because it is the steadier signal (28-day damped, a rest day
+never resets it), while `monthPercent` is jumpy early in a month by construction. Either
+metric alone moves the scene (max 0.6 / 0.4), and both maxed reach 1. `backdrop.js` eases
+the shown values toward the live ones (`approach()`, τ ≈ 1.2 s), so nothing snaps.
+Static mode and the first values after a skin loads are snapped instead.
+
+**What reads `intensity`:** rotation speed, glow and bloom, particle density and travel,
+lightning frequency and branching, Fractal zoom/iterations/saturation, Terminal stream
+speed/density and packet bursts. **What reads its own metric directly**, because displaying
+that metric is its job: the ten Kemet tiers (`streakLevel`), the halo stages and the Forge
+heat colour (`monthPercent`, existing 25/50/90% and 15–30% thresholds), Forge iron clarity
+(`streakFraction`), the Forge glow (`glow`, damped by frost). Neither metric's formula
+changed in this pass.
+
+**Flash safety.** `createFlashLimiter()` is a sliding window: at most 3 grants in any
+(t − 1000 ms, t]. One limiter per page, shared by every bolt track in both renderers.
+`updateBoltTrack()` schedules strikes by intensity (8 s mean gap at 0, 1.2 s at 1) and asks
+the limiter. A refused strike stays due and is retried next frame. Intensity buys branching
+and frequency, never a rate past the cap.
+
+**Rotation** is capped at one revolution per 8 s (`ROTATION.maxRadPerS`), whatever the
+intensity. Drag in the full-screen view is the user's hand and is not capped.
 
 ## Consistency score
 
@@ -441,10 +489,14 @@ Paint a colour that isn't a token and that proof silently stops being true.
 - `SKIN_TOKENS` must list every token the renderer reads. `readPalette()` has a hardcoded
   fallback for each one, so a skin that forgets to *declare* a token still renders happily —
   in a colour no contrast test has ever seen. The test cross-checks the two.
-- **Never use an additive composite op** (`globalCompositeOperation = 'lighter'`, `screen`,
-  …). Normal source-over alpha is a convex combination, so stacked draws land *between* the
-  colours involved and can't exceed `--backdrop-ink` however many layers pile up. Additive
-  blending breaks exactly that, and would break it silently.
+- **In the 2D renderer, never use an additive composite op** (`globalCompositeOperation =
+  'lighter'`, `screen`, …). Normal source-over alpha is a convex combination, so stacked
+  draws land *between* the colours involved and can't exceed `--backdrop-ink` however many
+  layers pile up. Additive blending breaks exactly that, and would break it silently. **The
+  WebGL2 scenes may blend additively**, because they hold the bracket differently: every
+  scene renders offscreen and `POST_FS` in `backdrop-gl.js` clamps each pixel's luminance
+  into `[base, ink]` before it reaches the screen (DECISIONS #74). Never draw a WebGL scene
+  straight to the default framebuffer, because that skips the clamp.
 
 **The feature band.** Each skin draws its signature graphic (pyramid, barbell, Mandelbrot)
 into `featureBand()` — the bottom third of the viewport, *less* the tab bar's height. The
@@ -467,6 +519,26 @@ Everything else is already handled centrally and needs no per-skin work: the 30f
 `visibilitychange`, the voice-recognition pause, `prefers-reduced-motion`, and the manual
 reduce-effects toggle all live in `backdrop.js`'s `shouldRun()`.
 
+**The WebGL2 scene.** Each skin also has a scene function in `js/backdrop-gl.js`, which is
+what normally runs. The 2D draw function is the fallback for no WebGL2, a failed build or a
+lost context, so a new skin needs both. A scene:
+
+- reads colours only from `f.palette` (the same `--backdrop-*` tokens) and draws into the
+  bound target. `render()` then runs the bounding pass, so never bind the default
+  framebuffer yourself;
+- takes shared effects from `f.k` (intensity) and its displayed metric from `f.level` /
+  `f.month` / `f.tierGlow`, and rotates by `f.spin` (integrated and capped in `backdrop.js`;
+  drag writes the same value);
+- frames its graphic with `camera(f, { targetY, needH, needW, tilt })`, which fits it into
+  `f.band` (the Today feature band, or the full viewport when `f.full`);
+- requests lightning only through `strike(f, trackName, level, make)`, and lists its track
+  names in `LIGHTNING_TRACKS` in `theme-engine.js` so the 10-second cap test drives them;
+- registers its programs and meshes in `SOURCES` / `MAKERS`, which compile lazily on first
+  use, so no skin pays for another's shaders.
+
+Then add it to `SKINS` in `tests/visuals.test.js` and `scripts/capture-visuals.mjs`, run
+`npm run visuals`, and look at the screenshots.
+
 **Two things a first pass at a skin will get wrong** (see `DECISIONS.md` #40 — a real
 regression, diagnosed the hard way):
 
@@ -483,9 +555,11 @@ regression, diagnosed the hard way):
   only the "hot" elements on top of that base state should be gated.
 
 Before assuming a skin's loop is broken, check `window.__backdrop.getDiagnostics()`
-(`running`, `frames` advancing) and read the canvas pixels back with `getImageData` — "looks
-like nothing is happening" and "the loop stopped" are different bugs with different fixes,
-and the diagnostics distinguish them in seconds.
+(`renderer`, `running`, `frames` advancing) and read the pixels back with
+`window.__backdrop.readPixels()`, which serves whichever renderer is live. Don't use
+`getImageData` on `#backdrop`, because under WebGL2 that canvas is never drawn and reads as
+blank. "Looks like nothing is happening" and "the loop stopped" are different bugs with
+different fixes, and the diagnostics distinguish them in seconds.
 
 ---
 
@@ -495,6 +569,7 @@ and the diagnostics distinguish them in seconds.
 npm test           # everything
 npm run skins      # CPU cost of each skin vs a no-canvas baseline
 npm run palettes   # design aid: contrast of a candidate skin palette, before writing CSS
+npm run visuals    # screenshots of every skin at intensity 0 / 0.5 / 1 → docs/screenshots/
 npm run acceptance # tests + footprint + Lighthouse + skin cost, rewrites ACCEPTANCE.md
 ```
 
@@ -515,6 +590,14 @@ npm run acceptance # tests + footprint + Lighthouse + skin cost, rewrites ACCEPT
   touch a background or text colour, so it cannot move any ratio).
 - `pwa-static` — manifest, icon dimensions, service-worker precache completeness, and the
   architectural rules listed under "Hard constraints".
+- `theme-engine` — the intensity formula, easing, the rotation cap, the sliding-window flash
+  limiter, and 10 simulated seconds at maximum intensity for every theme at 30 and 60 fps.
+- `visuals` — real Chromium against the WebGL2 scenes: DPR cap, frames differ 500 ms apart,
+  reduced motion is pixel-identical with Kemet's seams countable, text ≥ 4.5:1 against real
+  pixels at intensity 0 and 1, 10 s at max never exceeds 3 flashes/s, rotation cap, 2D
+  fallback with WebGL2 unavailable, context loss and restore, and the full-screen view's
+  focus, exits and drag. Headless Chromium has no GPU, so this runs on SwiftShader and needs
+  `--enable-unsafe-swiftshader` (set in `tests/helpers/browser.mjs`).
 - `browser` — real Chromium via Playwright: offline reload, voice (stubbed recogniser),
   the tap-to-text fallback, hold-mode logging, collapsible-panel keyboard operation and
   persistence, the theme toggle, runs, weekly summary download *and* Web Share, JSON

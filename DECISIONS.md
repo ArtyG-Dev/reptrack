@@ -985,3 +985,125 @@ Two adjustments after seeing it running:
 - The white-hot layer glowed the rod but left the vertical bars looking cold beside it. They
   now take the same heat ramp at 1.35× intensity — they are the tallest, most readable pieces
   of the barbell, and the effect is called "white-hot bars".
+
+### 73. The 3D skins are hand-rolled WebGL2, and "≤ 20 KB" is met gzipped, not raw
+
+The brief asked for no 3D library, with the engine at ≤ ~20 KB. The renderer core
+(`js/gl.js`: compile, buffers, the multisample target, six matrix functions, screen-space
+thick lines) is **6.1 KB raw**. The four scenes (`js/backdrop-gl.js`) are 39.6 KB raw, and
+most of that is GLSL source held as strings. Shader text does not minify the way JS does
+without a build step, and this project has no build step. Shipped size is **16 KB gzipped**
+for the core plus scenes, 19 KB with `theme-engine.js` included. So the target is met as
+transferred and missed as raw bytes on disk. For scale, Three.js is ~600 KB raw. No
+dependency was added, so no exception needed recording.
+
+### 74. The contrast proof moved from "by construction" to "by a bounding pass"
+
+The 2D renderer keeps every frame inside `[--backdrop-base, --backdrop-ink]` because it
+only paints token colours with source-over blending (#40, #68). Lit 3D shading, specular,
+bloom and additive glow cannot promise that. So the WebGL2 renderer draws each scene into
+an offscreen target, and one final pass clamps every pixel's relative luminance into that
+range. It scales down above the ceiling and adds equal grey below the floor. Both are exact
+in linear RGB, because luminance is linear there. Consequences:
+
+- **Additive blending is allowed in WebGL scenes only.** The halo, sparks, embers and
+  bolts all use it, as the brief asks for the halo. The old rule still binds the 2D
+  renderer, where nothing clamps afterwards, and `contrast.test.js` still enforces it
+  there. CLAUDE.md now scopes the rule accordingly.
+- **The guarantee is checked on pixels, not argued.** `browser.test.js` reads every pixel
+  of all four skins back at five metric combinations and asserts none exceeds the ink
+  ceiling. Before this pass that test read the 2D canvas directly, which under WebGL is
+  never drawn, so it would have passed vacuously. All pixel reads now go through
+  `__backdrop.readPixels()`, which serves whichever renderer is live.
+- **In the full-screen view the ceiling is lifted to white.** No text sits over the graphic
+  there except the level pill and two buttons, which carry their own 92% glass scrim, and
+  `visuals.test.js` checks them at 4.5:1 against the real pixels.
+
+### 75. Flash safety is now WCAG 2.3.1's number, enforced by one limiter
+
+Previously the rule was a stricter floor, invented for this app: no flash closer than 3.5 s
+to the last (#69). This brief explicitly wants faster, more frequent lightning that is
+capped at **3 flashes in any 1 s window**, in code. So `theme-engine.js` has one
+`createFlashLimiter()`. It is a sliding window, not a per-second bucket, which would allow
+six flashes across a second boundary. Every bolt in both renderers requests it, so the cap
+covers what the eye sees, not any one layer. The scheduling rate is set well below the cap:
+at maximum intensity each track averages one strike per ~1.2 s. Intensity buys branching
+and frequency up to that rate, never past the cap. The cap is tested for every theme in
+node (10 simulated seconds at 30 and 60 fps) and in real Chromium (10 s at maximum).
+
+This is a relaxation of the old floor, made deliberately because the brief asked for it.
+If strikes ever feel like a strobe on a device, raising `LIGHTNING.fastDelayS` is a
+one-number change and stays inside the WCAG cap either way.
+
+Found on the way: a strike booked while intensity was low (up to ~10 s away) was not
+pulled in when intensity jumped, so lightning lagged real progress. `updateBoltTrack` now
+caps a pending wait at the current level's longest gap.
+
+### 76. Terminal and Fractal ink were raised, because their ceilings made them invisible
+
+Terminal's `--backdrop-ink` was `#2f5567`, luminance 0.08. That was the cause of the earlier
+"barely visible" bug, and a 3D field bounded by it could not be bright either. Fractal's
+`#4a3a7a` (0.06) capped the zoomed filaments at a murk. At 92% glass both had a lot of
+headroom: the new inks (`#7fd8ec`, `#cdbdf8`) still leave the worst text pair at 6.7:1 and
+6.5:1. `contrast.test.js` re-proves every pair against the new range. The 2D fallback gets
+brighter too, which is intended.
+
+### 77. The full-screen level label, and "the activity visuals never speak"
+
+CLAUDE.md says no streak counts and no copy derived from consistency. The brief explicitly
+asks for "Tier 6 of 10 · 58% this month" in the full-screen view, so it is there, kept
+inside the spirit of the rule. It states only what has been earned and never a gap, a
+count of missed days or a nudge. It appears only in a view the user chose to open, hides
+with one tap, and is not `aria-live`, so it is never announced unprompted. It reads the
+values the scene is actually drawing, so label and picture cannot disagree. The
+`theme layer never scolds` test still passes over every tab.
+
+### 78. CPU is measured, but on a machine with no GPU, and the numbers say so
+
+`npm run skins` now reports per renderer. With WebGL2, app JavaScript costs **+0.7–0.9% of
+a core**, the same as the 2D skins. Total main-thread time reads 56–82%, which looks
+alarming, so it was investigated before being explained. A WebGL2 canvas that only clears
+costs 14% of the main thread here versus 3% for 2D: with no GPU, Chromium composites in
+software and reads every WebGL frame back synchronously. The rest is the main thread blocked
+on SwiftShader, which runs the GPU work on 2–3 CPU cores. A phone does that on its GPU,
+asynchronously. So the gate is the app's own JavaScript for WebGL2 and total CPU for the 2D
+fallback, and the blocked time and the GPU-process figure are recorded beside it, not
+hidden. The real ~5%-on-a-phone answer needs the phone (`MANUAL_TEST.md` Check 2).
+
+Real GPU load still matters on a phone, so two choices bear on it:
+
+- **4× MSAA only below 2× device pixels.** At DPR 2 the pixels are small enough that
+  multisampling would roughly quadruple fill bandwidth for edges nobody can see.
+- **`min(devicePixelRatio, 2)` is honoured on the Today view too**, as the brief says, even
+  though 92% glass covers most of that frame. Rendering Today at 1× would cut its GPU work
+  roughly fourfold. It is the first thing to try if the phone check runs warm, and is not
+  done pre-emptively because the brief asked for sharpness.
+
+GL context creation and shader compilation are lazy: nothing happens until a glass skin is
+chosen, and each skin compiles only its own programs. A test caught the alternative. Eager
+creation slowed boot enough that the Light theme was applied late after a reload.
+
+### 79. Class/PT attendance: schema only, a real migration, no SCHEMA_VERSION bump
+
+`Session` gains `sessionType` (`gym | run | class | pt`) plus null `className`,
+`instructor`, `location` and `attendance`. The brief says existing sessions migrate "to gym
+or run". Runs live in their own store and are not Sessions, so every existing Session is a
+gym session. `'run'` is reserved for a future where a run is logged as a Session. The
+database goes to version 2 solely to stamp that field on old records. Older backups are
+filled on import. `SCHEMA_VERSION` (the backup format) is **not** bumped: the top-level
+shape did not change, and bumping it would make older app versions refuse newer backups
+they can read perfectly well.
+
+The later-build spec is in `docs/PHASE_ROADMAP.md`, not a new `ROADMAP.md`, so there is one
+roadmap rather than two that drift apart.
+
+### 80. Two things the brief referred to that did not exist
+
+- **A "passcode gate"** is listed among existing tests to keep green. There is no passcode
+  gate anywhere in the code or tests. Nothing was built for it, because inventing an auth
+  feature inside a visuals pass would be the wrong place to do it.
+- **The browser tests had been silently skipping** in any environment where Playwright
+  ships `chrome-linux64/` rather than `chrome-linux/`. The helper now finds both. Chromium
+  also needs `--enable-unsafe-swiftshader` to keep software WebGL. Without it, a future
+  Chromium would quietly drop the tests to the 2D fallback and they would test the wrong
+  renderer.

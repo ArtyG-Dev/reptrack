@@ -271,7 +271,6 @@ function resizeGL() {
   glCanvas.width = w;
   glCanvas.height = h;
   glDims = { w, h };
-  glr.resize(w, h);
 }
 
 /** The band the GL scenes frame their graphic into, in NDC [bottom, top]. Same

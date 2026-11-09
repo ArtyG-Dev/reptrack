@@ -9,7 +9,7 @@ _Measured 2026-11-09 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 211 passed, 0 failed | ✅ |
+| Automated tests | 244 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -17,16 +17,16 @@ _Measured 2026-11-09 — regenerate with `npm run acceptance`._
 | Lighthouse — Accessibility (Fractal) | 100 | ✅ |
 | Lighthouse — Accessibility (Forge) | 100 | ✅ |
 | Lighthouse — Accessibility (Kemet) | 100 | ✅ |
-| Lighthouse — Performance | 91 | ✅ |
+| Lighthouse — Performance | 86 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 2.2% total, +2.2% vs Light · 22.3 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 2.7% total, +2.7% vs Light · 22 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 2.5% total, +2.5% vs Light · 22.2 fps | ✅ |
-| Skin CPU — Kemet (main thread, over baseline) | 2.5% total, +2.5% vs Light · 22.5 fps | ✅ |
-| App shell size | 0.242 MB | ✅ |
-| A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
-| Total installed footprint | 3.367 MB of a 50 MB budget | ✅ |
+| Skin CPU — Terminal (webgl2; see note below) | app JS +0.8% vs Light · main thread 81.4% incl. waiting on SwiftShader · GPU proc 279.4% (CPU-emulated) · 30 fps · 2D fallback 2.8% | ✅ |
+| Skin CPU — Fractal (webgl2; see note below) | app JS +0.8% vs Light · main thread 70.8% incl. waiting on SwiftShader · GPU proc 239.6% (CPU-emulated) · 29.9 fps · 2D fallback 3.4% | ✅ |
+| Skin CPU — Forge (webgl2; see note below) | app JS +0.8% vs Light · main thread 78.7% incl. waiting on SwiftShader · GPU proc 267.7% (CPU-emulated) · 30.1 fps · 2D fallback 3.1% | ✅ |
+| Skin CPU — Kemet (webgl2; see note below) | app JS +0.9% vs Light · main thread 62.8% incl. waiting on SwiftShader · GPU proc 209.3% (CPU-emulated) · 30 fps · 2D fallback 2.9% | ✅ |
+| App shell size | 0.319 MB | ✅ |
+| A year of data (156 sessions, 3120 sets, 52 runs) | 3.164 MB stored | ✅ |
+| Total installed footprint | 3.483 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -224,6 +224,34 @@ Per `docs/FOLLOWUP_PROMPT_MONTHLY_HALO_1.md`.
 | 93 | The two metrics are demonstrably independent, not conflated | `consistency.test.js` → "month progress and streak level are genuinely independent" (a perfect 3-day month with an unfilled rolling window, and a streak carrying into an empty new month); `browser.test.js` → "the month-to-date layer responds independently of the streak level" sweeps each with the other pinned and asserts both respond | ✅ |
 | 94 | Live-review tuning applied: flattened torus halo, stronger glow on the vertical bars | Halo is now an ellipse (~1:0.32) drawn as a single radial gradient with the ring band shaped into its colour stops, sized to sit between the card panel and the pyramid apex without shortening the pyramid; the vertical bars take the heat ramp at 1.35× the rod's intensity. Both verified by screenshot — see `DECISIONS.md` #72 | ✅ |
 | 95 | Pages deployment re-verified live after this merge | GitHub Actions run [`837fdca`](https://github.com/ArtyG-Dev/reptrack/actions/runs/31499198946) completed with conclusion `success`. Same proxy limitation as above applies to fetching the live files back from here | ✅ |
+
+## Added after the 3D theme visuals / full-screen view update
+
+Per `docs/FOLLOWUP_PROMPT_3D_VISUALS.md`. Screenshots and the full
+evidence table are in `VISUALS.md`.
+
+**Superseded on the WebGL2 path, still true of the 2D fallback:** #46/#68 (the 3.5 s
+lightning floor is now the WCAG 3-per-second sliding window, DECISIONS #75), #70 (the
+Mandelbrot is a GPU shader; the 2D fallback still pre-renders, and its test now runs with
+`?renderer=2d`) and #87 (halo-to-pyramid bolts now run whenever the halo is present,
+growing more frequent and branched with intensity, as this brief asks).
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 96 | `theme-engine.js` with documented `intensity` formula; all themes read from it | `intensity = clamp(0.6 × streakLevel/10 + 0.4 × monthPercent)`, documented in `CLAUDE.md` → "Theme engine", including which effects read it and which display their own metric. `theme-engine.test.js` pins the formula and that each metric moves it alone | ✅ |
+| 97 | Hand-rolled WebGL2 engine ≤ ~20 KB, or deviation justified; 2D fallback works with WebGL disabled | No library. `gl.js` 6.1 KB; with the four scenes, 16 KB gzipped (46 KB raw, mostly GLSL source text). Deviation recorded in `DECISIONS.md` #73. `visuals.test.js` → "with WebGL2 unavailable the existing 2D skins run instead" | ✅ gzipped / ⚠️ raw, see #73 |
+| 98 | Kemet: 3D pyramid rotates, 10 tiers countable, rotation/glow/particles/halo lightning scale with intensity; rotation capped | Screenshots at 0/0.5/1. `visuals.test.js` counts the tier seams from pixels in the reduced-motion frame, and asserts rotation speeds up and stays ≤ 2π/8 rad/s; `browser.test.js` tier and brightness tests | ✅ |
+| 99 | Forge: 3D barbell, heat shader red→white per `monthPercent`, embers scale with intensity | Screenshots at 0/0.5/1; `browser.test.js` → streak and month layers each brighten the frame independently | ✅ |
+| 100 | Fractal: GPU shader, zoom/detail rise with intensity, no precision artefacts at max zoom | `browser.test.js` → "the fractal zooms deeper, iterates more and resolves more detail" (zoom, iterations, saturation and pixel edge energy). Max zoom keeps ~20 float32 steps per pixel; checked by eye in `docs/screenshots/fractal-1-full.jpg` | ✅ |
+| 101 | Terminal clearly visible at default settings (by screenshot) | `docs/screenshots/terminal-0-today.jpg`; `browser.test.js` asserts the cold frame is not dark and the hot one carries more light | ✅ |
+| 102 | Flash limiter: 10 s max intensity, ≤ 3 flashes in any 1 s window, every theme | `theme-engine.test.js` (all four themes, 30 and 60 fps, simulated) and `visuals.test.js` (all four, 10 s, real Chromium) | ✅ |
+| 103 | Full-screen view: Fullscreen API + fallback; close, Esc and Android back exit; focus handled; drag-to-rotate on Kemet and Forge | `visuals.test.js` → full-screen focus/exits test (Esc, ✕, `goBack()` stays in the app), overlay without the Fullscreen API, drag holds and resumes auto-rotation. The physical back gesture is in `MANUAL_TEST.md` Check 2 | ✅ |
+| 104 | Screenshots at 0 / 0.5 / 1.0 for every animated theme; animation-running and reduced-motion assertions pass | 24 shots in `docs/screenshots/`, embedded in `VISUALS.md`; `visuals.test.js` frame-difference and pixel-identical reduced-motion tests | ✅ |
+| 105 | CPU measured and recorded per theme; anything over budget simplified | Measured block above: app JS +0.7–0.8%. The no-GPU environment's blocked main-thread and SwiftShader figures are recorded beside it, and DECISIONS #78 explains why they are not phone numbers. MSAA dropped at ≥ 2× DPR to cut fill on high-DPI phones | ✅ headless / ⚠️ needs device — `MANUAL_TEST.md` Check 2 |
+| 106 | `sessionType` + reserved attendance fields with migration; nothing user-facing; roadmap spec | DB v2; `db.test.js` builds a genuine v1 database and migrates it, plus import of an older backup. Spec in `docs/PHASE_ROADMAP.md` → "Later build — class & PT attendance" | ✅ |
+| 107 | Existing suite still green: weight-display regression, no-audio-persistence, weekly summary, noindex | 244 passing; all named tests included. There is no passcode gate in this codebase to keep green (DECISIONS #80) | ✅ |
+| 108 | Footprint < 50 MB; Playwright dev-only and not deployed | Measured block above. `pwa-static.test.js` fails the build on any runtime dependency; nothing under `js/` imports Playwright | ✅ |
+| 109 | Pushed, Pages re-verified live, service worker cache bumped | Cache `reptrack-shell-v3`. Live result recorded in `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
 
 ## Build constraints
 

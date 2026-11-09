@@ -388,7 +388,7 @@ void main() {
 const GLYPH_VS = `#version 300 es
 layout(location = 0) in vec4 aG;
 uniform mat4 uVP;
-uniform float uTime, uSpeed, uDensity, uPx, uRate;
+uniform float uTime, uSpeed, uDensity, uPx, uRate, uTrail, uHeadGlow;
 uniform vec3 uInk, uS1, uS2;
 out vec3 vCol;
 out float vGlyph, vA, vBlur;
@@ -402,10 +402,13 @@ void main() {
   vec4 clip = uVP * vec4(aG.x, y, aG.y, 1.0);
   gl_Position = clip;
   float fog = exp(-clip.w * 0.05);
-  vA = on * fog * (1.0 - trail / 14.0) * step(0.0, y) * step(y, 7.5);
+  vA = on * fog * max(0.0, 1.0 - trail / uTrail) * step(0.0, y) * step(y, 7.5);
   vBlur = clamp((clip.w - 5.0) / 18.0, 0.0, 1.0);
   float bucket = h1(seed * 5.3);
-  vCol = trail < 0.5 ? uInk : (bucket < 0.5 ? uS1 : uS2);
+  // A bright leading glyph is earned: the share of columns whose head glows
+  // in --backdrop-ink rises with intensity; the rest lead in a stream colour.
+  bool glows = trail < 0.5 && h1(seed * 7.9) < uHeadGlow;
+  vCol = glows ? uInk : (bucket < 0.5 ? uS1 : uS2);
   vGlyph = floor(h1(seed * 9.1 + trail * 3.7 + floor(uTime * uRate + h1(seed) * 9.0)) * 16.0);
   gl_PointSize = vA > 0.0 ? clamp(0.55 * uPx / clip.w, 1.0, 64.0) : 0.0;
 }`;
@@ -858,7 +861,7 @@ export function createGLBackdrop(canvas) {
     blend(null);
     r.floor.use().rgb('uBase', P.base).rgb('uGrid', P.grid).rgb('uS2', P.stream2).rgb('uInk', P.ink)
       .f('uTime', f.t).f('uAspect', aspect).f('uTanY', Math.tan(fov / 2)).f('uPitch', pitch).f('uCamY', camY)
-      .f('uBurst', Math.min(Math.max((f.k - 0.45) / 0.5, 0), 1) * 0.4).f('uPulse', (0.75 + 0.25 * Math.sin(f.t * 0.35)) * (0.8 + 0.6 * f.k));
+      .f('uBurst', Math.min(Math.max((f.k - 0.3) / 0.5, 0), 1) * 0.4).f('uPulse', (0.75 + 0.25 * Math.sin(f.t * 0.35)) * (0.8 + 0.6 * f.k));
     fullscreen();
 
     const view = multiply(rotationX(pitch), translation(0, -camY, 0));
@@ -866,8 +869,8 @@ export function createGLBackdrop(canvas) {
     blend('add');
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, r.atlas);
-    r.glyph.use().m4('uVP', vp).f('uTime', f.t).f('uSpeed', 0.9 + 2.4 * f.k).f('uDensity', 0.65 + 0.35 * f.k).f('uPx', size.h)
-      .f('uRate', 2 + 6 * f.k).rgb('uInk', P.ink).rgb('uS1', P.stream).rgb('uS2', P.stream2).i('uAtlas', 0).f('uBright', 1.1 + 0.8 * f.k);
+    r.glyph.use().m4('uVP', vp).f('uTime', f.t).f('uSpeed', 0.9 + 2.4 * f.k).f('uDensity', 0.35 + 0.65 * f.k).f('uPx', size.h)
+      .f('uRate', 2 + 6 * f.k).f('uTrail', 6 + 8 * f.k).f('uHeadGlow', 0.12 + 0.88 * f.k).rgb('uInk', P.ink).rgb('uS1', P.stream).rgb('uS2', P.stream2).i('uAtlas', 0).f('uBright', 1.5 + 0.6 * f.k);
     gl.bindVertexArray(r.glyphs.va);
     gl.drawArrays(gl.POINTS, 0, r.glyphs.count);
   }

@@ -67,9 +67,21 @@ and saturation rises. At 1 the seahorse spirals are resolved. The deepest zoom k
 | **1** | <img src="docs/screenshots/terminal-1-today.jpg" width="200" alt="Terminal at intensity 1, Today view"> | <img src="docs/screenshots/terminal-1-full.jpg" width="200" alt="Terminal at intensity 1, full screen"> |
 
 Glyph columns recede over a grid floor. Near glyphs are large and bright; far ones are small,
-dim and blurred. It is clearly visible at the default setting (0), which was the earlier
-bug. Data velocity and density rise with intensity, and packet bursts run along the grid
-toward the viewer at the top of the range.
+dim and blurred. Progress is shown in four ways at once, so it reads in a still frame and not
+only in motion:
+
+| | 0 | 0.5 | 1 |
+|---|---|---|---|
+| Columns falling | 35% | ~68% | 100% |
+| Columns led by a glowing head | 12% | ~56% | 100% |
+| Trail length | 6 glyphs | 10 | 14 |
+| Packet bursts along the grid | none | yes (from 0.3) | yes |
+| Fall speed | 0.9× | 2.1× | 3.3× |
+
+Measured over 12 frames at each level: bright-glyph coverage is **0.24% → 0.99% → 4.77%** of
+the screen, and average light is 28 → 32 → 51. At 0 it is sparse but readable, which keeps the
+original "clearly visible at default" fix. (Any single still is a lottery about where the
+columns happen to be, which is why those numbers are averaged.)
 
 ---
 

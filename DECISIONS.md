@@ -1107,3 +1107,16 @@ roadmap rather than two that drift apart.
   also needs `--enable-unsafe-swiftshader` to keep software WebGL. Without it, a future
   Chromium would quietly drop the tests to the 2D fallback and they would test the wrong
   renderer.
+
+### 81. Terminal's progression is now visible in a still frame, not just in motion
+
+On review, Terminal at 0 and 0.5 looked almost identical in screenshots. Most of what scaled
+was speed and flicker rate, which a still cannot show. Its brightest glyphs also already hit
+the ink ceiling at 0, so "brighter" had nowhere to go. Four changes make the reward something
+you can see at a glance. Density now rises from 35% of columns (was 65%). A glowing
+`--backdrop-ink` head is earned: 12% of columns at 0, rising to all of them. Trails lengthen
+from 6 to 14 glyphs. Packet bursts start at 0.3 instead of 0.45. The stream colours' base
+gain went up (1.1 → 1.5) so the sparser 0 state stays readable. Measured over 12 frames,
+bright-glyph coverage goes 0.24% → 0.99% → 4.77% across 0 / 0.5 / 1. The bounding pass still
+clamps every pixel and the scene has no lightning, so neither the contrast proof nor the
+flash cap is touched.

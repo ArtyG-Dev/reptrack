@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-09T01:32:07.351Z",
+  "capturedAt": "2026-11-09T08:12:21.481Z",
   "source": "local",
   "shots": [
     {
@@ -8,7 +8,7 @@
       "streakLevel": 0,
       "monthPercent": 0,
       "renderer": "webgl2",
-      "frames": 235,
+      "frames": 236,
       "label": "Tier 0 of 10 · 0% this month"
     },
     {
@@ -17,7 +17,7 @@
       "streakLevel": 5,
       "monthPercent": 0.5,
       "renderer": "webgl2",
-      "frames": 233,
+      "frames": 237,
       "label": "Tier 5 of 10 · 50% this month"
     },
     {
@@ -26,7 +26,7 @@
       "streakLevel": 10,
       "monthPercent": 1,
       "renderer": "webgl2",
-      "frames": 229,
+      "frames": 235,
       "label": "Tier 10 of 10 · 100% this month"
     },
     {
@@ -35,7 +35,7 @@
       "streakLevel": 0,
       "monthPercent": 0,
       "renderer": "webgl2",
-      "frames": 202,
+      "frames": 215,
       "label": "Level 0 of 10 · 0% this month"
     },
     {
@@ -44,7 +44,7 @@
       "streakLevel": 5,
       "monthPercent": 0.5,
       "renderer": "webgl2",
-      "frames": 211,
+      "frames": 224,
       "label": "Level 5 of 10 · 50% this month"
     },
     {
@@ -53,7 +53,7 @@
       "streakLevel": 10,
       "monthPercent": 1,
       "renderer": "webgl2",
-      "frames": 204,
+      "frames": 216,
       "label": "Level 10 of 10 · 100% this month"
     },
     {
@@ -62,7 +62,7 @@
       "streakLevel": 0,
       "monthPercent": 0,
       "renderer": "webgl2",
-      "frames": 181,
+      "frames": 195,
       "label": "Level 0 of 10 · 0% this month"
     },
     {
@@ -70,17 +70,17 @@
       "intensity": 0.5,
       "streakLevel": 5,
       "monthPercent": 0.5,
-      "renderer": "webgl2",
-      "frames": 118,
-      "label": "Level 5 of 10 · 50% this month"
-    },
-    {
-      "skin": "fractal",
-      "intensity": 1,
-      "streakLevel": 10,
-      "monthPercent": 1,
       "renderer": "webgl2",
       "frames": 125,
+      "label": "Level 5 of 10 · 50% this month"
+    },
+    {
+      "skin": "fractal",
+      "intensity": 1,
+      "streakLevel": 10,
+      "monthPercent": 1,
+      "renderer": "webgl2",
+      "frames": 129,
       "label": "Level 10 of 10 · 100% this month"
     },
     {
@@ -89,7 +89,7 @@
       "streakLevel": 0,
       "monthPercent": 0,
       "renderer": "webgl2",
-      "frames": 206,
+      "frames": 228,
       "label": "Level 0 of 10 · 0% this month"
     },
     {
@@ -98,7 +98,7 @@
       "streakLevel": 5,
       "monthPercent": 0.5,
       "renderer": "webgl2",
-      "frames": 217,
+      "frames": 228,
       "label": "Level 5 of 10 · 50% this month"
     },
     {
@@ -107,7 +107,7 @@
       "streakLevel": 10,
       "monthPercent": 1,
       "renderer": "webgl2",
-      "frames": 199,
+      "frames": 222,
       "label": "Level 10 of 10 · 100% this month"
     }
   ]

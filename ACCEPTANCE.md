@@ -5,7 +5,7 @@ Regenerate the measured block with `npm run acceptance`.
 
 <!-- measured:start -->
 
-_Measured 2026-08-11 — regenerate with `npm run acceptance`._
+_Measured 2026-11-09 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
@@ -17,13 +17,13 @@ _Measured 2026-08-11 — regenerate with `npm run acceptance`._
 | Lighthouse — Accessibility (Fractal) | 100 | ✅ |
 | Lighthouse — Accessibility (Forge) | 100 | ✅ |
 | Lighthouse — Accessibility (Kemet) | 100 | ✅ |
-| Lighthouse — Performance | 93 | ✅ |
+| Lighthouse — Performance | 91 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (main thread, over baseline) | 2.9% total, +2.9% vs Light · 21.8 fps | ✅ |
-| Skin CPU — Fractal (main thread, over baseline) | 3.9% total, +3.9% vs Light · 22 fps | ✅ |
-| Skin CPU — Forge (main thread, over baseline) | 3.4% total, +3.4% vs Light · 22.3 fps | ✅ |
-| Skin CPU — Kemet (main thread, over baseline) | 3.5% total, +3.5% vs Light · 21.8 fps | ✅ |
+| Skin CPU — Terminal (main thread, over baseline) | 2.2% total, +2.2% vs Light · 22.3 fps | ✅ |
+| Skin CPU — Fractal (main thread, over baseline) | 2.7% total, +2.7% vs Light · 22 fps | ✅ |
+| Skin CPU — Forge (main thread, over baseline) | 2.5% total, +2.5% vs Light · 22.2 fps | ✅ |
+| Skin CPU — Kemet (main thread, over baseline) | 2.5% total, +2.5% vs Light · 22.5 fps | ✅ |
 | App shell size | 0.242 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.124 MB stored | ✅ |
 | Total installed footprint | 3.367 MB of a 50 MB budget | ✅ |

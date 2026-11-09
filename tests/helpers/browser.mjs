@@ -13,7 +13,7 @@ export function findChromium() {
   if (existsSync(root)) {
     const dirs = readdirSync(root).filter((d) => d.startsWith('chromium')).sort().reverse();
     for (const dir of dirs) {
-      for (const candidate of ['chrome-linux/chrome', 'chrome-linux/headless_shell']) {
+      for (const candidate of ['chrome-linux64/chrome', 'chrome-linux/chrome', 'chrome-linux/headless_shell']) {
         const full = join(root, dir, candidate);
         if (existsSync(full)) return full;
       }

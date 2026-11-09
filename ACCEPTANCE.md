@@ -251,7 +251,7 @@ growing more frequent and branched with intensity, as this brief asks).
 | 106 | `sessionType` + reserved attendance fields with migration; nothing user-facing; roadmap spec | DB v2; `db.test.js` builds a genuine v1 database and migrates it, plus import of an older backup. Spec in `docs/PHASE_ROADMAP.md` → "Later build — class & PT attendance" | ✅ |
 | 107 | Existing suite still green: weight-display regression, no-audio-persistence, weekly summary, noindex | 244 passing; all named tests included. There is no passcode gate in this codebase to keep green (DECISIONS #80) | ✅ |
 | 108 | Footprint < 50 MB; Playwright dev-only and not deployed | Measured block above. `pwa-static.test.js` fails the build on any runtime dependency; nothing under `js/` imports Playwright | ✅ |
-| 109 | Pushed, Pages re-verified live, service worker cache bumped | Cache `reptrack-shell-v3`. Live result recorded in `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
+| 109 | Pushed, Pages re-verified live, service worker cache bumped | Actions run #23 `success`. Live site `200`; manifest and service worker load from `/reptrack/` (SW scope `/reptrack/`, single cache `reptrack-shell-v3`); deployed files are byte-identical to the commit; WebGL2 running with no console errors; 24 live screenshots in `docs/screenshots/live/`. Details in `DEPLOYMENT.md` → "Live verification" | ✅ |
 
 ## Build constraints
 

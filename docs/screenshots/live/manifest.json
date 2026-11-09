@@ -1,0 +1,114 @@
+{
+  "capturedAt": "2026-11-09T07:38:09.517Z",
+  "source": "live",
+  "shots": [
+    {
+      "skin": "kemet",
+      "intensity": 0,
+      "streakLevel": 0,
+      "monthPercent": 0,
+      "renderer": "webgl2",
+      "frames": 238,
+      "label": "Tier 0 of 10 · 0% this month"
+    },
+    {
+      "skin": "kemet",
+      "intensity": 0.5,
+      "streakLevel": 5,
+      "monthPercent": 0.5,
+      "renderer": "webgl2",
+      "frames": 238,
+      "label": "Tier 5 of 10 · 50% this month"
+    },
+    {
+      "skin": "kemet",
+      "intensity": 1,
+      "streakLevel": 10,
+      "monthPercent": 1,
+      "renderer": "webgl2",
+      "frames": 231,
+      "label": "Tier 10 of 10 · 100% this month"
+    },
+    {
+      "skin": "forge",
+      "intensity": 0,
+      "streakLevel": 0,
+      "monthPercent": 0,
+      "renderer": "webgl2",
+      "frames": 210,
+      "label": "Level 0 of 10 · 0% this month"
+    },
+    {
+      "skin": "forge",
+      "intensity": 0.5,
+      "streakLevel": 5,
+      "monthPercent": 0.5,
+      "renderer": "webgl2",
+      "frames": 212,
+      "label": "Level 5 of 10 · 50% this month"
+    },
+    {
+      "skin": "forge",
+      "intensity": 1,
+      "streakLevel": 10,
+      "monthPercent": 1,
+      "renderer": "webgl2",
+      "frames": 212,
+      "label": "Level 10 of 10 · 100% this month"
+    },
+    {
+      "skin": "fractal",
+      "intensity": 0,
+      "streakLevel": 0,
+      "monthPercent": 0,
+      "renderer": "webgl2",
+      "frames": 187,
+      "label": "Level 0 of 10 · 0% this month"
+    },
+    {
+      "skin": "fractal",
+      "intensity": 0.5,
+      "streakLevel": 5,
+      "monthPercent": 0.5,
+      "renderer": "webgl2",
+      "frames": 123,
+      "label": "Level 5 of 10 · 50% this month"
+    },
+    {
+      "skin": "fractal",
+      "intensity": 1,
+      "streakLevel": 10,
+      "monthPercent": 1,
+      "renderer": "webgl2",
+      "frames": 135,
+      "label": "Level 10 of 10 · 100% this month"
+    },
+    {
+      "skin": "terminal",
+      "intensity": 0,
+      "streakLevel": 0,
+      "monthPercent": 0,
+      "renderer": "webgl2",
+      "frames": 227,
+      "label": "Level 0 of 10 · 0% this month"
+    },
+    {
+      "skin": "terminal",
+      "intensity": 0.5,
+      "streakLevel": 5,
+      "monthPercent": 0.5,
+      "renderer": "webgl2",
+      "frames": 221,
+      "label": "Level 5 of 10 · 50% this month"
+    },
+    {
+      "skin": "terminal",
+      "intensity": 1,
+      "streakLevel": 10,
+      "monthPercent": 1,
+      "renderer": "webgl2",
+      "frames": 217,
+      "label": "Level 10 of 10 · 100% this month"
+    }
+  ]
+}

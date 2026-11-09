@@ -128,3 +128,23 @@ it, and cannot be cleared by it. Do not read the tests above as a statement abou
 platform layer — they are a statement about RepTrack. Anyone who needs a guarantee spanning
 the platform should use the tap-to-text fallback, which is a complete alternative path to
 every voice feature and involves no microphone at all.
+
+---
+
+## Live verification
+
+### 3D theme visuals pass — commit `b5f9fa3`, 2026-11-09
+
+- GitHub Actions "Deploy to GitHub Pages" run #23 (id `42550053860`): conclusion `success`.
+- `https://artyg-dev.github.io/reptrack/` → `200`. `manifest.webmanifest`, `sw.js` and every new
+  module (`js/theme-engine.js`, `js/gl.js`, `js/backdrop-gl.js`, `js/graphic-view.js`) → `200`
+  with the right content types. `sw.js`, `js/backdrop.js` and `js/backdrop-gl.js` are byte-identical
+  to the commit.
+- In headless Chromium against the live site: the service worker registers with scope `/reptrack/`
+  and holds exactly one cache, `reptrack-shell-v3`. The bump means installed PWAs drop `v2` on their
+  next launch. Kemet runs on `webgl2` and animates, with no console errors.
+- `npm run visuals -- --url <live site>` captured all 24 shots from the live deployment into
+  `docs/screenshots/live/`. All four skins report `webgl2` and match the local captures.
+
+Earlier passes could only confirm the Actions run, because this sandbox's proxy refused the Pages
+host. This session's environment now allows it, so the live files themselves were fetched back.

@@ -110,4 +110,11 @@ the one check left for the phone: `MANUAL_TEST.md` → Check 2.
 
 ## Live site
 
-The deployed copy is verified after each push. See "Live verification" in `DEPLOYMENT.md`.
+The same 24 shots were captured from the **deployed** site after this push, in
+`docs/screenshots/live/`. All four skins rendered through WebGL2 there, and the shots match the
+local ones. Example, Kemet at 1 from the live deployment:
+
+<img src="docs/screenshots/live/kemet-1-today.jpg" width="200" alt="Kemet at intensity 1, Today view, captured from the live site"> <img src="docs/screenshots/live/kemet-1-full.jpg" width="200" alt="Kemet at intensity 1, full screen, captured from the live site">
+
+Status codes, the service worker scope and the cache version are recorded in `DEPLOYMENT.md` →
+"Live verification".

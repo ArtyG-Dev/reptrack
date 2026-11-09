@@ -301,8 +301,8 @@ Per `docs/FOLLOWUP_PROMPT_TERMINAL_ORBIT_FRACTAL_COLOUR.md`. Each change committ
 | 135 | Contrast sweep (4 hues × 3 warmths × 2 intensities) in Today | `visuals.test.js` → all 24 combinations ≥ 4.5:1 against real pixels; no scrim change needed | ✅ |
 | 136 | Screenshots in `docs/screenshots/` and `VISUALS.md` | "Terminal look-around and Fractal recolouring" | ✅ |
 | 137 | CPU re-measured | Terminal app JS +0.9%, Fractal +0.8%, both PASS | ✅ headless / ⚠️ device |
-| 138 | Existing suite green | See measured run in the commit | ✅ |
-| 139 | Pushed, cache bumped, live re-verified | `reptrack-shell-v7`. `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
+| 138 | Existing suite green | 272 passing, two consecutive full runs | ✅ |
+| 139 | Pushed, cache bumped, live re-verified | Live files byte-identical to `ea1100f`, SW `/reptrack/` with `reptrack-shell-v7`; on the live site the Terminal clamp, snap home, Fractal hint, hue/warmth and persistence across a reload all verified, no console errors. `DEPLOYMENT.md` → "Live verification" | ✅ |
 | 140 | `MANUAL_TEST.md` on-phone checks | Check 2 → "Two more" | ✅ |
 
 ## Build constraints

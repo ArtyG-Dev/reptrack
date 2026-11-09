@@ -166,3 +166,12 @@ host. This session's environment now allows it, so the live files themselves wer
   left to right and upright; at full intensity Kemet turns **+0.734 rad/s** and Forge
   **−0.734 rad/s** (opposite, same capped speed); Terminal is on the `katakana` set. No
   console errors. `docs/screenshots/live/` re-captured.
+
+### Terminal look-around / Fractal recolour — commit `ea1100f`, 2026-11-09
+
+- Live files byte-identical to the commit; service worker scoped to `/reptrack/` with the
+  single cache `reptrack-shell-v7`.
+- On the live site: a long Terminal drag stops at exactly 40° / −25° and snaps home on
+  release under reduced motion. Fractal shows the first-use hint. A quarter-width drag gives
+  89.8° of hue, a 100px upward drag gives +0.23 warmth, and both survive Esc and a reload.
+  No console errors. `docs/screenshots/live/` re-captured.

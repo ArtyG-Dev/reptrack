@@ -99,7 +99,7 @@
   --glass-2: 20 25 32;
   --glass-alpha: .92;
   --backdrop-base: #04070b;
-  --backdrop-ink: #2f5567;
+  --backdrop-ink: #7fd8ec;   /* raised for the 3D pass: the old #2f5567 was the "barely visible" bug; worst text pair is still 6.7:1 */
   --backdrop-grid: #12222c;
   --backdrop-stream: #24485a;
   --backdrop-stream-2: #1c5248;
@@ -127,7 +127,7 @@
   --glass-2: 25 22 36;
   --glass-alpha: .92;
   --backdrop-base: #070510;
-  --backdrop-ink: #4a3a7a;
+  --backdrop-ink: #cdbdf8;   /* raised so the deep-zoom filaments resolve; worst text pair is still 6.5:1 */
   --backdrop-bloom-a: #2c2154;
   --backdrop-bloom-b: #1c3350;
 
@@ -579,7 +579,8 @@ textarea { min-height: 84px; resize: vertical; }
 /* The animated backdrop. Sits behind everything, is never interactive, and is
  * hidden outright for the two flat themes. js/backdrop.js owns what it draws
  * and when it runs. */
-#backdrop {
+#backdrop,
+#backdrop-gl {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -588,7 +589,11 @@ textarea { min-height: 84px; resize: vertical; }
   display: none;
   pointer-events: none;
 }
+/* Exactly one canvas is live: the WebGL2 one when it built, the 2D one as the
+ * fallback (no WebGL2, a failed build, or a lost context). */
 [data-glass="1"] #backdrop { display: block; }
+[data-glass="1"][data-renderer="webgl"] #backdrop { display: none; }
+[data-glass="1"][data-renderer="webgl"] #backdrop-gl { display: block; }
 /* Fractal's blur has come down 18px → 8px → 3px across successive rounds, each
  * time alongside a bigger backing store (see SCALE.fractal in js/backdrop.js).
  * It is this low now because the Mandelbrot is a focal graphic that has to
@@ -630,6 +635,53 @@ textarea { min-height: 84px; resize: vertical; }
   [data-glass="1"] .btn-ghost { background: transparent; }
   [data-glass="1"] .cal-day.has-session { background: var(--accent); }
 }
+
+/* ---------- full-screen graphic view (js/graphic-view.js) ---------- */
+
+.graphic-row { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+.graphic-view { position: fixed; inset: 0; z-index: 50; }
+.graphic-view[hidden] { display: none; }
+.graphic-stage { position: absolute; inset: 0; touch-action: none; }
+.graphic-view[data-skin="kemet"] .graphic-stage,
+.graphic-view[data-skin="forge"] .graphic-stage { cursor: grab; }
+.graphic-bar {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+.graphic-bar > * { pointer-events: auto; }
+/* The only text over the graphic. It sits on the same opaque-enough scrim as
+ * every glass panel, so it holds 4.5:1 over any frame — including the brighter
+ * full-screen range, where no panel stands between the scene and the eye. */
+.graphic-level,
+[data-glass="1"] .graphic-btn {
+  background: rgba(var(--glass) / var(--glass-alpha));
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.graphic-level {
+  position: absolute;
+  left: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.graphic-level[hidden] { display: none; }
+[data-graphic-view="1"] .app-bar,
+[data-graphic-view="1"] #main,
+[data-graphic-view="1"] .tabbar,
+[data-graphic-view="1"] .skip-link { visibility: hidden; }
 
 /* Frost — Forge skin only, calendar day cells only, and deliberately an *edge*
  * treatment: it changes no background and no text colour, so it cannot move any

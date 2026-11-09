@@ -88,7 +88,7 @@ function wireTheme() {
   const params = new URLSearchParams(location.search);
   const settings = state.getState().settings;
 
-  backdrop.mount(document.getElementById('backdrop'));
+  backdrop.mount(document.getElementById('backdrop'), document.getElementById('backdrop-gl'));
   backdrop.setReduceEffects(Boolean(settings.reduceBackgroundEffects) || params.get('static') === '1');
 
   const override = params.get('theme');

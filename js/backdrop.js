@@ -32,8 +32,14 @@
  *      contrast proof. tests/contrast.test.js enforces both.
  */
 
+import { createFlashLimiter, intensity, approach, rotationSpeed } from './theme-engine.js';
+import { createGLBackdrop } from './backdrop-gl.js';
+
 const FPS = 30;
 const FRAME_MS = 1000 / FPS;
+const FULL_VIEW_FPS = 60;            // the full-screen graphic view only — see setFullView()
+const MAX_DPR = 2;                   // sharp on high-DPI phones without rendering 4× the pixels
+const MAX_GL_PIXELS = 2_400_000;     // a desktop-monitor guard; no phone reaches it
 
 /* Backing-store resolution, as a fraction of CSS pixels. Fractal and Kemet run
  * higher than the others because both now carry a *legible* focal graphic (a
@@ -96,6 +102,7 @@ const TABBAR_CSS_PX = 78;
  *  glass panels sit over. */
 function featureBand() {
   const { w, h } = dims;
+  if (fullView) return { y: h * 0.12, h: h * 0.8, w };
   const inset = Math.min(h * 0.14, TABBAR_CSS_PX * (SCALE[skin] ?? 0.5));
   const y = h * (2 / 3);
   return { y, h: Math.max(8, h - inset - y), w };
@@ -126,6 +133,30 @@ function makeBoltTrack() {
 let boltTrack = makeBoltTrack();     // pyramid surface (Kemet) / bolts (Fractal)
 let haloTrack = makeBoltTrack();     // Kemet halo only
 let lastFlashAt = -Infinity;         // skin-wide flicker gate, across every track
+const baseLimiter = createFlashLimiter();   // the WCAG 2.3.1 cap — one gate for every bolt, 2D and WebGL
+let flashLog = [];                          // granted flash times (ms of backdrop clock), for diagnostics
+const flashLimiter = {
+  request(ms) {
+    if (!baseLimiter.request(ms)) return false;
+    flashLog.push(ms);
+    if (flashLog.length > 256) flashLog = flashLog.slice(-128);
+    return true;
+  },
+  reset() { baseLimiter.reset(); flashLog = []; }
+};
+
+/* WebGL2 state. `glr` is null whenever the 2D renderer is in charge: no WebGL2,
+ * a failed build, or a lost context waiting to be restored. The 2D renderers
+ * below are the fallback — never a blank background. */
+let glCanvas = null;
+let glr = null;
+let glDims = { w: 0, h: 0 };
+let fullView = false;                // the full-screen graphic view (js/views/graphic.js)
+let dragging = false;
+let spin = 0;                        // radians; integrated from rotationSpeed(), or the user's drag
+// What is on screen, eased toward `activity` so nothing snaps (theme-engine approach()).
+let shown = { level: 0, month: 0, glow: 0.5, heat: 0, k: 0 };
+let snapOnNextActivity = true;
 let frames = 0;                      // diagnostics/test hook
 
 const reducedMotionQuery = typeof matchMedia === 'function'
@@ -139,6 +170,10 @@ export function isGlassSkin(name) {
 /** Static means one frame and no loop — never a slowed-down animation. */
 function isStatic() {
   return reduceEffects || reducedMotionQuery.matches;
+}
+
+function usingGL() {
+  return Boolean(glr) && Boolean(skin);
 }
 
 function shouldRun() {
@@ -221,8 +256,36 @@ function readPalette() {
 
 /* ---------- sizing ---------- */
 
+function dpr() {
+  return Math.min(window.devicePixelRatio || 1, MAX_DPR);
+}
+
+function resizeGL() {
+  const cssW = window.innerWidth || 360;
+  const cssH = window.innerHeight || 640;
+  let scale = dpr();
+  if (cssW * cssH * scale * scale > MAX_GL_PIXELS) scale = Math.sqrt(MAX_GL_PIXELS / (cssW * cssH));
+  const w = Math.max(8, Math.round(cssW * scale));
+  const h = Math.max(8, Math.round(cssH * scale));
+  if (w === glDims.w && h === glDims.h) return;
+  glCanvas.width = w;
+  glCanvas.height = h;
+  glDims = { w, h };
+  glr.resize(w, h);
+}
+
+/** The band the GL scenes frame their graphic into, in NDC [bottom, top]. Same
+ *  geometry as featureBand(): bottom third, less the tab bar. */
+function glBand() {
+  if (fullView) return skin === 'fractal' ? [-1, 1] : [-0.74, 0.8];   // the fractal is the whole view
+  const cssH = window.innerHeight || 640;
+  const inset = Math.min(cssH * 0.14, TABBAR_CSS_PX);
+  return [-1 + (2 * inset) / cssH, -1 / 3];
+}
+
 function resize() {
   if (!canvas || !skin) return;
+  if (usingGL()) { resizeGL(); return; }   // the 2D buffers (and its CPU Mandelbrot) are only built if needed
   const scale = SCALE[skin] ?? 0.5;
   const w = Math.max(8, Math.round((window.innerWidth || 360) * scale));
   const h = Math.max(8, Math.round((window.innerHeight || 640) * scale));
@@ -281,6 +344,7 @@ function seed() {
   boltTrack = makeBoltTrack();
   haloTrack = makeBoltTrack();
   lastFlashAt = -Infinity;
+  flashLimiter.reset();                  // the clock restarts at 0, so old grants must go
 }
 
 /* ---------- Mandelbrot (rendered once, drawn every frame) ---------- */
@@ -407,6 +471,7 @@ function maybeStrikeBolt(track, t, intensity, makeBolt) {
   if (track.bolt) return;
   if (t < track.nextAt) return;
   if (t - lastFlashAt < LIGHTNING.minIntervalS) return;    // another layer just flashed
+  if (!flashLimiter.request(t * 1000)) return;             // belt and braces: the shared 3-per-second cap
 
   track.bolt = { bornAt: t, ...makeBolt(intensity) };
   track.flashes += 1;
@@ -1029,12 +1094,63 @@ function snapTiers() {
 
 const RENDERERS = { terminal: drawTerminal, fractal: drawFractal, forge: drawForge, kemet: drawKemet };
 
+const rand = Math.random;
+
 function draw() {
-  if (!ctx || !skin) return;
+  if (!skin) return;
+  if (usingGL()) {
+    let drawn = false;
+    try {
+      drawn = glr.render({
+      skin,
+      t: clock,
+      still: isStatic(),
+      palette,
+      tierGlow,
+      level: shown.level,
+      month: shown.month,
+      glow: shown.glow,
+      heat: shown.heat,
+      k: shown.k,
+      spin,
+      band: glBand(),
+      full: fullView,
+      dpr: glDims.w / Math.max(window.innerWidth || 1, 1),
+      limiter: flashLimiter,
+      rand
+      });
+    } catch (error) {
+      // A scene that cannot build or draw hands over to the 2D renderer for
+      // good — never a frozen or blank background.
+      console.warn('WebGL2 backdrop failed; using the 2D renderer.', error);
+      glr = null;
+      markRenderer();
+      dims = { w: 0, h: 0 };
+      resize();
+      return draw();
+    }
+    if (drawn) frames += 1;
+    return;
+  }
+  if (!ctx) return;
   const render = RENDERERS[skin];
   if (!render) return;
   render(clock);
   frames += 1;
+}
+
+/** The values the scene shows, eased toward the live metrics. Static mode
+ *  snaps them, the same way snapTiers() does for the pyramid. */
+function targets() {
+  const heat = Math.min(Math.max(activity.glow * (1 - 0.35 * activity.frostHint), 0), 1);
+  return { level: activity.streakFraction, month: activity.monthPercent, glow: activity.glow, heat };
+}
+
+function settleShown(dt) {
+  const t = targets();
+  for (const key of Object.keys(t)) shown[key] = dt === null ? t[key] : approach(shown[key], t[key], dt);
+  shown.k = intensity({ streakLevel: shown.level * STREAK_LEVELS, monthPercent: shown.month });
+  if (dt !== null && !dragging) spin = (spin + rotationSpeed(shown.k) * dt) % (Math.PI * 2);
 }
 
 function loop(timestamp) {
@@ -1042,11 +1158,13 @@ function loop(timestamp) {
   raf = requestAnimationFrame(loop);
 
   const elapsed = timestamp - lastFrameAt;
-  if (elapsed < FRAME_MS) return;          // 30fps cap
+  const frameMs = fullView ? 1000 / FULL_VIEW_FPS : FRAME_MS;
+  if (elapsed < frameMs - 1) return;       // 30fps cap (60 in the full-screen view)
   const dt = Math.min(elapsed / 1000, 0.1);
   lastFrameAt = timestamp;
   clock += dt;
   settleTiers(dt);
+  settleShown(dt);
   draw();
 }
 
@@ -1072,6 +1190,7 @@ function sync() {
   if (isStatic()) {
     stopLoop();
     snapTiers();
+    settleShown(null);
     draw();                                // exactly one frame, held
     return;
   }
@@ -1081,12 +1200,56 @@ function sync() {
 
 /* ---------- public API ---------- */
 
-export function mount(element) {
+/** Marks which canvas is live, so css/styles.css shows exactly one of them. */
+function markRenderer() {
+  document.documentElement.setAttribute('data-renderer', glr ? 'webgl' : '2d');
+}
+
+let glTried = false;
+
+/** Created on the first glass skin, not at boot: Light and Neon never pay for a
+ *  WebGL context or a single shader compile. */
+function ensureGL() {
+  if (glTried || !glCanvas) return;
+  glTried = true;
+  if (new URLSearchParams(location.search).get('renderer') === '2d') return;
+  glr = createGLBackdrop(glCanvas);
+  markRenderer();
+  if (!glr) return;
+  // Context loss: hand over to the 2D renderer at once (never a frozen or
+  // blank frame), then rebuild every GPU resource when the context returns.
+  glCanvas.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault();
+    glr?.lost();
+    held = glr;
+    glr = null;
+    markRenderer();
+    dims = { w: 0, h: 0 };
+    sync();
+  });
+  glCanvas.addEventListener('webglcontextrestored', () => {
+    if (!held?.restore()) return;
+    glr = held;
+    held = null;
+    glDims = { w: 0, h: 0 };
+    markRenderer();
+    sync();
+  });
+}
+
+function mountGL(element) {
+  glCanvas = element;
+}
+let held = null;                     // the GL renderer while its context is lost
+
+export function mount(element, glElement = null) {
   canvas = element;
   if (!canvas) return;
   ctx = canvas.getContext('2d', { alpha: false });
+  mountGL(glElement);
+  markRenderer();
 
-  addEventListener('resize', () => { dims = { w: 0, h: 0 }; sync(); }, { passive: true });
+  addEventListener('resize', () => { dims = { w: 0, h: 0 }; glDims = { w: 0, h: 0 }; sync(); }, { passive: true });
   document.addEventListener('visibilitychange', sync);
   reducedMotionQuery.addEventListener?.('change', sync);
 }
@@ -1095,6 +1258,7 @@ export function setSkin(name) {
   const next = GLASS_SKINS.has(name) ? name : null;
   if (next === skin) return;
   skin = next;
+  if (skin) ensureGL();
   dims = { w: 0, h: 0 };                   // force a resize + reseed
   clock = 0;
   tierGlow = new Float64Array(STREAK_LEVELS);
@@ -1102,6 +1266,10 @@ export function setSkin(name) {
   boltTrack = makeBoltTrack();
   haloTrack = makeBoltTrack();
   lastFlashAt = -Infinity;
+  flashLimiter.reset();                  // the clock restarts at 0, so old grants must go
+  glr?.resetLightning();
+  settleShown(null);
+  snapOnNextActivity = true;
   if (!skin && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   sync();
 }
@@ -1117,6 +1285,7 @@ export function setActivity({ glow = 0.5, frostHint = 0, streakLevel = 0, streak
     streakFraction: Math.min(Math.max(streakFraction, 0), 1),
     monthPercent: Math.min(Math.max(monthPercent, 0), 1)
   };
+  if (snapOnNextActivity) { snapOnNextActivity = false; settleShown(null); }   // open on the real values, not a ramp up from zero
   if (isStatic()) sync();                  // keep the held frame current
 }
 
@@ -1135,6 +1304,42 @@ export function stop() {
   stopLoop();
 }
 
+/** The full-screen graphic view: graphic re-framed to fill the viewport, and
+ *  60fps allowed. Every pause rule still applies — shouldRun() is unchanged. */
+export function setFullView(flag) {
+  fullView = Boolean(flag);
+  dims = { w: 0, h: 0 };                   // 2D fallback reseeds for the new framing
+  sync();
+}
+
+/** Drag-to-rotate (Kemet, Forge). While held, auto-rotation stops; releasing
+ *  resumes it from wherever the user left it. */
+export function setDragging(flag) {
+  dragging = Boolean(flag);
+}
+
+export function rotateBy(radians) {
+  spin = (spin + radians) % (Math.PI * 2);
+  if (isStatic()) draw();
+}
+
+/** The current frame's pixels, top row first, for tests and scripts. Draws a
+ *  fresh frame first: a WebGL canvas without preserveDrawingBuffer is only
+ *  readable in the same task that drew it. */
+export function readPixels() {
+  if (!skin) return null;
+  draw();
+  if (usingGL()) {
+    const { width, height, data } = glr.readPixels();
+    const rows = new Uint8ClampedArray(data.length);
+    const stride = width * 4;
+    for (let y = 0; y < height; y += 1) rows.set(data.subarray((height - 1 - y) * stride, (height - y) * stride), y * stride);
+    return { width, height, data: rows };
+  }
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  return { width: img.width, height: img.height, data: img.data };
+}
+
 /** Diagnostics for tests and scripts/measure-skins.mjs. */
 export function getDiagnostics() {
   return {
@@ -1144,15 +1349,25 @@ export function getDiagnostics() {
     voiceActive,
     hidden: typeof document !== 'undefined' ? document.hidden : false,
     frames,
-    fpsCap: FPS,
-    backingStore: { ...dims },
+    fpsCap: fullView ? FULL_VIEW_FPS : FPS,
+    renderer: usingGL() ? 'webgl2' : '2d',
+    fullView,
+    dragging,
+    spin,
+    rotationSpeed: rotationSpeed(shown.k),
+    intensity: shown.k,
+    flashLog: [...flashLog],
+    backingStore: usingGL() ? { ...glDims } : { ...dims },
     activity: { ...activity },
     boltFlashes: boltTrack.flashes,  // the flicker-hazard cap under test
     haloFlashes: haloTrack.flashes,  // Kemet's second, month-driven bolt layer
     totalFlashes: boltTrack.flashes + haloTrack.flashes,
     tierGlow: [...tierGlow],         // Kemet pyramid: which tiers are lit, and how far
     levels: STREAK_LEVELS,
-    featureBand: featureBand(),
-    hasMandelbrot: Boolean(mandelbrot)
+    featureBand: usingGL()
+      ? (() => { const [b, t] = glBand(); return { y: ((1 - t) / 2) * glDims.h, h: ((t - b) / 2) * glDims.h, w: glDims.w }; })()
+      : featureBand(),
+    hasMandelbrot: Boolean(mandelbrot),
+    scene: usingGL() ? JSON.parse(JSON.stringify(glr.info)) : null
   };
 }

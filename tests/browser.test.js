@@ -816,8 +816,8 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
    *  the hot state (a consistent profile, glow 1). */
   async function backdropMaxBrightness(page) {
     return page.evaluate(() => {
-      const c = document.getElementById('backdrop');
-      const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      // readPixels() serves whichever renderer is live (WebGL2 or the 2D fallback).
+      const { data } = window.__backdrop.readPixels();
       let max = 0;
       for (let i = 0; i < data.length; i += 4) max = Math.max(max, data[i] + data[i + 1] + data[i + 2]);
       return max;
@@ -831,12 +831,20 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
    *  peak at all. */
   async function backdropAverageBrightness(page) {
     return page.evaluate(() => {
-      const c = document.getElementById('backdrop');
-      const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      const { data } = window.__backdrop.readPixels();
       let sum = 0;
       for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
       return sum / (data.length / 4);
     });
+  }
+
+  async function averagedBrightness(page, samples = 4) {
+    let sum = 0;
+    for (let i = 0; i < samples; i += 1) {
+      sum += await backdropAverageBrightness(page);
+      await page.waitForTimeout(150);
+    }
+    return sum / samples;
   }
 
   /** A prior baseline plus a fortnight of daily training — the "hot" end of
@@ -1163,9 +1171,11 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await context.close();
   });
 
-  test('the fractal Mandelbrot is pre-rendered once, not computed per frame', async () => {
+  test('the 2D fallback\'s Mandelbrot is pre-rendered once, not computed per frame', async () => {
+    // The WebGL2 scene computes it per pixel on the GPU (cheap there); the 2D
+    // fallback must still never do that on the CPU.
     const { context, page } = await freshPage();
-    await page.goto(`${baseURL}?theme=fractal`, { waitUntil: 'load' });
+    await page.goto(`${baseURL}?theme=fractal&renderer=2d`, { waitUntil: 'load' });
     await page.waitForSelector('#start-session');
     await page.waitForFunction(() => window.__backdrop?.getDiagnostics().hasMandelbrot === true, null, { timeout: 5000 });
 
@@ -1182,7 +1192,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
 
   test('the signature graphics get brighter and clearer as the streak level climbs', async () => {
     const { context, page } = await freshPage();
-    for (const theme of ['kemet', 'forge', 'fractal']) {
+    for (const theme of ['kemet', 'forge']) {
       await page.goto(`${baseURL}?theme=${theme}&static=1`, { waitUntil: 'load' });
       await page.waitForSelector('#start-session');
       await page.waitForFunction((t) => window.__backdrop?.getDiagnostics().skin === t, theme, { timeout: 5000 });
@@ -1198,6 +1208,38 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
       assert.ok(mid > low, `${theme}: level 5 (${mid}) should read brighter than level 0 (${low})`);
       assert.ok(high > mid, `${theme}: level 10 (${high}) should read brighter than level 5 (${mid})`);
     }
+    await context.close();
+  });
+
+  test('the fractal zooms deeper, iterates more and resolves more detail as the level climbs', async () => {
+    // Brightness is the wrong measure here: the set's edge already reaches the
+    // luminance ceiling at level 0. What the brief asks for is depth and
+    // detail, so that is what this reads — the zoom and iteration count the
+    // shader actually used, and edge energy in the rendered pixels.
+    const { context, page } = await freshPage();
+    await page.goto(`${baseURL}?theme=fractal&static=1`, { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__backdrop?.getDiagnostics().skin === 'fractal', null, { timeout: 5000 });
+    const read = async (level) => {
+      await forceLevel(page, level);
+      return page.evaluate(() => {
+        const { data, width, height } = window.__backdrop.readPixels();
+        let edge = 0;
+        const y0 = Math.floor(height * 0.67);
+        for (let y = y0; y < height - 1; y += 1) {
+          for (let x = 0; x < width - 1; x += 1) {
+            const i = (y * width + x) * 4;
+            const v = data[i] + data[i + 1] + data[i + 2];
+            edge += Math.abs(v - (data[i + 4] + data[i + 5] + data[i + 6])) + Math.abs(v - (data[i + width * 4] + data[i + width * 4 + 1] + data[i + width * 4 + 2]));
+          }
+        }
+        return { edge: edge / ((height - y0) * width), ...window.__backdrop.getDiagnostics().scene.fractal };
+      });
+    };
+    const [low, mid, high] = [await read(0), await read(5), await read(10)];
+    assert.ok(mid.half < low.half && high.half < mid.half, `zoom must deepen: ${low.half} → ${mid.half} → ${high.half}`);
+    assert.ok(mid.iterations > low.iterations && high.iterations > mid.iterations, 'iterations must rise');
+    assert.ok(high.saturation > low.saturation, 'colour saturation must rise');
+    assert.ok(high.edge > low.edge * 1.5, `more resolved detail at level 10 (${high.edge.toFixed(1)}) than level 0 (${low.edge.toFixed(1)})`);
     await context.close();
   });
 
@@ -1250,7 +1292,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     // proves the *code* does, by sampling real rendered pixels across the
     // corners of the two-metric space. With two independent layers stacking,
     // that is no longer self-evident from reading the source.
-    for (const theme of ['kemet', 'forge']) {
+    for (const theme of GLASS_SKINS) {
       const { context, page } = await freshPage();
       await page.goto(`${baseURL}?theme=${theme}&static=1`, { waitUntil: 'load' });
       await page.waitForSelector('#start-session');
@@ -1268,8 +1310,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
         await forceLevel(page, level, month);
         await page.waitForTimeout(140);
         const worst = await page.evaluate(() => {
-          const c = document.getElementById('backdrop');
-          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          const d = window.__backdrop.readPixels().data;
           const ch = (v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
           let max = 0;
           for (let i = 0; i < d.length; i += 4) {
@@ -1321,7 +1362,8 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await cold.page.waitForSelector('#start-session');
     await cold.page.waitForTimeout(400);
     const coldGlow = (await cold.page.evaluate(() => window.__backdrop.getDiagnostics().activity)).glow;
-    const coldBright = await backdropMaxBrightness(cold.page);
+    const coldPeak = await backdropMaxBrightness(cold.page);
+    const coldBright = await averagedBrightness(cold.page);
     await cold.context.close();
 
     const hot = await freshPage();
@@ -1330,45 +1372,47 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await hot.page.waitForSelector('#start-session');
     await hot.page.waitForTimeout(400);
     const hotGlow = (await hot.page.evaluate(() => window.__backdrop.getDiagnostics().activity)).glow;
-    const hotBright = await backdropMaxBrightness(hot.page);
+    const hotBright = await averagedBrightness(hot.page);
     await hot.context.close();
 
     assert.equal(coldGlow, 0, 'sanity check: the cold profile really is at zero consistency');
     assert.ok(hotGlow > 0.9, 'sanity check: the seeded profile really is at high consistency');
-    assert.ok(coldBright > 40, `even at glow 0 the streams must not be literally invisible, got ${coldBright}`);
-    assert.ok(hotBright > coldBright + 30, `the hot profile (${hotBright}) should read visibly brighter than the cold one (${coldBright})`);
+    assert.ok(coldPeak > 40, `even at glow 0 the streams must not be literally invisible, got ${coldPeak}`);
+    // Total light, averaged over a few frames: both profiles' brightest glyph
+    // heads reach the same ceiling, so the peak cannot tell them apart — the
+    // hot profile shows up as more, denser, brighter streams.
+    assert.ok(hotBright > coldBright + 3, `the hot profile (${hotBright.toFixed(1)}) should carry visibly more light than the cold one (${coldBright.toFixed(1)})`);
   });
 
-  test('fractal lightning respects the flicker-hazard floor and gets more frequent as consistency rises', async () => {
-    const SAMPLE_MS = 16_000;
-    const MIN_INTERVAL_S = 3.5;   // must match LIGHTNING.minIntervalS in js/backdrop.js
+  test('fractal lightning stays under 3 flashes per second and gets more frequent as consistency rises', async () => {
+    const SAMPLE_MS = 12_000;
 
     async function sampleFlashes(page) {
-      const before = await page.evaluate(() => window.__backdrop.getDiagnostics().boltFlashes);
       await page.waitForTimeout(SAMPLE_MS);
-      const after = await page.evaluate(() => window.__backdrop.getDiagnostics().boltFlashes);
-      return after - before;
+      return page.evaluate(() => window.__backdrop.getDiagnostics().flashLog);
     }
+    const worstSecond = (log) => {
+      const t = [...log].sort((a, b) => a - b);
+      let best = 0;
+      for (let hi = 0, lo = 0; hi < t.length; hi += 1) { while (t[hi] - t[lo] >= 1000) lo += 1; best = Math.max(best, hi - lo + 1); }
+      return best;
+    };
 
     const cold = await freshPage();
     await cold.page.goto(`${baseURL}?theme=fractal`, { waitUntil: 'load' });
     await cold.page.waitForSelector('#start-session');
-    const coldFlashes = await sampleFlashes(cold.page);
+    const coldLog = await sampleFlashes(cold.page);
     await cold.context.close();
 
     const hot = await freshPage();
     await seedSessions(hot.page, consistentDays(Array.from({ length: 14 }, (_, i) => i)));
     await hot.page.goto(`${baseURL}?theme=fractal`, { waitUntil: 'load' });
     await hot.page.waitForSelector('#start-session');
-    const hotFlashes = await sampleFlashes(hot.page);
+    const hotLog = await sampleFlashes(hot.page);
     await hot.context.close();
 
-    // The cap is structural (Math.max against the floor in the scheduler), so
-    // this is really a sanity check that the observed cadence agrees with it:
-    // even in the busiest sample, the average gap can't be under the floor.
-    const impliedMinGap = SAMPLE_MS / 1000 / Math.max(1, hotFlashes);
-    assert.ok(impliedMinGap >= MIN_INTERVAL_S - 0.25, `flashes fired faster than the flicker-hazard floor: ${hotFlashes} in ${SAMPLE_MS / 1000}s`);
-    assert.ok(hotFlashes >= coldFlashes, `a consistent profile (${hotFlashes} flashes) should flash at least as often as a quiet one (${coldFlashes})`);
+    assert.ok(worstSecond(hotLog) <= 3, `WCAG 2.3.1: ${worstSecond(hotLog)} flashes inside one second`);
+    assert.ok(hotLog.length > coldLog.length, `a consistent profile (${hotLog.length} flashes) should flash more often than a quiet one (${coldLog.length})`);
   });
 
   test('the theme layer never scolds or counts the days missed', async () => {

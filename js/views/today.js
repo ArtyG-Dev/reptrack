@@ -8,6 +8,7 @@ import { listenOnce, isSupported as voiceSupported, VoiceInputError } from '../v
 import { formatDuration, suggestProgression, totalVolume, formatVolumeLine } from '../progression.js';
 import { pace } from '../summary.js';
 import { todayISO } from '../store.js';
+import * as graphicView from '../graphic-view.js';
 
 let listening = false;
 let restEndsAt = null;
@@ -491,6 +492,20 @@ function finishCard() {
   );
 }
 
+/** "View" — opens the active skin's graphic full screen. Only offered on the
+ *  animated skins; Light and Neon have no graphic to show. */
+function viewGraphicButton() {
+  const skin = document.documentElement.dataset.theme;
+  if (!backdrop.isGlassSkin(skin)) return null;
+  return el('div', { class: 'graphic-row' },
+    el('button', {
+      class: 'btn', id: 'view-graphic', type: 'button',
+      'aria-label': `View ${graphicView.skinLabel(skin)} graphic full screen`,
+      onclick: () => graphicView.open(skin)
+    }, el('span', { 'aria-hidden': 'true', text: '⛶' }), 'View')
+  );
+}
+
 export function render(container) {
   containerRef = container || containerRef;
   if (!containerRef) return;
@@ -501,6 +516,8 @@ export function render(container) {
     containerRef.append(el('h2', { class: 'visually-hidden', text: 'Today' }), idleCard(s));
     const runs = runsCard();
     if (runs) containerRef.append(runs);
+    const view = viewGraphicButton();
+    if (view) containerRef.append(view);
     return;
   }
 
@@ -512,4 +529,6 @@ export function render(container) {
     ...(runs ? [runs] : []),
     finishCard()
   );
+  const view = viewGraphicButton();
+  if (view) containerRef.append(view);
 }

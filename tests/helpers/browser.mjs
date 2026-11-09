@@ -26,7 +26,7 @@ export async function launch(playwrightChromium, options = {}) {
   const executablePath = findChromium();
   return playwrightChromium.launch({
     ...(executablePath ? { executablePath } : {}),
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
     ...options
   });
 }

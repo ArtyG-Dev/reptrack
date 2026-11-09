@@ -106,6 +106,52 @@ try {
     await shoot(page, 'forge-plates-sliding-on');
     await context.close();
   }
+
+  /* Kemet's base, seen from below; Forge vs Kemet spin ~1 s apart; Terminal
+   * katakana at 0.5 and the forced Latin fallback. */
+  const openFull = async (theme, { reduced = false, init = null } = {}) => {
+    const context = await browser.newContext({ viewport: VIEWPORT, ...(reduced ? { reducedMotion: 'reduce' } : {}) });
+    if (init) await context.addInitScript(init);
+    const page = await context.newPage();
+    await page.goto(`${base}index.html?theme=${theme}`, { waitUntil: 'load' });
+    await page.waitForFunction((t) => window.__backdrop?.getDiagnostics().skin === t, theme, { timeout: 15000 });
+    return { context, page };
+  };
+  {
+    const { context, page } = await openFull('kemet', { reduced: true });
+    await setLevel(page, 6, 0.6);
+    await page.click('#view-graphic');
+    await page.click('#graphic-level-toggle');
+    await page.mouse.move(200, 600);
+    await page.mouse.down();
+    await page.mouse.move(200, 469, { steps: 8 });                // ~π/2: the underside faces the camera
+    await page.mouse.up();
+    await shoot(page, 'kemet-base-underside');
+    await context.close();
+  }
+  for (const theme of ['kemet', 'forge']) {
+    const { context, page } = await openFull(theme);
+    await setLevel(page, 10, 1);
+    await page.click('#view-graphic');
+    await page.click('#graphic-level-toggle');
+    await page.waitForFunction(() => window.__backdrop.getDiagnostics().intensity > 0.95, null, { timeout: 20000 });
+    await shoot(page, `${theme}-spin-a`);
+    await page.waitForTimeout(1000);
+    await shoot(page, `${theme}-spin-b`);
+    await context.close();
+  }
+  for (const [name, init] of [['terminal-katakana', null], ['terminal-latin-fallback', () => {
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (t, ...r) { return fill.call(this, String(t).replace(/[\uFF66-\uFF9D]/g, '\uFFFF'), ...r); };
+  }]]) {
+    const { context, page } = await openFull('terminal', { init });
+    await setLevel(page, 5, 0.5);
+    await page.click('#view-graphic');
+    await page.click('#graphic-level-toggle');
+    await page.waitForTimeout(2500);
+    await shoot(page, name);
+    await context.close();
+  }
 } finally {
   await browser.close();
   if (local) await new Promise((resolve) => local.server.close(resolve));

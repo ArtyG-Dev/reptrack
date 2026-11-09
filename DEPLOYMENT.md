@@ -75,7 +75,7 @@ Expect the same scores as the local run recorded in `ACCEPTANCE.md`.
 
 ## A note on caching
 
-`sw.js` uses a versioned cache (currently `reptrack-shell-v5`) and deletes older caches on activate.
+`sw.js` uses a versioned cache (currently `reptrack-shell-v6`) and deletes older caches on activate.
 **Bump that version string whenever you change a shipped file**, or returning visitors will
 keep the old shell until their cache is evicted.
 

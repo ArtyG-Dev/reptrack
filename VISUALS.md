@@ -106,6 +106,27 @@ columns happen to be, which is why those numbers are averaged.)
 
 ---
 
+## Kemet base, Forge turntable, Terminal katakana
+
+**Kemet's base.** The pyramid used to be hollow underneath (left). It now has a solid, lit
+stone base engraved with `RepTrack © ArtyG-Dev` in gold with a cyan glow, reading correctly
+(not mirrored) when you turn the pyramid to look up at it (right). It never shows in the
+default view.
+
+<img src="docs/screenshots/kemet-base-before.jpg" width="150" alt="Before: looking up into the hollow pyramid"> <img src="docs/screenshots/kemet-base-underside.jpg" width="150" alt="After: the solid base with the RepTrack © ArtyG-Dev inscription">
+
+**Forge spins on a turntable, the opposite way to Kemet.** These are two frames about 1 s
+apart at full intensity. Kemet's pyramid turns one way (left pair). Forge's bar stays level
+and swings the other way, from three-quarter view to side-on (right pair).
+
+<img src="docs/screenshots/kemet-spin-a.jpg" width="150" alt="Kemet, first frame"> <img src="docs/screenshots/kemet-spin-b.jpg" width="150" alt="Kemet, about one second later"> <img src="docs/screenshots/forge-spin-a.jpg" width="150" alt="Forge, first frame"> <img src="docs/screenshots/forge-spin-b.jpg" width="150" alt="Forge, about one second later, turned the opposite way">
+
+**Terminal katakana** at intensity 0.5: half-width katakana with the digits kept, and about
+half the glyphs mirrored (left). With katakana unavailable it falls back to the old Latin
+set, unmirrored and with no boxes (right).
+
+<img src="docs/screenshots/terminal-katakana.jpg" width="150" alt="Terminal with half-width katakana, some mirrored"> <img src="docs/screenshots/terminal-latin-fallback.jpg" width="150" alt="Terminal falling back to Latin when katakana cannot be drawn">
+
 ## What the tests prove from real pixels
 
 Screenshots show what it looks like. These assertions show it is true every time, and they
@@ -125,6 +146,9 @@ run on every `npm test` (`tests/visuals.test.js`, plus the pixel tests in
 | WebGL2 unavailable → the old 2D skins, never blank | `webgl2` forced unavailable: the 2D renderer animates and the frame is not blank |
 | Context loss recovers | `WEBGL_lose_context` hands over to 2D (still animating), and restore brings the 3D scene back |
 | Drag turns both 3D scenes visibly | One shared orbit. A drag changes >2% of the frame; right moves the near side right; up tilts the near end up and the far end down. It holds while dragging, eases back after release, and stays put under reduced motion |
+| Kemet base | From below, the base faces the camera; the inscription runs left to right, upright and centred; the base is solid; it is hidden in the default view |
+| Forge turntable | Over ~1 s of scene time Kemet's heading rises and Forge's falls, Forge stays under the cap, and the bar's end stays at world height 0 as it swings round |
+| Terminal katakana | Katakana where a font draws them, Latin when it is forced unavailable, and a mirror split of about 50% fixed per glyph lifetime |
 | Forge plates | Plates per level match the table (Today and full screen), the bar ends never clip, plate colours stay > 60 RGB apart at heat 0 and 1, slide-on and fade-off are seen mid-animation, and a level gained between visits replays once |
 | Full-screen view | Focus moves in and returns to **View**; Esc, ✕ and browser back all close it (back stays in the app); a fixed overlay covers the viewport without the Fullscreen API; drag rotates Kemet/Forge, holds auto-rotation and resumes it on release |
 

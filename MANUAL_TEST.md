@@ -75,6 +75,18 @@ table, identical on both sides:
 If you levelled up since you last had Forge open, the new plates should slide on once as
 the Today screen appears.
 
+**Three more quick looks (about a minute):**
+
+- **Kemet base:** open Kemet, tap **View**, and drag *upwards* until you are looking at the
+  bottom of the pyramid. It should be solid dark stone with `RepTrack © ArtyG-Dev` engraved
+  in gold, readable, not back to front.
+- **Forge turntable:** open Forge and watch it next to Kemet. The barbell stays level and
+  turns like it's on a turntable, the *opposite* way to the pyramid.
+- **Terminal katakana:** open Terminal. The falling characters should be Japanese katakana
+  mixed with digits, some of them mirrored, and **never empty boxes (□)**. If your phone
+  shows Latin letters A–F instead, it couldn't draw katakana and fell back on purpose. Tell
+  me, because that would be unusual on Android.
+
 ### What to watch for
 
 | Observation | Meaning |

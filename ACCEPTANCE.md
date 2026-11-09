@@ -272,6 +272,22 @@ Per `docs/FOLLOWUP_PROMPT_FORGE_ROTATE_PLATES.md`.
 | 120 | Pushed, cache bumped, live re-verified | Live files byte-identical to `9f37261`; SW `/reptrack/` with `reptrack-shell-v5`; on the live site a Forge drag changes 4.85% of the frame (0.11% before the fix); plates correct; no console errors. `DEPLOYMENT.md` → "Live verification" | ✅ |
 | 121 | `MANUAL_TEST.md` on-phone check for Forge drag and plate count | Check 2 → "Forge, specifically", with the plate table to compare against | ✅ |
 
+## Added after the Kemet base / Forge turntable / Terminal katakana update
+
+Per `docs/FOLLOWUP_PROMPT_KEMET_BASE_FORGE_SPIN_TERMINAL_KATAKANA.md`. Each change committed separately.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 122 | Kemet: cause documented; base solid and lit; inscription legible, not mirrored, from below; no edge gaps | `DECISIONS.md` #83 (base never in the mesh; culling never enabled). `visuals.test.js` → "Kemet has a solid base…" (faces camera from below, left→right, upright, centred, solid; hidden by default). The base shares the side faces' corner vertices. `kemet-base-before.jpg` / `kemet-base-underside.jpg` | ✅ |
+| 123 | Forge: default spin about the vertical axis, opposite to Kemet, intensity-scaled and capped; axis and direction in one constant, documented | `FORGE_AUTO_ROTATION = { axis: 'vertical', direction: -1 }` in `theme-engine.js`; `CLAUDE.md` → "Auto-rotation axes" ('tumble' is the one-line switch). `visuals.test.js` → "Forge spins level on a turntable, the opposite way to Kemet" and "reduced motion: Forge does not auto-rotate" | ✅ |
+| 124 | Terminal: katakana replace the letters, ~even mix of mirrored glyphs fixed per glyph, no tofu, Latin fallback works, cached atlas | Half-width katakana (`DECISIONS.md` #85). Two-row atlas drawn once. Every glyph is checked against the tofu box before use. `visuals.test.js` (katakana where drawable, forced fallback → Latin), `theme-engine.test.js` (mirror split ~50%) | ✅ |
+| 125 | Screenshots for all three in `docs/screenshots/` and `VISUALS.md` | `VISUALS.md` → "Kemet base, Forge turntable, Terminal katakana" | ✅ |
+| 126 | CPU re-measured for Kemet, Forge, Terminal | `npm run skins`: app JS +0.9% each, 30 fps, all PASS | ✅ headless / ⚠️ device |
+| 127 | Full acceptance suite green | 262 passing | ✅ |
+| 128 | Footprint < 50 MB, no font files | 3.499 MB total; system font stacks only. Noto CJK was installed as an OS package on the test machine for screenshots, not in the repo | ✅ |
+| 129 | Pushed, cache bumped, live re-verified | `reptrack-shell-v6`. See `DEPLOYMENT.md` → "Live verification" | see `DEPLOYMENT.md` |
+| 130 | `MANUAL_TEST.md` on-phone checks for all three | Check 2 → "Three more quick looks" | ✅ |
+
 ## Build constraints
 
 | Constraint | Verification | Status |

@@ -14,7 +14,7 @@ import * as backdrop from './backdrop.js';
 import { el } from './ui.js';
 
 const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal' };
-const DRAGGABLE = new Set(['kemet', 'forge']);
+const DRAGGABLE = new Set(['kemet', 'forge', 'terminal']);   // all through the one shared orbit
 const TAP_SLOP_PX = 6;
 const KEY_NUDGE_PX = 14;          // an arrow key turns the scene as far as a 14px drag
 const SHELL = ['.app-bar', '#main', '.tabbar', '.skip-link'];

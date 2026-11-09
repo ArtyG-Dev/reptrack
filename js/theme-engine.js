@@ -208,17 +208,37 @@ export const ORBIT = Object.freeze({
   settleSeconds: 0.45        // ease-back time constant after release
 });
 
+/** Per-scene orbit behaviour. Kemet and Forge turn freely and, under reduced
+ *  motion, stay where they are let go. Terminal is a place you look around
+ *  *inside*, so the view is clamped (it can never swing off into empty space),
+ *  eases home over about a second, and under reduced motion snaps home. */
+const DEG = Math.PI / 180;
+export const ORBIT_STYLE = Object.freeze({
+  kemet: Object.freeze({ limits: null, settleSeconds: ORBIT.settleSeconds, stillRelease: 'stay' }),
+  forge: Object.freeze({ limits: null, settleSeconds: ORBIT.settleSeconds, stillRelease: 'stay' }),
+  terminal: Object.freeze({ limits: Object.freeze({ yaw: 40 * DEG, pitch: 25 * DEG }), settleSeconds: 0.3, stillRelease: 'home' })
+});
+
 export function createOrbit() {
   return { yaw: 0, pitch: 0, dragging: false };
 }
+
+const clampTo = (x, limit) => (limit == null ? x : Math.min(Math.max(x, -limit), limit));
 
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function orbitGrab(orbit) { orbit.dragging = true; }
 
-export function orbitDrag(orbit, dxPx, dyPx) {
-  orbit.yaw += dxPx * ORBIT.radPerPx;
-  orbit.pitch += dyPx * ORBIT.radPerPx;
+/** Clamping the accumulated angle (not the raw finger travel) means a drag
+ *  past the stop responds the moment it reverses — no dead zone to unwind. */
+export function orbitDrag(orbit, dxPx, dyPx, limits = null) {
+  orbit.yaw = clampTo(orbit.yaw + dxPx * ORBIT.radPerPx, limits?.yaw);
+  orbit.pitch = clampTo(orbit.pitch + dyPx * ORBIT.radPerPx, limits?.pitch);
+}
+
+export function orbitHome(orbit) {
+  orbit.yaw = 0;
+  orbit.pitch = 0;
 }
 
 /** Ends a drag. Angles are folded into (−π, π] so the ease back is the short way. */
@@ -229,10 +249,10 @@ export function orbitRelease(orbit) {
 }
 
 /** Ease the offset back toward the scene's own rotation. No-op while held. */
-export function orbitSettle(orbit, dt) {
+export function orbitSettle(orbit, dt, settleSeconds = ORBIT.settleSeconds) {
   if (orbit.dragging) return;
-  orbit.yaw = approach(orbit.yaw, 0, dt, ORBIT.settleSeconds);
-  orbit.pitch = approach(orbit.pitch, 0, dt, ORBIT.settleSeconds);
+  orbit.yaw = approach(orbit.yaw, 0, dt, settleSeconds);
+  orbit.pitch = approach(orbit.pitch, 0, dt, settleSeconds);
   if (Math.abs(orbit.yaw) < 1e-4) orbit.yaw = 0;
   if (Math.abs(orbit.pitch) < 1e-4) orbit.pitch = 0;
 }

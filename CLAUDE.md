@@ -229,6 +229,11 @@ intensity. Drag in the full-screen view is the user's hand and is not capped.
 feed the drag into the scene's auto-rotation angle: Forge spins about the bar's long axis,
 and a drag applied there is invisible (DECISIONS #82).
 
+**Per-scene orbit rules** live in `ORBIT_STYLE`: Kemet and Forge are unclamped and stay put
+on release under reduced motion; Terminal is a look-around *inside* the field, clamped to
+±40° yaw / ±25° pitch, easing home over ~1 s and snapping home under reduced motion. Fractal
+is not in it: dragging there recolours (below), it never moves the view.
+
 **Auto-rotation axes** are constants in `theme-engine.js`. Kemet spins `+1` about the
 vertical axis; `FORGE_AUTO_ROTATION = { axis: 'vertical', direction: -1 }` turns the bar
 level on a turntable, the opposite way. Switching Forge to an end-over-end tumble (about the

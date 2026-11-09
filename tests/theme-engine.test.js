@@ -4,7 +4,7 @@ import {
   intensity, approach, rotationSpeed, ROTATION, haloStages,
   createFlashLimiter, maxInWindow, FLASH,
   createBoltTrack, updateBoltTrack, LIGHTNING_TRACKS, boltBranches,
-  createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle,
+  createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle, orbitHome, ORBIT_STYLE,
   PLATE_TABLE, PLATE_SIZES, SLEEVE, PLATE_MOTION, platesForLevel, plateLayout,
   createPlateRack, setRackTarget, stepRack, rackPlates, rackSettled, snapRack
 } from '../js/theme-engine.js';
@@ -252,4 +252,24 @@ test('terminal glyph mirroring: about half, and fixed for each glyph\'s life', a
   // Its only inputs are column, slot and the glyph's lifetime key — no frame time — so it cannot flip mid-life.
   assert.equal(mirrorFlag.length, 3);
   assert.equal(mirrorFlag(3.5, 2, 7), mirrorFlag(3.5, 2, 7));
+});
+
+test('terminal look-around is clamped at ±40° yaw / ±25° pitch, and reversing responds at once', () => {
+  const lim = ORBIT_STYLE.terminal.limits;
+  assert.ok(Math.abs(lim.yaw - (40 * Math.PI) / 180) < 1e-12 && Math.abs(lim.pitch - (25 * Math.PI) / 180) < 1e-12);
+  const o = createOrbit();
+  orbitGrab(o);
+  orbitDrag(o, 5000, -5000, lim);
+  assert.equal(o.yaw, lim.yaw);
+  assert.equal(o.pitch, -lim.pitch);
+  orbitDrag(o, -10, 10, lim);
+  assert.ok(o.yaw < lim.yaw && o.pitch > -lim.pitch, 'no dead zone to unwind after overshooting');
+  orbitRelease(o);
+  for (let i = 0; i < 30; i += 1) orbitSettle(o, 1 / 30, ORBIT_STYLE.terminal.settleSeconds);
+  assert.ok(Math.hypot(o.yaw, o.pitch) < 0.04 * Math.hypot(lim.yaw, lim.pitch), 'back to centre in about a second');
+  orbitDrag(o, 300, 300, lim);
+  orbitHome(o);
+  assert.deepEqual([o.yaw, o.pitch], [0, 0]);
+  assert.equal(ORBIT_STYLE.terminal.stillRelease, 'home');
+  assert.equal(ORBIT_STYLE.kemet.limits, null, 'Kemet and Forge stay unclamped');
 });

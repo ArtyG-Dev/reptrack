@@ -25,7 +25,7 @@ const PYRAMID_H = 1.25;
 const RING_Y = PYRAMID_H + 0.4;
 const RING_R = 0.62;
 const PARTICLES = 220;
-const TERMINAL_COLUMNS = 72;
+const TERMINAL_COLUMNS = 170;          // spread wide enough to fill the ±40° look-around
 const TERMINAL_TRAIL = 14;
 
 const V_FULL = `#version 300 es
@@ -381,12 +381,14 @@ const ZOOM = Object.freeze({
 const FLOOR_FS = `${HEAD}
 in vec2 vUv;
 uniform vec3 uBase, uGrid, uS2, uInk;
-uniform float uTime, uAspect, uTanY, uPitch, uCamY, uBurst, uPulse;
+uniform float uTime, uAspect, uTanY, uPitch, uCamY, uBurst, uPulse, uYaw;
 void main() {
   vec2 ndc = vUv * 2.0 - 1.0;
   vec3 d = vec3(ndc.x * uTanY * uAspect, ndc.y * uTanY, -1.0);
   float c = cos(uPitch), s = sin(uPitch);
   vec3 w = vec3(d.x, c * d.y - s, -s * d.y - c);   // view ray, un-pitched into world space
+  float cy = cos(uYaw), sy = sin(uYaw);
+  w = vec3(cy * w.x + sy * w.z, w.y, -sy * w.x + cy * w.z);   // ...and turned by the look-around yaw
   vec3 col = uBase;
   if (w.y < -0.002) {
     float t = uCamY / -w.y;
@@ -557,8 +559,10 @@ function plateMesh() {
 function glyphColumns() {
   const out = [];
   for (let i = 0; i < TERMINAL_COLUMNS; i += 1) {
-    const z = -3 - ((i + Math.random()) / TERMINAL_COLUMNS) ** 1.3 * 26;
-    const x = (Math.random() - 0.5) * 2 * Math.abs(z) * 0.55;
+    const z = -1.2 - ((i + Math.random()) / TERMINAL_COLUMNS) ** 1.3 * 28;   // near columns too, so looking down still finds the stream
+    // ±1.3 × depth covers the straight-on view plus the full ±40° yaw clamp
+    // and the half field of view, so looking round never finds an empty edge.
+    const x = (Math.random() - 0.5) * 2 * Math.abs(z) * 1.3;
     for (let t = 0; t < TERMINAL_TRAIL; t += 1) out.push(x, z, i + 0.5, t);
   }
   return new Float32Array(out);
@@ -1058,17 +1062,21 @@ export function createGLBackdrop(canvas) {
 
   function terminal(f) {
     const P = f.palette;
-    const pitch = 0.16;
+    // Dragging moves the viewpoint, not the field: the look direction turns
+    // (clamped in theme-engine ORBIT_STYLE.terminal) and the field follows the
+    // finger, like looking around inside it. Glyphs are point sprites, so they
+    // always face the camera — billboarded by construction, never a sliver.
+    const pitch = 0.16 - f.orbit.pitch;
     const camY = 2.4;
     const aspect = size.w / size.h;
     const fov = f.full ? FOV * 1.6 : FOV * 1.9;
     blend(null);
     r.floor.use().rgb('uBase', P.base).rgb('uGrid', P.grid).rgb('uS2', P.stream2).rgb('uInk', P.ink)
-      .f('uTime', f.t).f('uAspect', aspect).f('uTanY', Math.tan(fov / 2)).f('uPitch', pitch).f('uCamY', camY)
+      .f('uTime', f.t).f('uAspect', aspect).f('uTanY', Math.tan(fov / 2)).f('uPitch', pitch).f('uCamY', camY).f('uYaw', f.orbit.yaw)
       .f('uBurst', Math.min(Math.max((f.k - 0.3) / 0.5, 0), 1) * 0.4).f('uPulse', (0.75 + 0.25 * Math.sin(f.t * 0.35)) * (0.8 + 0.6 * f.k));
     fullscreen();
 
-    const view = multiply(rotationX(pitch), translation(0, -camY, 0));
+    const view = multiply(rotationX(pitch), multiply(rotationY(-f.orbit.yaw), translation(0, -camY, 0)));
     const vp = multiply(perspective(fov, aspect, 0.1, 80), view);
     blend('add');
     gl.activeTexture(gl.TEXTURE0);

@@ -1249,3 +1249,32 @@ The headless machine here had no CJK font, so the `fonts-noto-cjk` OS package (t
 Noto Sans CJK family Android ships) was installed to render the screenshots. That is a
 property of this test box, not the app: nothing was added to the repo or the footprint, and
 on a box without it the test expects, and gets, the Latin fallback.
+
+### 86. Terminal: a clamped look-around, through the one shared orbit
+
+Terminal is a place, not an object, so dragging moves the **viewpoint** around inside the
+field: the look direction turns and the field follows the finger, as in a panorama. It goes
+through the same `orbit*` handler as Kemet and Forge. `ORBIT_STYLE` in `theme-engine.js`
+gives each scene its rules:
+
+- **Terminal:** clamped to ±40° yaw and ±25° pitch, easing home over about a second
+  (τ 0.3 s), and snapping home on release under reduced motion.
+- **Kemet and Forge:** unchanged. Unclamped, τ 0.45 s, and they stay put under reduced motion.
+
+The clamp limits the accumulated angle, not the finger's travel, so a drag past the stop
+responds the instant it reverses. The floor-grid shader turns its rays by the same yaw, so
+the grid, packet bursts and glyphs stay locked together.
+
+Two things the clamp needed that it didn't obviously need:
+
+- **The field had to be widened.** Columns were placed in the straight-on frustum only
+  (±0.55 × depth), so turning 40° would have shown empty space. They now span ±1.3 × depth,
+  enough for the full yaw plus the half field of view, and there are 170 of them instead of
+  72 to keep the visible density the same.
+- **The near field was empty.** Looking down showed only the floor, so the nearest columns
+  now start at 1.2 units instead of 3.
+
+**Billboarding is by construction.** The glyphs are GL point sprites, which are always
+screen-aligned, so a katakana never turns edge-on whatever the view. They still sample the
+same cached atlas, mirrored row included. Data velocity, the katakana mix, the Latin
+fallback and the flash limiter are untouched.

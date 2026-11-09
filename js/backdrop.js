@@ -34,7 +34,7 @@
 
 import {
   createFlashLimiter, intensity, approach, rotationSpeed,
-  createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle,
+  createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle, orbitHome, ORBIT_STYLE,
   createPlateRack, setRackTarget, snapRack, stepRack, rackPlates, rackSettled, platesForLevel
 } from './theme-engine.js';
 import { createGLBackdrop } from './backdrop-gl.js';
@@ -1166,7 +1166,7 @@ function settleShown(dt) {
   for (const key of Object.keys(t)) shown[key] = dt === null ? t[key] : approach(shown[key], t[key], dt);
   shown.k = intensity({ streakLevel: shown.level * STREAK_LEVELS, monthPercent: shown.month });
   if (dt !== null && !orbit.dragging) spin = (spin + rotationSpeed(shown.k) * dt) % (Math.PI * 2);
-  if (dt !== null) { orbitSettle(orbit, dt); stepRack(rack, dt); }
+  if (dt !== null) { orbitSettle(orbit, dt, orbitStyle().settleSeconds); stepRack(rack, dt); }
   reportPlates();
 }
 
@@ -1365,17 +1365,24 @@ export function setFullView(flag) {
  * held, auto-rotation stops; on release the offset eases back as the scene's
  * own rotation resumes. Under reduced motion a drag still turns the held frame
  * — the user is choosing that motion — but nothing eases or auto-rotates. */
+function orbitStyle() {
+  return ORBIT_STYLE[skin] ?? ORBIT_STYLE.kemet;
+}
+
 export function grab() {
   orbitGrab(orbit);
 }
 
 export function dragBy(dxPx, dyPx = 0) {
-  orbitDrag(orbit, dxPx, dyPx);
+  orbitDrag(orbit, dxPx, dyPx, orbitStyle().limits);
   if (isStatic() || !raf) draw();
 }
 
 export function release() {
   orbitRelease(orbit);
+  // Reduced motion: no ease. Kemet/Forge stay where they were let go;
+  // Terminal snaps straight back to its straight-on view.
+  if (isStatic() && orbitStyle().stillRelease === 'home') orbitHome(orbit);
   if (isStatic()) draw();
 }
 

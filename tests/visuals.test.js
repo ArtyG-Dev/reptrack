@@ -651,4 +651,45 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     assert.equal((await diag(page)).spin, h1);
     await context.close();
   });
+  test('Terminal: drag looks around the field, clamped at ±40° / ±25°, and eases back to centre', async () => {
+    const { context, page } = await open('terminal');
+    await intensity(page, 0.5);
+    await page.click('#view-graphic');
+    await page.waitForSelector('#graphic-view:not([hidden])');
+    const deg = (r) => (r * 180) / Math.PI;
+    const before = await frame(page);
+    for (const [dx, dy, yaw, pitch] of [[-700, 0, -40, 0], [700, 0, 40, 0], [0, -600, 0, -25], [0, 600, 0, 25]]) {
+      await page.mouse.move(196, 426);
+      await page.mouse.down();
+      await page.mouse.move(196 + dx, 426 + dy, { steps: 10 });
+      const o = (await diag(page)).orbit;
+      // Exact on the dragged axis; the other may still be finishing the previous ease home.
+      const [got, want] = dx ? [deg(o.yaw), yaw] : [deg(o.pitch), pitch];
+      assert.ok(Math.abs(got - want) < 1e-6, `a long drag stops at the clamp: ${got.toFixed(2)}° (want ${want}°)`);
+      if (dx === 700) assert.ok(changedFraction(before, await frame(page)) > 0.02, 'the view really moved');
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+      const mid = (await diag(page)).orbit;
+      assert.ok(Math.hypot(mid.yaw, mid.pitch) > 0.01, 'eases back, does not snap (animated)');
+      await page.waitForTimeout(1300);
+      const home = (await diag(page)).orbit;
+      assert.ok(Math.hypot(deg(home.yaw), deg(home.pitch)) < 1, `back to centre after about a second (${deg(home.yaw).toFixed(2)}°, ${deg(home.pitch).toFixed(2)}°)`);
+    }
+    await context.close();
+  });
+
+  test('Terminal under reduced motion: drag still works, and release snaps straight back to the default frame', async () => {
+    const { context, page } = await open('terminal', { context: { reducedMotion: 'reduce' } });
+    await intensity(page, 0.5);
+    await page.click('#view-graphic');
+    const home = await frame(page);
+    await page.mouse.move(196, 426);
+    await page.mouse.down();
+    await page.mouse.move(500, 200, { steps: 6 });
+    assert.ok(changedFraction(home, await frame(page)) > 0.02, 'the user chose this motion, so it happens');
+    await page.mouse.up();
+    assert.deepEqual((await diag(page)).orbit, { yaw: 0, pitch: 0 }, 'snapped home on release');
+    assert.equal(changedFraction(home, await frame(page)), 0, 'pixel-identical to the default frame');
+    await context.close();
+  });
 });

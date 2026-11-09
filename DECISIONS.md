@@ -1224,3 +1224,28 @@ round with it rather than staying put while it turns. Drag works as before throu
 shared orbit and eases back into this spin; reduced motion has no auto-rotation (tested).
 `visuals.test.js` compares the two themes over ~1 s: Kemet's heading rises, Forge's falls,
 and the bar's end stays at exactly world height 0 while it swings round.
+
+### 85. Terminal streams half-width katakana, half of them mirrored, with a Latin fallback
+
+**Character set: half-width katakana** (U+FF66–U+FF9D), chosen over full-width. They are
+the narrow forms, so a column reads as a dense vertical stream at the rendered sizes, where
+full-width glyphs crowd the cell. 22 of them replace the Latin letters A–F; the ten digits
+stay. **About half the glyphs are mirrored**, picked by a hash of (column, slot, glyph
+lifetime). The same lifetime key that picks the character picks the mirroring, so a glyph
+keeps its orientation until its character changes and never flips frame to frame. The atlas
+holds a normal row and a mirrored row, drawn once (`scale(-1, 1)`) and only sampled by the
+shader, with no per-frame `fillText`. `theme-engine.test.js` checks the formula's split
+(about 50%) through a JS twin, `mirrorFlag()`.
+
+**No font file.** The atlas uses the system stack `"Noto Sans CJK JP", "Noto Sans JP",
+"Hiragino Sans", "Yu Gothic", sans-serif`; Android ships Noto Sans CJK. **No tofu, ever:**
+before building the atlas, every katakana in the set is drawn and compared with a character
+no font has (U+FFFF, which every browser draws as the same box) and with blank. Every glyph
+must differ from both and from each other. Otherwise the old `0–9 A–F` Latin set is used,
+unmirrored, exactly as before. `visuals.test.js` forces that path by making the canvas draw
+katakana as U+FFFF, and asserts the Latin set.
+
+The headless machine here had no CJK font, so the `fonts-noto-cjk` OS package (the same
+Noto Sans CJK family Android ships) was installed to render the screenshots. That is a
+property of this test box, not the app: nothing was added to the repo or the footprint, and
+on a box without it the test expects, and gets, the Latin fallback.

@@ -413,10 +413,10 @@ void main() {
 const GLYPH_VS = `#version 300 es
 layout(location = 0) in vec4 aG;
 uniform mat4 uVP;
-uniform float uTime, uSpeed, uDensity, uPx, uRate, uTrail, uHeadGlow;
+uniform float uTime, uSpeed, uDensity, uPx, uRate, uTrail, uHeadGlow, uCount, uMirrorOn;
 uniform vec3 uInk, uS1, uS2;
 out vec3 vCol;
-out float vGlyph, vA, vBlur;
+out float vGlyph, vA, vBlur, vMirror;
 float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
 void main() {
   float seed = aG.z, trail = aG.w;
@@ -434,16 +434,21 @@ void main() {
   // in --backdrop-ink rises with intensity; the rest lead in a stream colour.
   bool glows = trail < 0.5 && h1(seed * 7.9) < uHeadGlow;
   vCol = glows ? uInk : (bucket < 0.5 ? uS1 : uS2);
-  vGlyph = floor(h1(seed * 9.1 + trail * 3.7 + floor(uTime * uRate + h1(seed) * 9.0)) * 16.0);
+  // A glyph lives until its character next changes; its mirroring is drawn
+  // from the same "lifetime" key, so it is fixed for that life — never a
+  // per-frame flip. About half of them are mirrored.
+  float life = floor(uTime * uRate + h1(seed) * 9.0);
+  vGlyph = floor(h1(seed * 9.1 + trail * 3.7 + life) * uCount);
+  vMirror = step(0.5, h1(seed * 4.3 + trail * 1.9 + life * 0.71)) * uMirrorOn;   // the Latin fallback is never mirrored
   gl_PointSize = vA > 0.0 ? clamp(0.55 * uPx / clip.w, 1.0, 64.0) : 0.0;
 }`;
 const GLYPH_FS = `${HEAD}
 in vec3 vCol;
-in float vGlyph, vA, vBlur;
+in float vGlyph, vA, vBlur, vMirror;
 uniform sampler2D uAtlas;
-uniform float uBright;
+uniform float uBright, uCount;
 void main() {
-  vec2 uv = (vec2(vGlyph, 0.0) + gl_PointCoord) / vec2(16.0, 1.0);
+  vec2 uv = (vec2(vGlyph, vMirror) + gl_PointCoord) / vec2(uCount, 2.0);
   float a = texture(uAtlas, uv, vBlur * 2.5).r;
   o = vec4(vCol * a * vA * uBright, 1.0);
 }`;
@@ -559,25 +564,83 @@ function glyphColumns() {
   return new Float32Array(out);
 }
 
-function glyphAtlas(gl) {
+/* Terminal glyphs. Digits stay; the letters are half-width katakana
+ * (U+FF66–U+FF9D), the narrow forms, which give the dense column look at this
+ * size. No font file: the system stack below, which Android satisfies with
+ * Noto Sans CJK. If a device cannot draw katakana (they would come out as
+ * tofu boxes), the old Latin set is used instead. */
+const DIGITS = '0123456789';
+const KATAKANA = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆ';
+const LATIN = 'ABCDEF';
+const CJK_STACK = '"Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif';
+
+/** True when this device really draws katakana: two different katakana must
+ *  render differently from each other and from a character no font has
+ *  (which every browser draws as the same tofu box), and not be blank. */
+function katakanaRenders() {
   const c = document.createElement('canvas');
-  c.width = 512;
-  c.height = 32;
+  c.width = 40;
+  c.height = 40;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  const shape = (ch) => {
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, 40, 40);
+    g.fillStyle = '#fff';
+    g.font = `32px ${CJK_STACK}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(ch, 20, 21);
+    return g.getImageData(0, 0, 40, 40).data.join(',');
+  };
+  const tofu = shape('\uFFFF');
+  const blank = shape(' ');
+  // Every glyph in the set must draw as itself — a font that covered only some
+  // would otherwise leave boxes in the stream.
+  const drawn = [...KATAKANA].map(shape);
+  return drawn.every((d) => d !== tofu && d !== blank) && new Set(drawn).size === drawn.length;
+}
+
+/** JS twin of the shader's mirror flag, for tests: same formula, so it shows
+ *  the split is ~even and depends only on (column, slot, glyph lifetime) —
+ *  never on the frame. GPU sin() differs in the last bits, not the shape. */
+export function mirrorFlag(seed, trail, life) {
+  const h1 = (n) => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
+  return h1(seed * 4.3 + trail * 1.9 + life * 0.71) >= 0.5 ? 1 : 0;
+}
+
+/** The atlas: one row of glyphs and, beneath it, the same glyphs mirrored
+ *  horizontally — drawn once here, so the shader only ever samples. */
+function glyphAtlas(gl) {
+  const katakana = katakanaRenders();
+  const glyphs = [...DIGITS, ...(katakana ? KATAKANA : LATIN)];
+  const cell = 32;
+  const c = document.createElement('canvas');
+  c.width = glyphs.length * cell;
+  c.height = cell * 2;
   const g = c.getContext('2d');
   g.fillStyle = '#000';
-  g.fillRect(0, 0, 512, 32);
+  g.fillRect(0, 0, c.width, c.height);
   g.fillStyle = '#fff';
-  g.font = 'bold 26px monospace';
+  g.font = katakana ? `bold 26px ${CJK_STACK}` : 'bold 26px monospace';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  [...'0123456789ABCDEF'].forEach((ch, i) => g.fillText(ch, i * 32 + 16, 17));
+  glyphs.forEach((ch, i) => {
+    const x = i * cell + cell / 2;
+    g.fillText(ch, x, cell / 2 + 1);
+    g.save();
+    g.translate(x, cell + cell / 2 + 1);
+    g.scale(-1, 1);                                       // the mirrored ("inverted") row
+    g.fillText(ch, 0, 0);
+    g.restore();
+  });
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   gl.generateMipmap(gl.TEXTURE_2D);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  return tex;
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return { tex, count: glyphs.length, set: katakana ? 'katakana' : 'latin' };
 }
 
 /* ---------- small helpers ---------- */
@@ -1009,8 +1072,9 @@ export function createGLBackdrop(canvas) {
     const vp = multiply(perspective(fov, aspect, 0.1, 80), view);
     blend('add');
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, r.atlas);
-    r.glyph.use().m4('uVP', vp).f('uTime', f.t).f('uSpeed', 0.9 + 2.4 * f.k).f('uDensity', 0.35 + 0.65 * f.k).f('uPx', size.h)
+    gl.bindTexture(gl.TEXTURE_2D, r.atlas.tex);
+    info.terminal = { glyphSet: r.atlas.set, glyphs: r.atlas.count };
+    r.glyph.use().f('uCount', r.atlas.count).f('uMirrorOn', r.atlas.set === 'katakana' ? 1 : 0).m4('uVP', vp).f('uTime', f.t).f('uSpeed', 0.9 + 2.4 * f.k).f('uDensity', 0.35 + 0.65 * f.k).f('uPx', size.h)
       .f('uRate', 2 + 6 * f.k).f('uTrail', 6 + 8 * f.k).f('uHeadGlow', 0.12 + 0.88 * f.k).rgb('uInk', P.ink).rgb('uS1', P.stream).rgb('uS2', P.stream2).i('uAtlas', 0).f('uBright', 1.5 + 0.6 * f.k);
     gl.bindVertexArray(r.glyphs.va);
     gl.drawArrays(gl.POINTS, 0, r.glyphs.count);

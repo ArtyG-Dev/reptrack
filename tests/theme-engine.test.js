@@ -237,3 +237,19 @@ test('snapRack puts the right plates in place at once (reduced motion)', () => {
   assert.ok(rackSettled(rack));
   assert.ok(rackPlates(rack).every((p) => p.alpha === 1 && !p.moving));
 });
+
+test('terminal glyph mirroring: about half, and fixed for each glyph\'s life', async () => {
+  const { mirrorFlag } = await import('../js/backdrop-gl.js');
+  let mirrored = 0;
+  let total = 0;
+  for (let seed = 0.5; seed < 72; seed += 1) {
+    for (let trail = 0; trail < 14; trail += 1) {
+      for (let life = 0; life < 20; life += 1) { mirrored += mirrorFlag(seed, trail, life); total += 1; }
+    }
+  }
+  const share = mirrored / total;
+  assert.ok(share > 0.45 && share < 0.55, `about half mirrored (${(share * 100).toFixed(1)}%)`);
+  // Its only inputs are column, slot and the glyph's lifetime key — no frame time — so it cannot flip mid-life.
+  assert.equal(mirrorFlag.length, 3);
+  assert.equal(mirrorFlag(3.5, 2, 7), mirrorFlag(3.5, 2, 7));
+});

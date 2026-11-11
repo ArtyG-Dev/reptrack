@@ -1,0 +1,578 @@
+{
+  "app": "reptrack",
+  "schemaVersion": 1,
+  "exportedAt": "2026-11-11T00:14:33.827Z",
+  "exercises": [
+    {
+      "id": "ex_09f815bb-d912-4c36-852b-2e466c052569",
+      "name": "Tricep Pushdown",
+      "aliases": [
+        "pushdown",
+        "tricep push down",
+        "rope pushdown"
+      ],
+      "muscleGroup": "arms",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072913,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_0eaebf37-5571-4961-9f8f-cb8499ee8e13",
+      "name": "Incline Bench Press",
+      "aliases": [
+        "incline bench",
+        "incline press"
+      ],
+      "muscleGroup": "chest",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072907,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_1df23675-9ee6-4a6b-b6c0-dde68199f1f0",
+      "name": "Plank",
+      "aliases": [
+        "planks"
+      ],
+      "muscleGroup": "core",
+      "category": "calisthenics",
+      "mode": "hold",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072927,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_3a1d99ab-1bc6-4469-8629-4e48d46d091d",
+      "name": "Downward Dog",
+      "aliases": [
+        "downward facing dog",
+        "down dog"
+      ],
+      "muscleGroup": "other",
+      "category": "yoga",
+      "mode": "hold",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072930,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_3d7afef4-8046-4ed2-bbb5-16b354e41566",
+      "name": "Pull Up",
+      "aliases": [
+        "pull ups",
+        "pullup",
+        "pullups",
+        "chin up",
+        "chin ups"
+      ],
+      "muscleGroup": "back",
+      "category": "calisthenics",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": true,
+      "lastModified": 1794356072925,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_3e0126bf-6187-473c-840c-074f94b7cdda",
+      "name": "Front Squat",
+      "aliases": [
+        "front squats"
+      ],
+      "muscleGroup": "legs",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072909,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_3f1d0b7f-1ba0-498f-ad2c-6db9ebd22c36",
+      "name": "Back Squat",
+      "aliases": [
+        "squat",
+        "squats",
+        "barbell squat",
+        "back squats"
+      ],
+      "muscleGroup": "legs",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072908,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_41d9b549-0524-46bc-87fd-37e787795f69",
+      "name": "Overhead Press",
+      "aliases": [
+        "ohp",
+        "shoulder press",
+        "military press",
+        "press"
+      ],
+      "muscleGroup": "shoulders",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072908,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_4e914a2c-855d-4560-9889-b5f83e5c0739",
+      "name": "Leg Curl",
+      "aliases": [
+        "hamstring curl",
+        "leg curls"
+      ],
+      "muscleGroup": "legs",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072911,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_5436b83b-15f2-4acc-bdbc-0a02d30793fa",
+      "name": "Child's Pose",
+      "aliases": [
+        "childs pose",
+        "child pose"
+      ],
+      "muscleGroup": "other",
+      "category": "yoga",
+      "mode": "hold",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072931,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_6efbad94-d2da-4596-8f72-c1727ab0fba7",
+      "name": "The Hundred",
+      "aliases": [
+        "hundred",
+        "the 100"
+      ],
+      "muscleGroup": "core",
+      "category": "pilates",
+      "mode": "hold",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072932,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_7639a83a-369b-49bd-bdd2-2f03d10e9e9b",
+      "name": "Barbell Row",
+      "aliases": [
+        "row",
+        "rows",
+        "bent over row",
+        "pendlay row"
+      ],
+      "muscleGroup": "back",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072910,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_7a302627-140a-48d8-9a01-9228debcbdb4",
+      "name": "Pistol Squat",
+      "aliases": [
+        "pistol squats",
+        "single leg squat"
+      ],
+      "muscleGroup": "legs",
+      "category": "calisthenics",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": true,
+      "lastModified": 1794356072927,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_8967f1dd-fbe0-4616-ab60-9bdd8fb92bd9",
+      "name": "Leg Extension",
+      "aliases": [
+        "leg extensions",
+        "quad extension"
+      ],
+      "muscleGroup": "legs",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072912,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_8e11f7fe-e4be-4c5f-a95e-300a85d76a41",
+      "name": "Dumbbell Curl",
+      "aliases": [
+        "bicep curl",
+        "biceps curl",
+        "curl",
+        "curls",
+        "dumbbell curls"
+      ],
+      "muscleGroup": "arms",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072912,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_9060c1a2-7b17-4120-af05-a5140b973ac2",
+      "name": "Hip Thrust",
+      "aliases": [
+        "hip thrusts",
+        "glute bridge"
+      ],
+      "muscleGroup": "legs",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072924,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_98264057-d814-44b1-a2a2-adf7e7739b2d",
+      "name": "Plank Series",
+      "aliases": [
+        "pilates plank"
+      ],
+      "muscleGroup": "core",
+      "category": "pilates",
+      "mode": "hold",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072933,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_9e2b5c75-fc3c-4895-9ab4-06dfc0e047db",
+      "name": "Lat Pulldown",
+      "aliases": [
+        "pulldown",
+        "pulldowns",
+        "lat pull down"
+      ],
+      "muscleGroup": "back",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072911,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_a0fae780-0aa5-4378-aa93-2b4958c63555",
+      "name": "Deadlift",
+      "aliases": [
+        "deadlifts",
+        "conventional deadlift",
+        "dead lift"
+      ],
+      "muscleGroup": "back",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072909,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_a2be6d84-0bbb-44ee-a249-83eae23f26d3",
+      "name": "Warrior II",
+      "aliases": [
+        "warrior 2",
+        "warrior two"
+      ],
+      "muscleGroup": "other",
+      "category": "yoga",
+      "mode": "hold",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072931,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_aa41ee55-e9c7-4197-920a-060619fd972a",
+      "name": "Roll Up",
+      "aliases": [
+        "roll-up",
+        "rollup",
+        "roll ups"
+      ],
+      "muscleGroup": "core",
+      "category": "pilates",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": true,
+      "lastModified": 1794356072933,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_b81bea35-3ea2-4dd2-ac30-395a4963ebba",
+      "name": "Leg Press",
+      "aliases": [
+        "leg presses"
+      ],
+      "muscleGroup": "legs",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072911,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_b9ced4d2-767b-4dac-9d44-b71e216b3702",
+      "name": "Push Up",
+      "aliases": [
+        "push ups",
+        "pushup",
+        "pushups",
+        "press up",
+        "press ups"
+      ],
+      "muscleGroup": "chest",
+      "category": "calisthenics",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": true,
+      "lastModified": 1794356072925,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_d0deac6d-2a41-4ed0-a786-472763d0cd5a",
+      "name": "Romanian Deadlift",
+      "aliases": [
+        "rdl",
+        "rdls",
+        "romanian deadlifts",
+        "stiff leg deadlift"
+      ],
+      "muscleGroup": "back",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072910,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_d5f9171f-6d4e-4f05-96f1-32ff5a67536d",
+      "name": "Bench Press",
+      "aliases": [
+        "bench",
+        "flat bench",
+        "barbell bench press",
+        "bench press"
+      ],
+      "muscleGroup": "chest",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072906,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_db4b3fe9-2b1f-4052-9e70-17e20c7fab8e",
+      "name": "Lateral Raise",
+      "aliases": [
+        "lat raise",
+        "side raise",
+        "lateral raises"
+      ],
+      "muscleGroup": "shoulders",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072923,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_e4a56622-4444-452f-a42d-1ed5a141d65d",
+      "name": "Calf Raise",
+      "aliases": [
+        "calf raises",
+        "standing calf raise"
+      ],
+      "muscleGroup": "legs",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072924,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_eaf91f97-b9cf-4d59-8ba8-757443447d1e",
+      "name": "Face Pull",
+      "aliases": [
+        "face pulls"
+      ],
+      "muscleGroup": "shoulders",
+      "category": "strength",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": false,
+      "lastModified": 1794356072923,
+      "visibility": "private"
+    },
+    {
+      "id": "ex_edcadd9e-b7ed-4efc-ba5a-7ff098c741f3",
+      "name": "Dip",
+      "aliases": [
+        "dips",
+        "parallel bar dips"
+      ],
+      "muscleGroup": "chest",
+      "category": "calisthenics",
+      "mode": "reps",
+      "isCustom": false,
+      "isBodyweight": true,
+      "lastModified": 1794356072925,
+      "visibility": "private"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "ses_27130206-6c29-4c47-9c24-a71e949b1400",
+      "dateISO": "2026-11-11",
+      "startTs": 1794356073018,
+      "endTs": null,
+      "durationSec": 0,
+      "notes": "",
+      "lastModified": 1794356073018,
+      "visibility": "private",
+      "sessionType": "gym",
+      "className": null,
+      "instructor": null,
+      "location": null,
+      "attendance": null
+    }
+  ],
+  "sets": [
+    {
+      "id": "set_22d14111-c3df-4f5e-b0e6-1f8829290c47",
+      "sessionId": "ses_27130206-6c29-4c47-9c24-a71e949b1400",
+      "exerciseId": "ex_3f1d0b7f-1ba0-498f-ad2c-6db9ebd22c36",
+      "dateISO": "2026-11-11",
+      "order": 2,
+      "weight": 100,
+      "unit": "kg",
+      "reps": 5,
+      "rpe": null,
+      "holdSeconds": null,
+      "side": null,
+      "isPR": false,
+      "lastModified": 1794356073377,
+      "visibility": "private"
+    },
+    {
+      "id": "set_56faa93a-1659-4c90-894a-c2e889a377f6",
+      "sessionId": "ses_27130206-6c29-4c47-9c24-a71e949b1400",
+      "exerciseId": "ex_3f1d0b7f-1ba0-498f-ad2c-6db9ebd22c36",
+      "dateISO": "2026-11-11",
+      "order": 1,
+      "weight": 100,
+      "unit": "kg",
+      "reps": 5,
+      "rpe": null,
+      "holdSeconds": null,
+      "side": null,
+      "isPR": true,
+      "lastModified": 1794356073367,
+      "visibility": "private"
+    },
+    {
+      "id": "set_5ceaaee0-b00a-4b03-90ea-836a7581be2d",
+      "sessionId": "ses_27130206-6c29-4c47-9c24-a71e949b1400",
+      "exerciseId": "ex_1df23675-9ee6-4a6b-b6c0-dde68199f1f0",
+      "dateISO": "2026-11-11",
+      "order": 4,
+      "weight": 0,
+      "unit": "kg",
+      "reps": 0,
+      "rpe": null,
+      "holdSeconds": 60,
+      "side": null,
+      "isPR": true,
+      "lastModified": 1794356073567,
+      "visibility": "private"
+    },
+    {
+      "id": "set_9eb183b1-c018-4681-a9e6-15d4e8f9f049",
+      "sessionId": "ses_27130206-6c29-4c47-9c24-a71e949b1400",
+      "exerciseId": "ex_d5f9171f-6d4e-4f05-96f1-32ff5a67536d",
+      "dateISO": "2026-11-11",
+      "order": 0,
+      "weight": 60,
+      "unit": "kg",
+      "reps": 10,
+      "rpe": null,
+      "holdSeconds": null,
+      "side": null,
+      "isPR": true,
+      "lastModified": 1794356073185,
+      "visibility": "private"
+    },
+    {
+      "id": "set_bd704686-14e6-48a7-8f67-448fe716e21c",
+      "sessionId": "ses_27130206-6c29-4c47-9c24-a71e949b1400",
+      "exerciseId": "ex_3f1d0b7f-1ba0-498f-ad2c-6db9ebd22c36",
+      "dateISO": "2026-11-11",
+      "order": 3,
+      "weight": 100,
+      "unit": "kg",
+      "reps": 5,
+      "rpe": null,
+      "holdSeconds": null,
+      "side": null,
+      "isPR": false,
+      "lastModified": 1794356073378,
+      "visibility": "private"
+    }
+  ],
+  "runs": [
+    {
+      "id": "run_e262bba1-2b15-4665-9a56-d01b708f2974",
+      "dateISO": "2026-11-11",
+      "distance": 5,
+      "distanceUnit": "km",
+      "durationSec": 1500,
+      "notes": "",
+      "lastModified": 1794356073717,
+      "visibility": "private"
+    }
+  ],
+  "settings": [
+    {
+      "key": "seedBackfillDone",
+      "value": true
+    }
+  ]
+}

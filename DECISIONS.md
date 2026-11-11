@@ -1553,3 +1553,11 @@ error and stack too, so a future intermittent failure can be read from the log.
 earlier stages' checks: the body map has one control per muscle (18), and pressing Enter on
 a muscle opens its exercise suggestions. No console errors. Tests 336 → 352; Lighthouse
 a11y 100 in all six themes; skins within budget; footprint 3.753 MB.
+
+### 102. Repair: the max-intensity flash test, batched
+
+Adding skins took the "10 s at maximum intensity" test from four pages rendering at once on
+SwiftShader to seven. The flash cap held on every skin, but the check that the lightning
+skins are really busy at maximum failed for Fractal: its scene clock ran only 3.4 s in 10 s
+of wall time, too little to count strikes. The test was calibrated at four pages, so it now
+runs in batches of at most four. What it asserts is unchanged.

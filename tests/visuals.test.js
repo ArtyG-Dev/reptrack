@@ -192,7 +192,9 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     // page draws fewer frames, and the scene clock (which the flash log is
     // stamped in) caps each step at 0.1 s — so "busy" is judged per second of
     // scene time, while the cap is judged on the log itself, which is exact.
-    const runs = await Promise.all(SKINS.map(async (theme) => {
+    // In batches of at most four: every page shares one CPU rasteriser, and with
+    // more at once a scene's clock can barely run in 10 s of wall time.
+    const measure = async (theme) => {
       const { context, page } = await open(theme);
       await intensity(page, 1);
       await page.waitForTimeout(1500);            // let the eased intensity arrive
@@ -201,7 +203,9 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
       const d = await diag(page);
       await context.close();
       return { theme, log: d.flashLog, seconds: d.clock - start, recent: d.flashLog.filter((t) => t >= start * 1000).length };
-    }));
+    };
+    const runs = [];
+    for (let i = 0; i < SKINS.length; i += 4) runs.push(...await Promise.all(SKINS.slice(i, i + 4).map(measure)));
     for (const { theme, log } of runs) {
       assert.ok(maxInWindow(log) <= FLASH.maxFlashes, `${theme}: ${maxInWindow(log)} flashes inside one second`);
     }

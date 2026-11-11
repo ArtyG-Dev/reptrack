@@ -1,13 +1,14 @@
 /* RepTrack — single stylesheet, semantic custom properties.
  *
- * Six colour schemes. Settings sets `data-theme` on <html> and it applies
+ * Nine colour schemes. Settings sets `data-theme` on <html> and it applies
  * immediately, no reload:
  *   light     (default, on :root)          flat, opaque
  *   neon                                   flat, opaque, high-contrast
- *   terminal | fractal | forge | kemet     frosted glass over an animated backdrop
+ *   terminal | fractal | forge | kemet |
+ *   monolith | constellation | orrery     frosted glass over an animated backdrop
  *
  * Every foreground/background pair is contrast-checked at >= 4.5:1 by
- * tests/contrast.test.js in EVERY scheme. For the four glass schemes that check
+ * tests/contrast.test.js in EVERY scheme. For the seven glass schemes that check
  * is run twice — compositing the glass scrim over `--backdrop-base` (the darkest
  * the animated layer ever draws) and over `--backdrop-ink` (the lightest) — so
  * the floor holds across the whole animation range, not just one frame.

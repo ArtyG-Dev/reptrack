@@ -137,6 +137,20 @@ try {
   check('stage 4: a muscle opens its exercise suggestions', await page.waitForSelector('#muscle-sheet li', { timeout: 8000 }).then(() => true, () => false));
   await page.click('#muscle-sheet button:has-text("Close")');
 
+  // Stage 5: each new skin is offered and draws.
+  for (const theme of ['monolith', 'constellation', 'orrery']) {
+    await page.click('#tab-settings');
+    await page.selectOption('#set-theme', theme);
+    const drawn = await page.waitForFunction((t) => { const d = window.__backdrop?.getDiagnostics(); return d?.skin === t && d.frames > 0; }, theme, { timeout: 15000 }).then(() => true, () => false);
+    check(`stage 5: ${theme} draws`, drawn);
+  }
+  await page.click('#tab-today');
+  await page.click('#view-graphic');
+  check('stage 5: the Orrery has eight tappable planets', await page.waitForFunction(() => window.__backdrop.getDiagnostics().planets.length === 8, null, { timeout: 8000 }).then(() => true, () => false));
+  await page.keyboard.press('Escape');
+  await page.click('#tab-settings');
+  await page.selectOption('#set-theme', 'light');
+
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await context.close();
 } finally {

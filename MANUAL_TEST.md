@@ -178,6 +178,16 @@ Also worth a quick look while you're in there:
 - After 6+ chest sets today, tapping a pec shows "Trained recently — rest may serve it
   better", and Log this still works.
 
+## Check 8: the three new skins (about 3 minutes)
+
+- **Monolith** (Settings → Theme): View, drag the cube sideways and let go. It turns to the
+  nearest face in under half a second, then carries on turning. Dragging up and down tilts
+  it a little and no further.
+- **Constellation:** View, give it a long spin. It eases back after you let go. Watch the
+  stars for ten seconds: they should shimmer gently, never blink.
+- **Orrery:** View, tap a planet. Its region's exercises appear. Close the sheet; the
+  view is still there. With a keyboard, Tab rings each planet in turn.
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.

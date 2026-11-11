@@ -38,6 +38,30 @@ mkdirSync(outDir, { recursive: true });
 
 const local = remote ? null : await listen(0);
 const base = remote || `http://127.0.0.1:${local.port}/`;
+
+/* The Stage 5 skins draw training history, not just the shared intensity, so
+ * each shot also gets history to match its level: none at 0, about half the
+ * days at 0.5, nearly every day (with PRs) at 1. Built in the page with the
+ * app's own js/skin-data.js, so the shapes are exactly what the app pushes. */
+async function seedSkinData({ k, streakLevel }) {
+  const sd = await import('./js/skin-data.js');
+  const today = new Date();
+  const iso = (n) => { const d = new Date(today); d.setDate(d.getDate() - n); return d.toLocaleDateString('en-CA'); };
+  const trained = new Set();
+  const prs = new Set();
+  for (let n = 0; n < 365; n += 1) {
+    if (((n * 37) % 100) / 100 < k * 0.85) trained.add(iso(n));
+    if (trained.has(iso(n)) && n % 9 === 0) prs.add(iso(n));
+  }
+  const todayISO = iso(0);
+  const stars = sd.starField({ trained, prs, todayISO });
+  const weekly = [12, 9, 8, 10, 6, 11, 14, 5];
+  window.__backdrop.setSkinData({
+    monolith: sd.monolithFaces({ trained, prs, todayISO }),
+    constellation: { stars, links: sd.constellationLinks(stars, { level: streakLevel, peakLevel: streakLevel, todayISO }), peakLevel: streakLevel },
+    orrery: { planets: sd.REGIONS.map((r, i) => ({ ...r, weekly: weekly[i] * k, size: sd.planetSize(weekly[i] * k), rings: Math.min(3, Math.round(k * (i % 4))) })) }
+  });
+}
 const browser = await launch(chromium);
 const manifest = { capturedAt: new Date().toISOString(), source: remote ? 'live' : 'local', shots: [] };
 
@@ -49,6 +73,7 @@ try {
       await page.goto(`${base}index.html?theme=${skin}`, { waitUntil: 'load' });
       await page.waitForFunction((s) => window.__backdrop?.getDiagnostics().skin === s, skin, { timeout: 15000 });
       await page.evaluate(([lv, mp]) => window.__backdrop.setActivity({ glow: lv / 10, streakLevel: lv, streakFraction: lv / 10, monthPercent: mp }), [streakLevel, monthPercent]);
+      await page.evaluate(seedSkinData, { k, streakLevel });
       await page.waitForTimeout(2500);
 
       const name = `${skin}-${String(k).replace('.', '_')}`;

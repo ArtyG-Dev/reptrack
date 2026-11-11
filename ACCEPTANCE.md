@@ -9,7 +9,7 @@ _Measured 2026-11-11 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 352 passed, 0 failed | ✅ |
+| Automated tests | 387 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -17,16 +17,22 @@ _Measured 2026-11-11 — regenerate with `npm run acceptance`._
 | Lighthouse — Accessibility (Fractal) | 100 | ✅ |
 | Lighthouse — Accessibility (Forge) | 100 | ✅ |
 | Lighthouse — Accessibility (Kemet) | 100 | ✅ |
-| Lighthouse — Performance | 82 | ✅ |
+| Lighthouse — Accessibility (Monolith) | 100 | ✅ |
+| Lighthouse — Accessibility (Constellation) | 100 | ✅ |
+| Lighthouse — Accessibility (Orrery) | 100 | ✅ |
+| Lighthouse — Performance | 80 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (webgl2; see note below) | app JS +0.8% vs Light · main thread 76.4% incl. waiting on SwiftShader · GPU proc 259.8% (CPU-emulated) · 29.9 fps · 2D fallback 2.5% | ✅ |
-| Skin CPU — Fractal (webgl2; see note below) | app JS +0.9% vs Light · main thread 79.2% incl. waiting on SwiftShader · GPU proc 270.2% (CPU-emulated) · 30 fps · 2D fallback 3% | ✅ |
-| Skin CPU — Forge (webgl2; see note below) | app JS +0.9% vs Light · main thread 63.3% incl. waiting on SwiftShader · GPU proc 215.7% (CPU-emulated) · 30 fps · 2D fallback 3.1% | ✅ |
-| Skin CPU — Kemet (webgl2; see note below) | app JS +1.1% vs Light · main thread 64.1% incl. waiting on SwiftShader · GPU proc 219.2% (CPU-emulated) · 30 fps · 2D fallback 3.6% | ✅ |
-| App shell size | 0.418 MB | ✅ |
+| Skin CPU — Terminal (webgl2; see note below) | app JS +0.9% vs Light · main thread 74.2% incl. waiting on SwiftShader · GPU proc 259.6% (CPU-emulated) · 30 fps · 2D fallback 2.5% | ✅ |
+| Skin CPU — Fractal (webgl2; see note below) | app JS +0.9% vs Light · main thread 73.6% incl. waiting on SwiftShader · GPU proc 255.2% (CPU-emulated) · 30 fps · 2D fallback 3% | ✅ |
+| Skin CPU — Forge (webgl2; see note below) | app JS +0.9% vs Light · main thread 58% incl. waiting on SwiftShader · GPU proc 198.1% (CPU-emulated) · 30 fps · 2D fallback 2.6% | ✅ |
+| Skin CPU — Kemet (webgl2; see note below) | app JS +0.9% vs Light · main thread 58.7% incl. waiting on SwiftShader · GPU proc 199.7% (CPU-emulated) · 30 fps · 2D fallback 3.4% | ✅ |
+| Skin CPU — Monolith (webgl2; see note below) | app JS +0.8% vs Light · main thread 62.4% incl. waiting on SwiftShader · GPU proc 212.7% (CPU-emulated) · 30.1 fps · 2D fallback 3.8% | ✅ |
+| Skin CPU — Constellation (webgl2; see note below) | app JS +1.2% vs Light · main thread 54.1% incl. waiting on SwiftShader · GPU proc 177.6% (CPU-emulated) · 30.2 fps · 2D fallback 2.6% | ✅ |
+| Skin CPU — Orrery (webgl2; see note below) | app JS +1.9% vs Light · main thread 56.8% incl. waiting on SwiftShader · GPU proc 184.4% (CPU-emulated) · 30.1 fps · 2D fallback 2.5% | ✅ |
+| App shell size | 0.46 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.336 MB stored | ✅ |
-| Total installed footprint | 3.753 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 3.795 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -305,6 +311,27 @@ Per `docs/FOLLOWUP_PROMPT_TERMINAL_ORBIT_FRACTAL_COLOUR.md`. Each change committ
 | 139 | Pushed, cache bumped, live re-verified | Live files byte-identical to `ea1100f`, SW `/reptrack/` with `reptrack-shell-v7`; on the live site the Terminal clamp, snap home, Fractal hint, hue/warmth and persistence across a reload all verified, no console errors. `DEPLOYMENT.md` → "Live verification" | ✅ |
 | 140 | `MANUAL_TEST.md` on-phone checks | Check 2 → "Two more" | ✅ |
 
+## Plans, muscles, body map and three skins
+
+Per `docs/FOLLOWUP_PROMPT_PLANS_BODYMAP_THEMES.md` (plus Stage 1b, added at the user's
+request). Each stage verified live after its push; see `DECISIONS.md` #88–#105.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 141 | Stage 1: edit a logged set, quick adjust, "make that N", rest buzz, per-exercise rest, wake lock, backup reminder | `features.test.js` (Stage 1 block), `parser.test.js`, `reminders.test.js`; live 15/15 | ✅ |
+| 142 | Stage 1b: persistent storage, earlier sessions + re-dating with PR recompute, Diary editing, RPE field, warm-up sets | `features.test.js` (Stage 1b block), `state.test.js`, `progression.test.js` | ✅ |
+| 143 | Plans: store (DB v3, backup schema 2), schema-1 backups import, CRUD + reorder, Save as plan, Start from plan, checklist with targets / tick / untick / skip / Extra, voice counts, "Update plan to what I did?" defaulting to No | `db.test.js`, `plans.test.js`, `features.test.js` (Stage 2 block); live 19/19 | ✅ |
+| 144 | Muscles: 18-muscle taxonomy, accurate seed mappings, one-time backfill (never overwrites), old backups filled, chip editor | `muscles.test.js`, `state.test.js`, `features.test.js` | ✅ |
+| 145 | Total reps / volume per session (bodyweight → total reps, labelled); weekly sets by muscle (1 primary, ½ secondary, warm-ups excluded) with last week faint; 12-week line per muscle | `progression.test.js`, `chart.test.js` (`computeBars`), `muscles.test.js`, `features.test.js`; live 22/22 | ✅ |
+| 146 | Body map: front/back, flip on narrow screens, three figures, heat levels in one constant, `--heat-*` in every theme with contrast, legend + labels with counts, keyboard | `contrast.test.js` (heat block ×9), `muscles.test.js`, `features.test.js` (Stage 4 block) | ✅ |
+| 147 | Tap → suggestions (primary first, fewest sets this week, least recent), recovery note at 6 weighted sets in 48 h that never blocks, "Add an exercise for …", "Log this" through the confirm sheet | `muscles.test.js`, `features.test.js`; live 24/24 | ✅ |
+| 148 | Definition 0–5: lifetime, monotonic, unchanged by a 60-day lapse, never size | `muscles.test.js`; `features.test.js` moves every set 60 days back and reads the level | ✅ |
+| 149 | Monolith: four weeks on four faces, PR caps, month rings, ±30° tilt, snap to a face in ~400 ms (instant under reduced motion), frosted bars cooled not removed | `skin-data.test.js`, `theme-engine.test.js`, `visuals.test.js` (Monolith block) | ✅ |
+| 150 | Constellation: star per training day (≤400), stable positions, lines by level kept at the peak, twinkle ≤15% at ≤1 Hz, measured flash-safe from real pixels at maximum intensity | `skin-data.test.js`, `visuals.test.js` (Constellation block) | ✅ |
+| 151 | Orrery: eight regions, size floor, permanent rings ≤3, sun by month, speed within the cap, tap and Tab + Enter open the region's suggestions | `skin-data.test.js`, `visuals.test.js` (Orrery block) | ✅ |
+| 152 | All three skins: GL + 2D, static frame, voice pause, contrast and flash tests in node and Chromium, Lighthouse a11y 100, CPU within budget, screenshots | The shared per-skin loops in `visuals.test.js`, `browser.test.js`, `sweep.test.js`, `contrast.test.js`, `theme-engine.test.js` all include them; measured block above; `VISUALS.md` | ✅ headless / ⚠️ device |
+| 153 | On-phone checks | `MANUAL_TEST.md` Checks 3–8 | ⚠️ needs a phone |
+
 ## Build constraints
 
 | Constraint | Verification | Status |
@@ -328,7 +355,7 @@ npm run acceptance     # all three + rewrites the measured block above
 Two things cannot be settled headlessly, and both live in `MANUAL_TEST.md`: criterion #3,
 the music behaviour, and the real-device half of criterion #34, the skin CPU/battery cost.
 
-Lighthouse runs against all six themes (`?theme=light|neon|terminal|fractal|forge|kemet` — a
+Lighthouse runs against all nine themes (`?theme=light|neon|terminal|…|orrery` — a
 preview-only URL override `app.js` reads at boot, see `js/app.js` `wireTheme()`) and gates
 every one of them at ≥ 90 for accessibility. The measured block above reports the default
 (light) run's other categories; each theme's accessibility score has its own row.

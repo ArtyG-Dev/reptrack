@@ -60,7 +60,7 @@ const skins = read('.reports/skins.json');
 /* 5. Write the measured block into ACCEPTANCE.md */
 const scores = lighthouse?.scores ?? {};                                    // default (light) run
 const themeScores = lighthouse?.themes ?? {};
-const THEME_LABELS = { light: 'Light', neon: 'Neon', terminal: 'Terminal', fractal: 'Fractal', forge: 'Forge', kemet: 'Kemet' };
+const THEME_LABELS = { light: 'Light', neon: 'Neon', terminal: 'Terminal', fractal: 'Fractal', forge: 'Forge', kemet: 'Kemet', monolith: 'Monolith', constellation: 'Constellation', orrery: 'Orrery' };
 const a11yOf = (theme) => themeScores?.[theme]?.scores?.accessibility;
 const everyThemeAccessible = Object.keys(THEME_LABELS).every((t) => (a11yOf(t) ?? scores.accessibility ?? 0) >= 90);
 

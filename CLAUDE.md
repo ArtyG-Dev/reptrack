@@ -41,7 +41,7 @@ progression, weekly summary. Phases 2–4 (nutrition, multi-user, auth/social) a
 index.html              shell: app bar, five view sections, tab bar, two <dialog> sheets
 manifest.webmanifest    PWA manifest
 sw.js                   service worker — precache the shell, cache-first, offline navigations
-css/styles.css          one stylesheet; semantic custom properties, six palettes
+css/styles.css          one stylesheet; semantic custom properties, nine palettes
 
 js/
   app.js                boot, tab router (hash + ARIA tablist), SW registration, theme
@@ -55,11 +55,12 @@ js/
   consistency.js        consistency score, streak level, month percent, frost (pure)
   backdrop.js           the animated-skin loop: 30fps cap (60 full screen), auto-pause, static
                         mode, eased values; picks WebGL2 or the 2D fallback renderers in here
-  backdrop-gl.js        the four WebGL2 scenes + the luminance-bounding pass
+  backdrop-gl.js        the seven WebGL2 scenes + the luminance-bounding pass
   gl.js                 hand-rolled WebGL2 core: programs, buffers, targets, matrices, lines
   theme-engine.js       intensity driver, flash limiter, lightning scheduling, rotation cap (pure)
   graphic-view.js       the full-screen graphic view (View button on Today)
   reminders.js          when to show the backup reminder (pure)
+  skin-data.js          what Monolith / Constellation / Orrery draw: faces, stars, lines, planets (pure)
   bodymap.js            the body-map SVG: pure geometry for three figures × front/back, and its renderer
   muscles.js            heat levels, recovery guard, suggestion order, definition; weekly working sets per muscle, a muscle's 12-week series, backfill guess (pure)
   plans.js              plan checklist progress, prefill, plan-from-session, update-to-what-I-did (pure)
@@ -133,6 +134,10 @@ Details that look redundant and are not:
   sets this week, then least recently trained. `RECOVERY_SETS` (6 weighted sets "in the last
   48 h" — today and yesterday, since sets carry dates, not times) shows a note and blocks
   nothing.
+- **`settings.constellationPeakLevel`** (default `0`) — the highest streak level the
+  Constellation's lines have reached. Lines are drawn for the peak's window and dimmed to
+  a trace outside the current level's, so a drop never deletes one. Written by `app.js`
+  through `rememberSetting()` (no re-render).
 - **Plans** (version 3, backup `SCHEMA_VERSION` 2). A plan is a named, ordered list of
   exercises with targets; a hold-mode item uses `targetHoldSec` and leaves reps/weight
   `null`, a reps item the reverse. `Session.planId` (nullable) records which plan a session
@@ -200,8 +205,9 @@ Details that look redundant and are not:
   `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
   `state.setPanelExpanded()`, which also supply the "most recently used category starts
   expanded" default when no explicit choice is stored yet.
-- **`settings.theme`** — `'light' | 'neon' | 'terminal' | 'fractal' | 'forge' | 'kemet'`.
-  The last four are the animated frosted-glass skins. `normaliseTheme()` in `views/settings.js`
+- **`settings.theme`** — `'light' | 'neon' | 'terminal' | 'fractal' | 'forge' | 'kemet' |
+  'monolith' | 'constellation' | 'orrery'`. All but the first two are the animated
+  frosted-glass skins. `normaliseTheme()` in `views/settings.js`
   maps anything unrecognised (including a `'dark'`/`'auto'` value saved by a much older
   build) back to `'light'`, so no stored value can leave someone on a broken theme.
 - **`settings.reduceBackgroundEffects`** (default `false`) — the manual counterpart to
@@ -319,6 +325,39 @@ places them on the sleeve (`SLEEVE` is sized so level 10 just fills it), and a p
 (`createPlateRack`/`stepRack`/`rackPlates`) moves one plate at a time: outer plates off
 before inner ones change, new ones on inner-first. `backdrop.js` owns the rack.
 `settings.forgePlatesSeenLevel` lets a level gained between visits be shown going on once.
+
+## The Stage 5 skins — Monolith, Constellation, Orrery
+
+All three read their own data from `js/skin-data.js` (pure, `tests/skin-data.test.js`),
+built in `state.skinData()` as of the same effective date as every other activity visual
+(so "Pause activity effects" freezes them) and pushed by `app.js` through
+`backdrop.setSkinData()`. Each starts from a base state that needs no data at all, since a
+fresh install has none. None of them has lightning (`LIGHTNING_TRACKS` lists them empty).
+
+- **Monolith.** A cube: four side faces are the last four weeks (this week on the front at
+  heading 0), seven bars each Monday → Sunday, lit on a training day, with a bright cap on a
+  PR day; a frosted day's bar is cooled (`--backdrop-frost`), never removed. The top face
+  carries five rings lit by `monthPercent` (its carry included). Turntable auto-rotation;
+  drag turns freely and tilts at most ±30° (`ORBIT_STYLE.monolith`). On release the drag is
+  folded into the heading and the cube turns to the nearest face over 0.4 s
+  (`createSnap`/`stepSnap`), then auto-rotation resumes; under reduced motion the snap is
+  instant.
+- **Constellation.** One star per training day of the last 365 (≤ `MAX_STARS` 400, one
+  point draw), longitude = day of year, latitude = a stable hash of the date, PR days
+  larger and brighter. Lines join stars in date order inside a window that grows with the
+  streak level (all of the last 28 days at level 10). The window is the *peak* level's
+  (`settings.constellationPeakLevel`); lines outside the current level's window ease down
+  to a trace, never away. Twinkle is brightness only, a ≤15% swing at ≤1 Hz
+  (`TWINKLE`); `visuals.test.js` measures it from real pixels at maximum intensity.
+  Frost cools the sky, never a star. Drag like Kemet.
+- **Orrery.** Eight planets, one per region (`REGIONS` covers all 18 muscles once), round a
+  sun. Size = this week's weighted sets, with a floor (`PLANET.minSize`); rings = lifetime
+  PRs on exercises whose primary muscles touch the region, up to 3, so they are permanent.
+  Sun brightness = `monthPercent`; frost cools only the sun. Planet speed is `spin` scaled
+  by ≤ 1 (`planetAngle()`), so the shared rotation cap holds. In the full-screen view a tap
+  on a planet (`backdrop.planetAt()`, ≥ 22 px hit radius) or Tab + Enter on its button
+  (`#graphic-planet-N`, which also rings it in the scene) opens the Stage 4 suggestion sheet
+  for the region.
 
 ## Consistency score
 
@@ -550,8 +589,8 @@ Views are re-rendered wholesale on every state change — keep them cheap and st
 feature module, needs to change.
 
 ### Adding a colour scheme
-Six exist: Light (`:root`, default), High-Contrast Neon, and the four animated skins
-(Terminal, Fractal, Forge, Kemet). Add another the same way — a new `[data-theme="..."]` block in
+Nine exist: Light (`:root`, default), High-Contrast Neon, and the seven animated skins
+(Terminal, Fractal, Forge, Kemet, Monolith, Constellation, Orrery). Add another the same way — a new `[data-theme="..."]` block in
 `css/styles.css` overriding only the colour custom properties (including `--heat-0…3`) (never introduce a hardcoded
 colour in component CSS), an entry in `THEMES` in `views/settings.js`, and it flows through
 `applyTheme()`, `run-lighthouse.mjs` and `run-acceptance.mjs` automatically. Then run
@@ -564,7 +603,7 @@ motion goes on the canvas instead, and the reason is not stylistic: CSS animatio
 reliably *stopped*, and skin motion must stop dead during voice recognition.
 
 ### Adding an animated skin
-Four exist. A fifth needs, in this order:
+Seven exist. An eighth needs, in this order:
 
 1. A `[data-theme="..."]` block declaring the normal semantic tokens **plus** the backdrop
    contract: `--backdrop-base` (the darkest colour the canvas will ever paint),

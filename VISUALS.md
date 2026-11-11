@@ -142,6 +142,48 @@ normal Today view (last shot: a fresh profile, so the set is fully zoomed out).
 
 <img src="docs/screenshots/fractal-colour-hint.jpg" width="130" alt="The first-use hint"> <img src="docs/screenshots/fractal-colour-h0-w0.jpg" width="130" alt="Hue 0°"> <img src="docs/screenshots/fractal-colour-h90-w0.jpg" width="130" alt="Hue 90°"> <img src="docs/screenshots/fractal-colour-h180-w0.jpg" width="130" alt="Hue 180°"> <img src="docs/screenshots/fractal-colour-h270-w0.jpg" width="130" alt="Hue 270°"> <img src="docs/screenshots/fractal-colour-h0-w1.jpg" width="130" alt="Warmest"> <img src="docs/screenshots/fractal-colour-h0-w-1.jpg" width="130" alt="Coolest"> <img src="docs/screenshots/fractal-colour-today.jpg" width="130" alt="Chosen colours in the Today view">
 
+## Monolith: four weeks on four faces
+
+| | Today | Full screen |
+|---|---|---|
+| **0** | <img src="docs/screenshots/monolith-0-today.jpg" width="200" alt="Monolith at intensity 0, Today view"> | <img src="docs/screenshots/monolith-0-full.jpg" width="200" alt="Monolith at intensity 0, full screen"> |
+| **0.5** | <img src="docs/screenshots/monolith-0_5-today.jpg" width="200" alt="Monolith at intensity 0.5, Today view"> | <img src="docs/screenshots/monolith-0_5-full.jpg" width="200" alt="Monolith at intensity 0.5, full screen"> |
+| **1** | <img src="docs/screenshots/monolith-1-today.jpg" width="200" alt="Monolith at intensity 1, Today view"> | <img src="docs/screenshots/monolith-1-full.jpg" width="200" alt="Monolith at intensity 1, full screen"> |
+
+Each shot also gets training history to match its level (`scripts/capture-visuals.mjs` →
+`seedSkinData()`, built with the app's own `js/skin-data.js`): none at 0, about half the
+days at 0.5, nearly every day with some PRs at 1. The front face is this week. A lit bar is
+a training day, a bright cap is a PR day, and the top face's rings fill with the month. At 0
+the cube, its unlit bars and the empty rings are all still there.
+
+## Constellation: one star per training day
+
+| | Today | Full screen |
+|---|---|---|
+| **0** | <img src="docs/screenshots/constellation-0-today.jpg" width="200" alt="Constellation at intensity 0, Today view"> | <img src="docs/screenshots/constellation-0-full.jpg" width="200" alt="Constellation at intensity 0, full screen"> |
+| **0.5** | <img src="docs/screenshots/constellation-0_5-today.jpg" width="200" alt="Constellation at intensity 0.5, Today view"> | <img src="docs/screenshots/constellation-0_5-full.jpg" width="200" alt="Constellation at intensity 0.5, full screen"> |
+| **1** | <img src="docs/screenshots/constellation-1-today.jpg" width="200" alt="Constellation at intensity 1, Today view"> | <img src="docs/screenshots/constellation-1-full.jpg" width="200" alt="Constellation at intensity 1, full screen"> |
+
+The year's stars form a band around the sphere, and the last 28 days are joined into one
+figure at level 10. At 0 there are no stars yet; the faint graticule keeps the sky from
+looking empty. The twinkle is measured from real frames at maximum intensity: held still,
+the largest change in any 48-pixel area between frames is under 1% (WCAG counts a flash
+at 10%).
+
+## Orrery: eight regions round the month
+
+| | Today | Full screen |
+|---|---|---|
+| **0** | <img src="docs/screenshots/orrery-0-today.jpg" width="200" alt="Orrery at intensity 0, Today view"> | <img src="docs/screenshots/orrery-0-full.jpg" width="200" alt="Orrery at intensity 0, full screen"> |
+| **0.5** | <img src="docs/screenshots/orrery-0_5-today.jpg" width="200" alt="Orrery at intensity 0.5, Today view"> | <img src="docs/screenshots/orrery-0_5-full.jpg" width="200" alt="Orrery at intensity 0.5, full screen"> |
+| **1** | <img src="docs/screenshots/orrery-1-today.jpg" width="200" alt="Orrery at intensity 1, Today view"> | <img src="docs/screenshots/orrery-1-full.jpg" width="200" alt="Orrery at intensity 1, full screen"> |
+
+Planet size is the region's sets this week, and rings are its lifetime PRs (up to three).
+The sun brightens with the month. At 0 every planet is at its minimum size. In the full-screen
+view, tapping a planet opens that region's exercises.
+
+---
+
 ## What the tests prove from real pixels
 
 Screenshots show what it looks like. These assertions show it is true every time, and they

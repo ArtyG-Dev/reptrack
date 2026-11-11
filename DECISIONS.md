@@ -1326,3 +1326,44 @@ themes score Performance 50–55 on this machine because headless Chromium here 
 on the CPU (#78); it is recorded, not gated. Skin cost, app JS over baseline: Terminal +0.8%,
 Fractal +0.7%, Forge +0.9%, Kemet +1.0%. Footprint 3.508 MB of 50 MB. Nothing was failing,
 so no Stage 0 repair was needed.
+
+### 89. Stage 1: editing sets, quick adjust, "make that N", rest buzz, wake lock, backup reminder
+
+- **Editing a set** reopens the same confirm sheet as a one-set editor: the set's own values
+  are filled in, the exercise is fixed, and there is no "+ Another set". Saving goes through
+  `state.updateSetEntry()`, which now **recomputes PR flags for that exercise** in true
+  chronological order (date, then session start, then set order) and writes back only the
+  flags that changed. An edit can create a PR or take one away; both directions are tested
+  in `state.test.js`. Deleting a set is unchanged, as the brief asked, and does not recompute.
+- **Quick adjust** buttons sit under each field, on every row of the sheet, for logging and
+  editing alike: reps ±1, weight ± the user's progression step (`progressionStepKg`/`Lb`,
+  by that row's unit), holds ±5 s. They are real 44 px buttons labelled with what they do
+  ("Set 1 weight up by 2.5 kg").
+- **"make that N" / "change that to N"** is a parser intent (`amend-last`) that proposes a
+  new value for the most recently logged set and opens it in the editor. Nothing changes
+  until it is confirmed. On a **hold** it changes the seconds, since a hold has no reps.
+- **Rest buzz:** `navigator.vibrate([200, 100, 200])` when rest reaches zero, behind
+  "Vibrate when rest ends" (on by default). **`Exercise.restSec`** (null = the default) is
+  set in the Exercises editor; the timer started after a commit uses it.
+- **Wake lock** (`js/wake.js`): held while a session is active and "Keep screen on during a
+  session" is on (the default), released when the session ends or is discarded, and taken
+  again when the page becomes visible. A refused or unsupported request is silent.
+- **Backup reminder** (`js/reminders.js`, pure): after *finishing* a session only, if the last
+  export was 30+ days ago (or never, with at least 5 sessions), and at most once every 7
+  days. It is one toast with an "Export now" action, never a dialog, and never states how
+  long it has been. `settings.lastExportAt` is stamped on every export, and Settings shows
+  "Last backup: <date>" or "Never backed up". `toast()` gained an optional single action
+  button for this.
+- **Regression sweep** (`tests/sweep.test.js`) was added before any feature work and runs
+  with the suite. It includes a real backup exported from the live schema-1 build
+  (`tests/fixtures/backup-live-schema1.json`), so "old backups still import" is tested
+  against a genuine file rather than a hand-written one.
+
+### 90. Repair: the theme sweep could read diagnostics before the first frame
+
+Once, under full parallel load, `sweep.test.js` → "every theme loads normally…" failed
+transiently. It passed alone and in the next three full runs, so the message was never
+captured. Cause: the test read `getDiagnostics()` straight after boot and asserted
+`frames > 0`, and under heavy SwiftShader load the first frame of an animated skin can land
+a moment after the shell is interactive. Fix: wait for the first frame before asserting.
+Every assertion is unchanged; only the read is no longer racing the renderer.

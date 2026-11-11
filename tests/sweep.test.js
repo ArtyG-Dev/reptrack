@@ -231,6 +231,10 @@ describe('regression sweep', { skip: findChromium() ? false : 'no Chromium build
       for (const mode of ['normal', 'reduced', 'reduce-effects']) {
         const { context, page, errors } = await fresh(`?theme=${theme}${mode === 'reduce-effects' ? '&static=1' : ''}`,
           mode === 'reduced' ? { reducedMotion: 'reduce' } : {});
+        // Under full parallel load the first frame can land a moment after boot.
+        if (theme !== 'light' && theme !== 'neon') {
+          await page.waitForFunction(() => window.__backdrop.getDiagnostics().frames > 0, null, { timeout: 10000 });
+        }
         const d = await page.evaluate(() => window.__backdrop.getDiagnostics());
         assert.equal(await page.getAttribute('html', 'data-theme'), theme);
         if (theme === 'light' || theme === 'neon') assert.equal(d.skin, null);

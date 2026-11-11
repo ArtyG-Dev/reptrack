@@ -1448,3 +1448,13 @@ The version-3 upgrade only creates the store, so nothing already stored is touch
 - **Hold items** store `targetHoldSec` and null reps/weight; reps items the reverse, so a
   plan can't carry a stale field from an exercise that was changed in the editor.
 
+
+### 95. Stage 2 live verification
+
+`scripts/verify-live.mjs reptrack-shell-v10`: 19/19 on the deployed site. Cache v10,
+offline reload, the pre-work schema-1 backup imports complete into the version-3 database,
+the Stage 1 and 1b checks, and on the live build: a plan saves and is listed, starting from
+it and tapping an item prefills its target, the item ticks at its target, and finishing
+offers "Update plan to what I did?". No console errors.
+Test count 303 → 320. Acceptance: Lighthouse a11y 100 in all six themes, PWA 100, skins
++0.8–1.0% app JS.

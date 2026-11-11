@@ -16,6 +16,7 @@
  */
 
 import { compile, vao, target, perspective, multiply, rotationX, rotationY, rotationZ, translation, scaling, bandMatrix, project, strokeNDC } from './gl.js';
+import { orbitRadius, planetAngle } from './skin-data.js';
 import { createBoltTrack, updateBoltTrack, boltBranches, haloStages, smoothstep, LIGHTNING_TRACKS, LIGHTNING, PLATE_SIZES, SLEEVE, FORGE_AUTO_ROTATION, KEMET_AUTO_ROTATION } from './theme-engine.js';
 
 const AXIS = { vertical: rotationY, tumble: rotationZ, roll: rotationX };
@@ -339,6 +340,22 @@ void main() {
   float d = length(gl_PointCoord - 0.5);
   float a = smoothstep(0.5, 0.15, d);
   o = vec4(mix(uStar, uStarPr, vPr) * vB * a, 1.0);
+}`;
+
+/* ---------- Orrery ---------- */
+
+/* A lit sphere as a screen-space disc: the normal is rebuilt from the quad
+ * coordinate, lit from the sun's direction. Alpha-blended over what is behind. */
+const PLANET_FS = `${HEAD}
+in vec2 vQ;
+uniform vec3 uDark, uLit;
+uniform vec2 uL;
+void main() {
+  float d = dot(vQ, vQ);
+  if (d > 1.0) discard;
+  vec3 n = vec3(vQ, sqrt(1.0 - d));
+  float lambert = max(dot(n, normalize(vec3(uL, 0.45))), 0.0);
+  o = vec4(mix(uDark, uLit, lambert), 1.0);
 }`;
 
 /* ---------- Forge ---------- */
@@ -813,7 +830,7 @@ export function createGLBackdrop(canvas) {
     sky: [SKY_FS], pyramid: [PYRAMID_FS, PYRAMID_VS], ring: [RING_FS, RING_VS], spark: [POINT_FS, SPARK_VS],
     forgeBg: [FORGE_BG_FS], barbell: [BARBELL_FS, BARBELL_VS], ember: [EMBER_FS, EMBER_VS],
     bloom: [BLOOM_FS], mandel: [MANDEL_FS], floor: [FLOOR_FS], glyph: [GLYPH_FS, GLYPH_VS],
-    mono: [MONO_FS, MONO_VS], night: [NIGHT_FS], star: [STAR_FS, STAR_VS]
+    mono: [MONO_FS, MONO_VS], night: [NIGHT_FS], star: [STAR_FS, STAR_VS], planet: [PLANET_FS, SPRITE_VS]
   };
   const MAKERS = {
     pyramidMesh: () => vao(gl, pyramidMesh(), [[0, 3], [1, 3], [2, 2], [3, 1]]),
@@ -1300,7 +1317,56 @@ export function createGLBackdrop(canvas) {
     info.constellation = { stars: mesh.n, links: links.length, centre: project(cam.vp, [0, 0, 0]) };
   }
 
-  const SCENES = { kemet, forge, fractal, terminal, monolith, constellation };
+  function orrery(f) {
+    const P = f.palette;
+    blend(null);
+    r.night.use().rgb('uSky', P.sky).rgb('uCool', P.sky).rgb('uBase', P.base).f('uFrost', 0);
+    fullscreen();
+    const cam = camera(f, f.full ? { targetY: 0, needH: 1.0, needW: 1.45, tilt: 0.62 } : { targetY: 0, needH: 0.9, needW: 1.45, tilt: 0.62 });
+    const world = multiply(rotationX(f.orbit.pitch), rotationY(f.orbit.yaw));
+    const vp = multiply(cam.vp, world);
+    const toNDC = (p) => project(vp, p);
+    const circle = (cx, cz, radius, n = 64) => Array.from({ length: n + 1 }, (_, a) => toNDC([cx + Math.cos((a / n) * Math.PI * 2) * radius, 0, cz + Math.sin((a / n) * Math.PI * 2) * radius]));
+
+    blend('add');
+    for (let i = 0; i < 8; i += 1) lines(circle(0, 0, orbitRadius(i)), 1.1 * f.dpr, P.orbitLine, 0.9);
+
+    // The sun: always there; the month brightens it toward sun-hot; frost cools it.
+    const mixc = (a, b, t) => a.map((v, j) => v + (b[j] - v) * t);
+    const sunColour = mixc(mixc(P.sun, P.sunHot, f.month), P.sunCool, 0.5 * (f.frost || 0));
+    const sun = toNDC([0, 0, 0]);
+    const sunR = (orbitRadius(0) * 0.36) * (Math.abs(toNDC([1, 0, 0])[0] - sun[0]) || 0.3);
+    sprite(sunColour, sun, sunR * 2.4, sunR * 2.4 * (size.w / size.h), 0.35 + 0.45 * f.month, 2.5);
+    sprite(sunColour, sun, sunR, sunR * (size.w / size.h), 1.6, 1.2);
+
+    const planets = f.data.orrery.planets.map((p, i) => {
+      const a = planetAngle(i, f.spin);
+      const at = [Math.cos(a) * orbitRadius(i), 0, Math.sin(a) * orbitRadius(i)];
+      const ndc = toNDC(at);
+      const edge = toNDC([at[0] + 0.1 * p.size, 0, at[2]]);
+      const depth = multiply(world, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, at[0], at[1], at[2], 1])[14];
+      return { p, i, at, ndc, r: Math.max(Math.hypot(edge[0] - ndc[0], (edge[1] - ndc[1]) * (size.h / size.w)), 0.006), depth };
+    }).sort((a, b) => a.depth - b.depth);
+
+    for (const q of planets) {
+      for (let j = 0; j < q.p.rings; j += 1) lines(circle(q.at[0], q.at[2], 0.1 * q.p.size * (1.55 + 0.35 * j), 40), 1.4 * f.dpr, P.ring, 0.9);
+      blend(null);
+      const toward = [sun[0] - q.ndc[0], (sun[1] - q.ndc[1]) * (size.h / size.w)];
+      const len = Math.hypot(...toward) || 1;
+      r.planet.use().rgb('uDark', P.planet).rgb('uLit', P.planetLit).f('uL', toward[0] / len, toward[1] / len)
+        .f('uC', q.ndc[0], q.ndc[1]).f('uR', q.r, q.r * (size.w / size.h));
+      gl.bindVertexArray(r.empty);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      blend('add');
+      if (q.i === f.focusPlanet) {
+        const ring = Array.from({ length: 41 }, (_, a) => [q.ndc[0] + Math.cos((a / 40) * Math.PI * 2) * q.r * 1.45, q.ndc[1] + Math.sin((a / 40) * Math.PI * 2) * q.r * 1.45 * (size.w / size.h)]);
+        lines(ring, 2.5 * f.dpr, P.focus, 1);
+      }
+    }
+    info.orrery = { planets: planets.map((q) => ({ index: q.i, ndc: q.ndc, r: q.r })), sun };
+  }
+
+  const SCENES = { kemet, forge, fractal, terminal, monolith, constellation, orrery };
 
   return {
     gl,

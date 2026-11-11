@@ -1600,3 +1600,22 @@ runs in batches of at most four. What it asserts is unchanged.
 - A faint graticule (three latitude rings) is always drawn, so a fresh install with no
   stars still shows a sky rather than an empty background.
 
+### 105. Stage 5 — Orrery
+
+- **Regions** as the brief lists them; `REGIONS` is tested to cover all 18 muscles exactly
+  once. Size uses the same weighted sets as the body map, with a floor so an untrained
+  region is still a planet you can tap. Rings are `min(3, lifetime PRs)` on exercises
+  whose primary muscles touch the region, read literally from the brief, so the first
+  three PRs each add a ring and rings never go away.
+- **Speed within the cap.** Planet angles are `spin` times a Kepler-like factor that is at
+  most 1 for the innermost planet, so no planet turns faster than the shared cap allows.
+- **Tap and keyboard.** Hit-testing uses the planets' positions from the last drawn frame
+  in either renderer, with a 22 px minimum radius (a 44 px target). For the keyboard there
+  is one real button per planet in the full-screen view, off-screen until focused; focus
+  shows its name as a chip and rings the planet in the scene, and Enter opens the Stage 4
+  sheet for the region. The sheet opens over the full-screen view, and the view's own
+  Esc/Tab handling now stands aside while a sheet is open, so Esc closes only the sheet.
+- The sun mixes `sun` → `sun-hot` by the month and toward `sun-cool` by frost in the GL
+  scene (bounded by the luminance pass, DECISIONS #74). The 2D fallback layers the same
+  tokens with plain source-over, never a blend.
+

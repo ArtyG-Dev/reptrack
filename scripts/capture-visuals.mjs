@@ -22,7 +22,7 @@ import { listen } from './serve.mjs';
 import { findChromium, launch } from '../tests/helpers/browser.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SKINS = ['kemet', 'forge', 'fractal', 'terminal', 'monolith', 'constellation'];
+const SKINS = ['kemet', 'forge', 'fractal', 'terminal', 'monolith', 'constellation', 'orrery'];
 const LEVELS = [[0, 0, 0], [0.5, 5, 0.5], [1, 10, 1]];   // [intensity, streakLevel, monthPercent]
 const VIEWPORT = { width: 393, height: 852 };
 

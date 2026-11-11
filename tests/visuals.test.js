@@ -15,7 +15,7 @@ import { listen } from '../scripts/serve.mjs';
 import { findChromium, launch } from './helpers/browser.mjs';
 import { maxInWindow, FLASH, ROTATION } from '../js/theme-engine.js';
 
-const SKINS = ['kemet', 'forge', 'fractal', 'terminal', 'monolith', 'constellation'];
+const SKINS = ['kemet', 'forge', 'fractal', 'terminal', 'monolith', 'constellation', 'orrery'];
 const VIEWPORT = { width: 393, height: 852 };      // a typical Android phone, CSS px
 
 /** streakLevel / monthPercent pairs that put the shared intensity at 0, 0.5, 1. */
@@ -998,4 +998,55 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     await context.close();
   });
 
+  /* ---------- Stage 5: Orrery ---------- */
+
+  test('Orrery: tapping a planet opens that region’s exercises over the view; Esc closes only the sheet', async () => {
+    const { context, page, errors } = await open('orrery', { context: { reducedMotion: 'reduce' } });   // held: planets stay put
+    await page.click('#view-graphic');
+    await page.waitForSelector('#graphic-view:not([hidden])');
+    const { planets } = await diag(page);
+    assert.equal(planets.length, 8);
+    const chest = planets.find((p) => p.index === 0);
+    await page.mouse.click(chest.x, chest.y);
+    await page.waitForSelector('#muscle-sheet');
+    assert.equal(await page.textContent('#muscle-sheet h2'), 'Chest');
+    assert.match(await page.textContent('#muscle-sheet'), /Bench Press/);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#muscle-sheet', { state: 'detached' });
+    assert.equal(await page.isVisible('#graphic-view'), true, 'the full-screen view is still open');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  test('Orrery: Tab reaches each planet (ringed in the scene), Enter opens it; sizes and rings follow the data', async () => {
+    const { context, page } = await open('orrery', { context: { reducedMotion: 'reduce' } });
+    await page.click('#view-graphic');
+    const seen = new Set();
+    for (let i = 0; i < 14 && seen.size < 8; i += 1) {
+      await page.keyboard.press('Tab');
+      const id = await page.evaluate(() => document.activeElement?.id || '');
+      if (id.startsWith('graphic-planet-')) {
+        seen.add(id);
+        assert.equal((await diag(page)).focusPlanet, Number(id.split('-').pop()), 'focus rings the same planet in the scene');
+      }
+    }
+    assert.equal(seen.size, 8, 'every planet is reachable by keyboard');
+    await page.focus('#graphic-planet-6');
+    assert.match(await page.getAttribute('#graphic-planet-6', 'aria-label'), /^Posterior chain: 0 sets this week/);
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#muscle-sheet');
+    assert.equal(await page.textContent('#muscle-sheet h2'), 'Posterior chain');
+    await page.click('#muscle-sheet button:has-text("Close")');
+
+    const before = await frame(page);
+    const r0 = (await diag(page)).planets.find((p) => p.index === 1).r;
+    await page.evaluate(() => {
+      const planets = window.__backdrop.getSkinData().orrery.planets.map((p, i) => (i === 1 ? { ...p, weekly: 20, size: 1, rings: 3 } : p));
+      window.__backdrop.setSkinData({ orrery: { planets } });
+    });
+    const after = (await diag(page)).planets.find((p) => p.index === 1).r;
+    assert.ok(after > r0 * 2, `a busy week grows the planet (${r0.toFixed(1)} → ${after.toFixed(1)} px)`);
+    assert.ok(changedFraction(before, await frame(page)) > 0.001, 'and the picture shows it, rings included');
+    await context.close();
+  });
 });

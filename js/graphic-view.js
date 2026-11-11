@@ -15,8 +15,8 @@ import * as state from './state.js';
 import { el } from './ui.js';
 import { TINT } from './theme-engine.js';
 
-const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal', monolith: 'Monolith', constellation: 'Constellation' };
-const DRAGGABLE = new Set(['kemet', 'forge', 'terminal', 'monolith', 'constellation']);   // all through the one shared orbit
+const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal', monolith: 'Monolith', constellation: 'Constellation', orrery: 'Orrery' };
+const DRAGGABLE = new Set(['kemet', 'forge', 'terminal', 'monolith', 'constellation', 'orrery']);   // all through the one shared orbit
 const TAP_SLOP_PX = 6;
 const KEY_NUDGE_PX = 14;          // an arrow key turns the scene as far as a 14px drag
 const SHELL = ['.app-bar', '#main', '.tabbar', '.skip-link'];
@@ -61,8 +61,12 @@ function build() {
     el('p', { text: 'Drag sideways to change colour, up and down for warmth.' }),
     el('button', { class: 'btn graphic-btn', id: 'graphic-hint-dismiss', type: 'button', onclick: () => dismissHint() }, 'Got it')
   );
+  // Orrery: one button per planet. Visually hidden until focused; focus also
+  // rings the planet in the scene, and Enter opens its exercises.
+  const planets = el('div', { class: 'graphic-planets', id: 'graphic-planets', role: 'group', 'aria-label': 'Planets', hidden: true });
   root = el('div', { class: 'graphic-view', id: 'graphic-view', role: 'dialog', 'aria-modal': 'true', hidden: true },
     stage,
+    planets,
     el('div', { class: 'graphic-bar' }, toggle, el('div', { class: 'graphic-actions' }, reset, close)),
     hint,
     level
@@ -118,9 +122,11 @@ function wireDrag(stage) {
     }
     last = { x: event.clientX, y: event.clientY };
   });
-  const end = () => {
+  const end = (event) => {
     if (!start) return;
-    if (!start.moved) toggleLevel();
+    const planet = openFor === ORRERY && !start.moved && event?.type === 'pointerup' ? backdrop.planetAt(event.clientX, event.clientY) : -1;
+    if (planet >= 0) openPlanet(planet);
+    else if (!start.moved) toggleLevel();
     start = null;
     if (DRAGGABLE.has(openFor)) backdrop.release();
   };
@@ -128,7 +134,37 @@ function wireDrag(stage) {
   stage.addEventListener('pointercancel', end);
 }
 
+/* ---------- Orrery planets ---------- */
+
+const ORRERY = 'orrery';
+
+async function openPlanet(index) {
+  const planet = backdrop.getSkinData().orrery.planets[index];
+  if (!planet?.muscles?.length) return;
+  const { openMuscleSheet } = await import('./views/muscle-sheet.js');   // loaded on first use
+  await openMuscleSheet(planet.muscles, planet.name);
+  document.getElementById(`graphic-planet-${index}`)?.focus();
+}
+
+function buildPlanetButtons() {
+  const host = document.getElementById('graphic-planets');
+  host.textContent = '';
+  host.hidden = openFor !== ORRERY;
+  if (openFor !== ORRERY) return;
+  backdrop.getSkinData().orrery.planets.forEach((p, i) => {
+    const sets = Math.round(p.weekly * 10) / 10;
+    host.append(el('button', {
+      class: 'btn graphic-btn planet-btn', type: 'button', id: `graphic-planet-${i}`,
+      'aria-label': `${p.name}: ${sets} set${sets === 1 ? '' : 's'} this week. Show exercises`,
+      onfocus: () => backdrop.setFocusPlanet(i),
+      onblur: () => backdrop.setFocusPlanet(-1),
+      onclick: () => openPlanet(i)
+    }, p.name));
+  });
+}
+
 function onKey(event) {
+  if (document.querySelector('dialog[open]')) return;   // a sheet over the view handles its own keys
   if (event.key === 'Escape') { event.preventDefault(); close_(); return; }
   const nudge = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
   if (DRAGGABLE.has(openFor) && nudge) {
@@ -178,6 +214,7 @@ export function open(skin, { returnFocus = 'view-graphic' } = {}) {
   // First time only: say what dragging does here, since it is not what it does elsewhere.
   const showHint = recolour && !state.getState().settings.fractalHintSeen;
   document.getElementById('graphic-hint').hidden = !showHint;
+  buildPlanetButtons();
   if (showHint) state.rememberSetting({ fractalHintSeen: true }).catch(() => {});
   document.documentElement.dataset.graphicView = '1';
   for (const sel of SHELL) document.querySelector(sel)?.setAttribute('inert', '');
@@ -200,6 +237,7 @@ function close_() {
   delete document.documentElement.dataset.graphicView;
   for (const sel of SHELL) document.querySelector(sel)?.removeAttribute('inert');
   backdrop.release();
+  backdrop.setFocusPlanet(-1);
   backdrop.setFullView(false);
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   root.dataset.fullscreen = '0';

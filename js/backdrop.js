@@ -38,7 +38,7 @@ import {
   createPlateRack, setRackTarget, snapRack, stepRack, rackPlates, rackSettled, platesForLevel,
   TINT, normaliseTint, tintDrag, createSnap, stepSnap, snapTarget
 } from './theme-engine.js';
-import { twinkle, twinkleHz, TWINKLE } from './skin-data.js';
+import { twinkle, twinkleHz, TWINKLE, orbitRadius, planetAngle } from './skin-data.js';
 import { createGLBackdrop } from './backdrop-gl.js';
 
 const FPS = 30;
@@ -52,8 +52,8 @@ const MAX_GL_PIXELS = 2_400_000;     // a desktop-monitor guard; no phone reache
  * Mandelbrot, a ten-tier pyramid) rather than a soft wash — detail you can
  * resolve is the entire point of them, and it does not survive being drawn at
  * an eighth scale and blown back up. */
-const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.34, kemet: 0.4, monolith: 0.5, constellation: 0.5 };
-const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation']);
+const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.34, kemet: 0.4, monolith: 0.5, constellation: 0.5, orrery: 0.5 };
+const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation', 'orrery']);
 
 /** Which --backdrop-* tokens each skin's renderer actually reads. Exported so
  *  tests/contrast.test.js can assert every skin *declares* the tokens it draws
@@ -65,7 +65,8 @@ export const SKIN_TOKENS = Object.freeze({
   forge: ['base', 'ink', 'glow', 'iron', 'ember', 'spark', 'heat-a', 'heat-b', 'heat-c', 'plate-red', 'plate-blue', 'plate-green'],
   kemet: ['base', 'ink', 'star', 'halo', 'halo-hot', 'sky', 'stone', 'gold', 'gold-hot', 'glyph', 'arc'],
   monolith: ['base', 'ink', 'sky', 'stone', 'bar', 'bar-lit', 'bar-pr', 'frost', 'ring'],
-  constellation: ['base', 'ink', 'sky', 'sky-cool', 'star', 'star-pr', 'line', 'line-faint']
+  constellation: ['base', 'ink', 'sky', 'sky-cool', 'star', 'star-pr', 'line', 'line-faint'],
+  orrery: ['base', 'ink', 'sky', 'sun', 'sun-hot', 'sun-cool', 'orbit', 'planet', 'planet-lit', 'ring', 'focus']
 });
 
 // Lightning — a flicker-hazard budget, not a suggestion. The floor applies at
@@ -175,8 +176,12 @@ let snap = null;                     // Monolith: a face snap in progress after 
  * app.js pushes it, so every scene must draw its base state from nothing. */
 let skinData = {
   monolith: { states: new Array(28).fill(0), frost: new Array(28).fill(0) },
-  constellation: { stars: [], links: [], peakLevel: 0, alpha: [] }
+  constellation: { stars: [], links: [], peakLevel: 0, alpha: [] },
+  // Eight regions at their minimum size until app.js says otherwise.
+  orrery: { planets: Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, name: '', muscles: [], weekly: 0, size: 0.35, rings: 0 })) }
 };
+let focusPlanet = -1;                // Orrery: the planet with keyboard focus, or −1
+let planetHits = [];                 // Orrery: [{ index, x, y, r }] in CSS px, from the last frame
 /* Constellation lines ease in (and down to a trace) rather than switching:
  * alpha per line, keyed by its two stars' dates so it survives a data push. */
 const linkAlpha = new Map();
@@ -290,7 +295,14 @@ function readPalette() {
     skyCool: read('--backdrop-sky-cool', '#0a1a24'),
     starPr: read('--backdrop-star-pr', '#eef2ff'),
     line: read('--backdrop-line', '#6a7fc4'),
-    lineFaint: read('--backdrop-line-faint', '#263160')
+    lineFaint: read('--backdrop-line-faint', '#263160'),
+    sun: read('--backdrop-sun', '#b5783a'),
+    sunHot: read('--backdrop-sun-hot', '#fff0d4'),
+    sunCool: read('--backdrop-sun-cool', '#8a8a86'),
+    orbitLine: read('--backdrop-orbit', '#3a2e24'),
+    planet: read('--backdrop-planet', '#6e5a48'),
+    planetLit: read('--backdrop-planet-lit', '#e2bf92'),
+    focus: read('--backdrop-focus', '#f0b56e')
   };
 }
 
@@ -1291,7 +1303,72 @@ function settleLinks(dt) {
   });
 }
 
-const RENDERERS = { terminal: drawTerminal, fractal: drawFractal, forge: drawForge, kemet: drawKemet, monolith: drawMonolith, constellation: drawConstellation };
+/* ---------- Orrery (2D fallback) ----------
+ * Eight planets, one per body region, round a sun. Size is this week's sets
+ * (never below a floor), rings are lifetime PRs (never removed), the sun's
+ * brightness is the month, and frost only cools the sun. Token colours, layered
+ * source-over: a planet is its shadowed disc with a smaller sunlit disc on top. */
+function drawOrrery() {
+  const { w, h } = dims;
+  ctx.fillStyle = rgba(palette.sky, 1);
+  ctx.fillRect(0, 0, w, h);
+  const band = featureBand();
+  const size = Math.min(band.h * 0.38, w * (fullView ? 0.36 : 0.3));
+  const cx = w / 2; const cy = band.y + band.h * 0.5;
+  const heading = orbit.yaw; const pitch = 0.62 + orbit.pitch;
+  const ch = Math.cos(heading); const sh = Math.sin(heading);
+  const cp = Math.cos(pitch); const sp = Math.sin(pitch);
+  const P = ([x, y, z]) => {
+    const x1 = x * ch + z * sh; const z1 = -x * sh + z * ch;
+    return [cx + x1 * size, cy - (y * cp - z1 * sp) * size, y * sp + z1 * cp];
+  };
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 8; i += 1) {
+    ctx.strokeStyle = rgba(palette.orbitLine, 0.9);
+    ctx.beginPath();
+    for (let a = 0; a <= 64; a += 1) { const [x, y] = P([Math.cos((a / 64) * Math.PI * 2) * orbitRadius(i), 0, Math.sin((a / 64) * Math.PI * 2) * orbitRadius(i)]); if (a) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+    ctx.stroke();
+  }
+  const [sx, sy] = P([0, 0, 0]);
+  const sunR = size * 0.12;
+  ctx.fillStyle = rgba(palette.sun, 1);
+  ctx.beginPath(); ctx.arc(sx, sy, sunR, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = rgba(palette.sunHot, 0.85 * shown.month);
+  ctx.beginPath(); ctx.arc(sx, sy, sunR * 0.92, 0, Math.PI * 2); ctx.fill();
+  if (activity.frostHint > 0) {
+    ctx.fillStyle = rgba(palette.sunCool, 0.5 * activity.frostHint);
+    ctx.beginPath(); ctx.arc(sx, sy, sunR, 0, Math.PI * 2); ctx.fill();
+  }
+  const planets = skinData.orrery.planets.map((p, i) => {
+    const a = planetAngle(i, spin);
+    const at = P([Math.cos(a) * orbitRadius(i), 0, Math.sin(a) * orbitRadius(i)]);
+    return { p, i, x: at[0], y: at[1], z: at[2], r: size * 0.1 * p.size };
+  }).sort((a, b) => a.z - b.z);
+  const toCss = w ? (window.innerWidth || w) / w : 1;
+  planetHits = [];
+  for (const q of planets) {
+    for (let j = 0; j < q.p.rings; j += 1) {
+      ctx.strokeStyle = rgba(palette.ring, 0.85);
+      ctx.lineWidth = Math.max(1, size * 0.008);
+      ctx.beginPath();
+      ctx.ellipse(q.x, q.y, q.r * (1.5 + 0.35 * j), q.r * (1.5 + 0.35 * j) * Math.max(0.2, Math.abs(sp)), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = rgba(palette.planet, 1);
+    ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.fill();
+    const toward = Math.atan2(sy - q.y, sx - q.x);
+    ctx.fillStyle = rgba(palette.planetLit, 0.9);
+    ctx.beginPath(); ctx.arc(q.x + Math.cos(toward) * q.r * 0.28, q.y + Math.sin(toward) * q.r * 0.28, q.r * 0.7, 0, Math.PI * 2); ctx.fill();
+    if (q.i === focusPlanet) {
+      ctx.strokeStyle = rgba(palette.focus, 1);
+      ctx.lineWidth = Math.max(2, size * 0.015);
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.r * 1.35 + 3, 0, Math.PI * 2); ctx.stroke();
+    }
+    planetHits.push({ index: q.i, x: q.x * toCss, y: q.y * toCss, r: q.r * toCss });
+  }
+}
+
+const RENDERERS = { terminal: drawTerminal, fractal: drawFractal, forge: drawForge, kemet: drawKemet, monolith: drawMonolith, constellation: drawConstellation, orrery: drawOrrery };
 
 const rand = Math.random;
 
@@ -1315,6 +1392,7 @@ function draw() {
       orbit: { yaw: orbit.yaw, pitch: orbit.pitch },
       data: skinData,
       frost: activity.frostHint,
+      focusPlanet,
       twinkle: { hz: twinkleHz(shown.k), swing: TWINKLE.maxSwing },
       tint,
       plates: rackPlates(rack),
@@ -1335,6 +1413,11 @@ function draw() {
       return draw();
     }
     if (drawn) frames += 1;
+    const hits = glr.info.orrery?.planets;
+    if (skin === 'orrery' && hits) {
+      const cw = window.innerWidth || 1; const chh = window.innerHeight || 1;
+      planetHits = hits.map((p) => ({ index: p.index, x: ((p.ndc[0] + 1) / 2) * cw, y: ((1 - p.ndc[1]) / 2) * chh, r: (p.r / 2) * cw }));
+    }
     return;
   }
   if (!ctx) return;
@@ -1546,6 +1629,28 @@ export function setSkinData(next = {}) {
   if (isStatic()) sync();
 }
 
+/** What setSkinData() last received, for the full-screen view's planet buttons. */
+export function getSkinData() {
+  return skinData;
+}
+
+/** Orrery: which planet has keyboard focus (−1 for none). Redraws a held frame. */
+export function setFocusPlanet(index) {
+  focusPlanet = Number.isInteger(index) ? index : -1;
+  if (isStatic() || !raf) draw();
+}
+
+/** Orrery: the planet under a point (CSS px), or −1. A touch target is at
+ *  least 22 px in radius however small the planet is drawn. */
+export function planetAt(x, y) {
+  let best = -1; let bestD = Infinity;
+  for (const p of planetHits) {
+    const d = Math.hypot(x - p.x, y - p.y);
+    if (d <= Math.max(p.r * 1.2, 22) && d < bestD) { best = p.index; bestD = d; }
+  }
+  return best;
+}
+
 /** Speech recognition is starting/finishing — the backdrop gets out of the way. */
 export function setVoiceActive(active) {
   voiceActive = Boolean(active);
@@ -1654,6 +1759,8 @@ export function getDiagnostics() {
     plates: { target: [...rack.target], seated: [...rack.seated], moving: rack.moving ? { ...rack.moving } : null, settled: rackSettled(rack) },
     spin,
     snapping: Boolean(snap),
+    planets: planetHits.map((p) => ({ ...p })),
+    focusPlanet,
     rotationSpeed: rotationSpeed(shown.k),
     intensity: shown.k,
     flashLog: [...flashLog],         // ms of scene clock, the same clock as `clock`

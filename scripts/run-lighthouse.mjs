@@ -20,7 +20,7 @@ import { findChromium } from '../tests/helpers/browser.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GATES = { accessibility: 90, pwa: 90 };
 const CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo', 'pwa'];
-const THEMES = ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation'];
+const THEMES = ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation', 'orrery'];
 
 const { server, port } = await listen(0);
 

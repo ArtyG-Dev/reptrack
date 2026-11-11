@@ -7,7 +7,7 @@ import { SEED_EXERCISES } from './exercises-seed.js';
 import { isPersonalRecord, recordScore, workingSets as progressionWorking } from './progression.js';
 import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
 import { activityVisualState, frostedDates, trainingDays, effectiveToday } from './consistency.js';
-import { monolithFaces, starField, constellationLinks } from './skin-data.js';
+import { monolithFaces, starField, constellationLinks, orreryPlanets } from './skin-data.js';
 import { itemsFromSets, updatedItems } from './plans.js';
 import { hasMuscles, guessMuscles } from './muscles.js';
 
@@ -493,7 +493,8 @@ export function skinData() {
   const stars = starField({ trained, prs, todayISO });
   return {
     monolith: monolithFaces({ trained, prs, frosted: frostedDates(input), todayISO }),
-    constellation: { stars, links: constellationLinks(stars, { level: streakLevel, peakLevel, todayISO }), peakLevel }
+    constellation: { stars, links: constellationLinks(stars, { level: streakLevel, peakLevel, todayISO }), peakLevel },
+    orrery: { planets: orreryPlanets({ sets: state.allSets, exercisesById: new Map(state.exercises.map((ex) => [ex.id, ex])), todayISO }) }
   };
 }
 

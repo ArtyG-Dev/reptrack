@@ -70,7 +70,8 @@ export const THEMES = [
   ['forge', 'Forge (frosted glass)'],
   ['kemet', 'Kemet (frosted glass)'],
   ['monolith', 'Monolith (frosted glass)'],
-  ['constellation', 'Constellation (frosted glass)']
+  ['constellation', 'Constellation (frosted glass)'],
+  ['orrery', 'Orrery (frosted glass)']
 ];
 
 const THEME_IDS = new Set(THEMES.map(([id]) => id));

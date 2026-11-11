@@ -328,6 +328,44 @@
   --frost-sheen: rgba(190, 222, 236, .2);
 }
 
+[data-theme="orrery"] {
+  --bg: #070605;
+  --surface: #0f0c0a;
+  --surface-2: #1b1816;
+  --text: #f6eee4;
+  --muted: #c8bbab;
+  --border: #33291f;
+  --accent: #f0b56e;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #261d14;
+  --heat-1: #644c30;
+  --heat-2: #a47c4c;
+  --heat-3: #f0b56e;
+  --on-accent: #2a1704;
+  --danger: #ff9198;
+  --on-danger: #2b0209;
+  --ok: #8fe0b1;
+  --warn: #f7d070;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .7), 0 10px 30px rgba(0, 0, 0, .55);
+
+  --glass: 15 12 10;
+  --glass-2: 27 24 22;
+  --glass-alpha: .92;
+  --backdrop-base: #070605;
+  --backdrop-ink: #fff0d4;          /* the sun at a full month — the ceiling */
+  --backdrop-sky: #15100d;
+  --backdrop-sun: #b5783a;          /* the sun early in a month: always there */
+  --backdrop-sun-hot: #fff0d4;
+  --backdrop-sun-cool: #8a8a86;     /* frost cools the sun toward this */
+  --backdrop-orbit: #3a2e24;
+  --backdrop-planet: #6e5a48;       /* a planet's shadowed side */
+  --backdrop-planet-lit: #e2bf92;   /* its sunlit side */
+  --backdrop-ring: #c79c62;         /* a ring per lifetime PR, up to three */
+  --backdrop-focus: #f0b56e;        /* the planet with keyboard focus */
+
+  --frost-edge: #86b4c4;
+  --frost-sheen: rgba(190, 222, 236, .2);
+}
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -860,6 +898,15 @@ textarea { min-height: 84px; resize: vertical; }
 .graphic-level[hidden] { display: none; }
 .graphic-actions { display: flex; gap: 8px; }
 .graphic-btn[hidden] { display: none; }
+/* Orrery planet buttons: out of sight until keyboard focus reaches one; then it
+   shows as a chip naming the planet, while the scene rings that planet. */
+.graphic-planets .planet-btn:not(:focus) {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.graphic-planets .planet-btn:focus {
+  position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 2;
+}
 /* The first-use hint carries the same dark scrim as the level label, so it
  * reads over any colours the user has dragged the fractal to. */
 .graphic-hint {

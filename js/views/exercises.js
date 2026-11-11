@@ -2,15 +2,40 @@
 
 import * as state from '../state.js';
 import { el, clear, toast, openSheet, confirmSheet, disclosure, titleCase } from '../ui.js';
-import { CATEGORIES } from '../exercises-seed.js';
+import { CATEGORIES, MUSCLES } from '../exercises-seed.js';
+import { MUSCLE_LABELS } from '../muscles.js';
 import { describeTarget } from '../plans.js';
 
 let filter = '';
 let containerRef = null;
 
-function exerciseSheet(existing = null) {
+/** A row of toggle buttons, one per muscle. `other` is the opposite list: a
+ *  muscle is primary or secondary, never both, so choosing it here drops it there.
+ *  `sync` updates every chip in place, so keyboard focus stays where it was. */
+function muscleChips(kind, chosen, other, sync) {
+  return el('div', { class: 'chips', role: 'group', 'aria-label': `${kind === 'primary' ? 'Primary' : 'Secondary'} muscles`, id: `ex-${kind}-muscles` },
+    ...MUSCLES.map((m) => el('button', {
+      class: 'chip', type: 'button', 'aria-pressed': chosen.has(m) ? 'true' : 'false', dataset: { muscle: m },
+      onclick: () => { if (chosen.has(m)) chosen.delete(m); else { chosen.add(m); other.delete(m); } sync(); }
+    }, MUSCLE_LABELS[m])));
+}
+
+function exerciseSheet(existing = null, { preselectMuscle = null } = {}) {
   const titleId = 'confirm-sheet-title';
   return openSheet('confirm-sheet', (ctx) => {
+    const primary = new Set(existing?.primaryMuscles || (preselectMuscle ? [preselectMuscle] : []));
+    const secondary = new Set(existing?.secondaryMuscles || []);
+    const sync = () => {
+      for (const [group, chosen] of [[primaryChips, primary], [secondaryChips, secondary]]) {
+        for (const chip of group.children) chip.setAttribute('aria-pressed', chosen.has(chip.dataset.muscle) ? 'true' : 'false');
+      }
+    };
+    const primaryChips = muscleChips('primary', primary, secondary, sync);
+    const secondaryChips = muscleChips('secondary', secondary, primary, sync);
+    const chipsHost = el('div', { class: 'stack' },
+      el('p', { class: 'small', style: 'margin:0', text: 'Primary muscles' }), primaryChips,
+      el('p', { class: 'small', style: 'margin:0', text: 'Secondary muscles' }), secondaryChips
+    );
     const name = el('input', { type: 'text', id: 'ex-name', value: existing?.name || '', required: true, 'data-autofocus': '' });
     const aliases = el('input', { type: 'text', id: 'ex-aliases', value: (existing?.aliases || []).join(', '), placeholder: 'bench, flat bench' });
     const group = el('select', { id: 'ex-group' }, ...['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'other']
@@ -70,7 +95,9 @@ function exerciseSheet(existing = null) {
           category: (chosenCategory.trim() || 'strength').toLowerCase(),
           mode: mode.value,
           isBodyweight: bodyweight.checked,
-          restSec: Number(rest.value) > 0 ? Math.round(Number(rest.value)) : null   // blank: use the default
+          restSec: Number(rest.value) > 0 ? Math.round(Number(rest.value)) : null,   // blank: use the default
+          primaryMuscles: MUSCLES.filter((m) => primary.has(m)),
+          secondaryMuscles: MUSCLES.filter((m) => secondary.has(m))
         });
       }
     },
@@ -82,6 +109,8 @@ function exerciseSheet(existing = null) {
         el('div', {}, el('label', { for: 'ex-category', text: 'Category' }), category)
       ),
       customCategoryField,
+      el('div', { class: 'field' }, chipsHost,
+        el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'A working set counts 1 for each primary muscle and ½ for each secondary in the weekly charts.' })),
       el('div', { class: 'field' },
         el('label', { for: 'ex-mode', text: 'How it’s logged' }), mode,
         el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'Reps covers strength and calisthenics (weight is optional). Hold covers yoga poses, pilates holds, and timed calisthenics like a plank.' })

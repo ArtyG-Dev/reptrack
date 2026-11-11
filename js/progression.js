@@ -97,6 +97,8 @@ export function buildSeries(sets = [], displayUnit = 'kg') {
       e1rm: fromKg(estimate1RM(top.weight, top.reps, top.unit), displayUnit),
       e1rmKg: estimate1RM(top.weight, top.reps, top.unit),
       holdSeconds: top.holdSeconds ?? null,
+      totalReps: daySets.reduce((sum, x) => sum + (Number(x.reps) || 0), 0),
+      volume: totalVolume(daySets, displayUnit),
       isPR
     };
   });

@@ -8,6 +8,7 @@ import { isPersonalRecord, recordScore } from './progression.js';
 import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
 import { activityVisualState, frostedDates } from './consistency.js';
 import { itemsFromSets, updatedItems } from './plans.js';
+import { hasMuscles, guessMuscles } from './muscles.js';
 
 const state = {
   ready: false,
@@ -94,6 +95,7 @@ export async function init() {
     state.settings = await store.saveSettings({ seedBackfillDone: true });
   }
   state.exercises = exercises;
+  await backfillMuscles();
 
   await reloadRecords();
   state.currentExerciseId = state.lastSet?.exerciseId || null;
@@ -112,9 +114,25 @@ async function reloadRecords() {
   state.lastSet = state.sessionSets.length ? withExercise(state.sessionSets.at(-1)) : null;
 }
 
+/**
+ * Muscles for exercises that have none. Once per install (settings.muscleBackfillDone):
+ * every exercise with no muscles gets the starter mapping of the same name, else a
+ * guess from its old `muscleGroup`. Never overwrites a non-empty list. After that,
+ * only records whose fields are *absent* — old-shaped exercises arriving in an
+ * import — are filled; an empty list someone chose in the editor stays empty.
+ */
+async function backfillMuscles() {
+  const firstTime = !state.settings.muscleBackfillDone;
+  const due = state.exercises.filter((ex) => (firstTime ? !hasMuscles(ex) : !Array.isArray(ex.primaryMuscles)));
+  for (const ex of due) await store.updateExercise({ ...ex, ...guessMuscles(ex) });
+  if (due.length) state.exercises = await store.listExercises();
+  if (firstTime) state.settings = await store.saveSettings({ muscleBackfillDone: true });
+}
+
 export async function reloadAll() {
   state.settings = await store.getSettings();
   state.exercises = await store.listExercises();
+  await backfillMuscles();
   await reloadRecords();
   emit();
   return state;

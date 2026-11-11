@@ -101,3 +101,46 @@ test('editing a set can create a PR, and can take one away — flags are recompu
   assert.deepEqual(stored, flags());
   assert.equal(state.getState().lastSet.weight, 70, 'the last set reflects its edit');
 });
+
+/* ---------- Stage 3: muscle backfill ---------- */
+
+const oldShaped = (ex) => { const { primaryMuscles, secondaryMuscles, ...rest } = ex; return rest; };
+
+test('muscle backfill: starters by name, others from muscleGroup, never overwriting, once', async () => {
+  const bench = await store.addExercise({ name: 'bench press', muscleGroup: 'chest' });           // starter, other case
+  const custom = await store.addExercise({ name: 'Sled Push', muscleGroup: 'legs' });             // not a starter
+  const chosen = await store.addExercise({ name: 'Deadlift', primaryMuscles: ['glutes'] });       // already set
+  const legacy = await store.addExercise({ name: 'Cable Fly', muscleGroup: 'chest' });
+  await store.updateExercise(oldShaped(legacy));                                                   // field absent
+  const { exercises, settings } = await state.init();
+  const get = (id) => exercises.find((e) => e.id === id);
+  assert.deepEqual(get(bench.id).secondaryMuscles, ['front-delts', 'triceps']);
+  assert.deepEqual(get(custom.id).primaryMuscles, ['quads', 'hamstrings', 'glutes']);
+  assert.deepEqual(get(custom.id).secondaryMuscles, []);
+  assert.deepEqual(get(chosen.id).primaryMuscles, ['glutes'], 'a non-empty choice is never overwritten');
+  assert.deepEqual(get(legacy.id).primaryMuscles, ['chest']);
+  assert.equal(settings.muscleBackfillDone, true);
+
+  // Once: an exercise someone later cleared stays cleared on the next boot.
+  await store.updateExercise({ ...get(custom.id), primaryMuscles: [], secondaryMuscles: [] });
+  const again = await state.init();
+  assert.deepEqual(again.exercises.find((e) => e.id === custom.id).primaryMuscles, []);
+});
+
+test('a schema-1 backup with no muscle fields imports, and its exercises get muscles', async () => {
+  await state.init();
+  const backup = {
+    app: 'reptrack', schemaVersion: 1, sessions: [], sets: [], runs: [], settings: [],
+    exercises: [
+      { id: 'ex_old_1', name: 'Pull Up', aliases: [], muscleGroup: 'back', category: 'calisthenics', mode: 'reps', isCustom: false, isBodyweight: true },
+      { id: 'ex_old_2', name: 'Arm Wrestle', aliases: [], muscleGroup: 'arms', category: 'strength', mode: 'reps', isCustom: true, isBodyweight: false }
+    ]
+  };
+  for (const mode of ['replace', 'merge']) {
+    await store.importAll(backup, { mode });
+    await state.reloadAll();
+    const ex = state.getState().exercises;
+    assert.deepEqual(ex.find((e) => e.id === 'ex_old_1').secondaryMuscles, ['biceps', 'upper-back', 'rear-delts'], mode);
+    assert.deepEqual(ex.find((e) => e.id === 'ex_old_2').primaryMuscles, ['biceps', 'triceps'], mode);
+  }
+});

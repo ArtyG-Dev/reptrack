@@ -86,7 +86,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // exercises-seed.js after this install's dictionary was first created —
   // see the backfill note in state.js. Never re-checked after that, so a
   // starter exercise a user deliberately deletes doesn't come back.
-  seedBackfillDone: false
+  seedBackfillDone: false,
+  muscleBackfillDone: false
 });
 
 let dbPromise = null;
@@ -268,7 +269,7 @@ export async function listExercises() {
 
 export function makeExercise({
   name, aliases = [], muscleGroup = 'other', category = 'strength', mode = 'reps',
-  isCustom = true, isBodyweight = false, restSec = null
+  isCustom = true, isBodyweight = false, restSec = null, primaryMuscles = [], secondaryMuscles = []
 }) {
   return {
     id: uid('ex'),
@@ -279,7 +280,9 @@ export function makeExercise({
     mode: mode === 'hold' ? 'hold' : 'reps',
     isCustom,
     isBodyweight,
-    restSec: Number(restSec) > 0 ? Math.round(Number(restSec)) : null
+    restSec: Number(restSec) > 0 ? Math.round(Number(restSec)) : null,
+    primaryMuscles: [...primaryMuscles],
+    secondaryMuscles: [...secondaryMuscles]
   };
 }
 

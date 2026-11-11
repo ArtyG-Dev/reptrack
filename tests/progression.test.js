@@ -183,3 +183,14 @@ test('warm-up sets count toward nothing: no PR, no top set, no volume, no nudge'
   assert.ok(suggestProgression([...day('2026-01-01'), ...day('2026-01-08')]), 'working sets still nudge');
   assert.equal(suggestProgression([{ ...warm, dateISO: '2026-01-01' }, { ...warm, dateISO: '2026-01-08' }]), null);
 });
+
+test('series carry total reps and volume per session, working sets only', () => {
+  const series = buildSeries([
+    { dateISO: '2026-11-01', weight: 100, unit: 'kg', reps: 5 },
+    { dateISO: '2026-11-01', weight: 100, unit: 'kg', reps: 5 },
+    { dateISO: '2026-11-01', weight: 40, unit: 'kg', reps: 10, isWarmup: true },
+    { dateISO: '2026-11-03', weight: 0, unit: 'kg', reps: 12 }
+  ], 'kg');
+  assert.deepEqual(series.map((p) => [p.totalReps, p.volume]), [[10, 1000], [12, 0]]);
+  assert.ok(Math.abs(buildSeries([{ dateISO: '2026-11-01', weight: 100, unit: 'kg', reps: 5 }], 'lb')[0].volume - 1102.3) < 0.1, 'volume in the display unit');
+});

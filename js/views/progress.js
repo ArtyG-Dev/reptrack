@@ -5,26 +5,69 @@
 
 import * as state from '../state.js';
 import { el, clear, humanDate } from '../ui.js';
-import { renderChart } from '../chart.js';
+import { renderChart, renderBars } from '../chart.js';
+import { MUSCLES } from '../exercises-seed.js';
+import { MUSCLE_LABELS, weeklyMuscleSets, muscleWeeklySeries } from '../muscles.js';
+import { todayISO } from '../store.js';
 import { buildSeries, suggestProgression, bestSet, estimate1RM, fromKg, toKg, formatWeight, formatDuration } from '../progression.js';
 import { describeSet } from '../parser.js';
 
-const view = { exerciseId: null, metric: null };
+const view = { exerciseId: null, metric: null, muscle: null };
 
 let containerRef = null;
 
 const METRICS_REPS = {
   e1rm: { label: 'Estimated 1RM', pick: (p) => p.e1rm },
   topWeight: { label: 'Top set weight', pick: (p) => p.topWeight },
-  reps: { label: 'Reps at top set', pick: (p) => p.reps }
+  reps: { label: 'Reps at top set', pick: (p) => p.reps },
+  totalReps: { label: 'Total reps per session', pick: (p) => p.totalReps, count: true },
+  volume: { label: 'Volume per session', pick: (p) => p.volume }
 };
+
+/* A bodyweight exercise has no load to multiply, so its volume is its total
+ * reps — said so in the label rather than charting a row of zeros. */
+const VOLUME_BODYWEIGHT = { label: 'Volume per session (total reps — bodyweight)', pick: (p) => p.totalReps, count: true };
 
 const METRICS_HOLD = {
   holdSeconds: { label: 'Hold duration', pick: (p) => p.holdSeconds || 0 }
 };
 
 function metricsFor(exercise) {
-  return exercise?.mode === 'hold' ? METRICS_HOLD : METRICS_REPS;
+  if (exercise?.mode === 'hold') return METRICS_HOLD;
+  return exercise?.isBodyweight ? { ...METRICS_REPS, volume: VOLUME_BODYWEIGHT } : METRICS_REPS;
+}
+
+const formatSets = (v) => String(Math.round(v * 10) / 10);
+
+/** "Weekly sets by muscle": this week's bars over last week's, then one muscle's 12 weeks. */
+function muscleCard(s, rerender) {
+  const byId = new Map(s.exercises.map((ex) => [ex.id, ex]));
+  const today = todayISO();
+  const { current, previous } = weeklyMuscleSets(s.allSets, byId, today);
+  const rows = MUSCLES.filter((m) => current[m] || previous[m])
+    .map((m) => ({ label: MUSCLE_LABELS[m], value: current[m], previous: previous[m] }));
+
+  const card = el('div', { class: 'card stack', id: 'muscle-card' }, el('h3', { text: 'Weekly sets by muscle' }));
+  if (!rows.length) {
+    card.append(el('p', { class: 'empty', text: 'No sets for any muscle this week or last. Muscles come from each exercise’s settings in Exercises.' }));
+    return card;
+  }
+  const barsHost = el('div', {});
+  card.append(barsHost, el('p', { class: 'small muted', style: 'margin:0', text: 'Solid: this week (Monday to today). Faint: last week. A set counts 1 for each primary muscle, ½ for each secondary; warm-ups don’t count.' }));
+  renderBars(barsHost, rows, { title: 'Working sets by muscle, this week and last', currentLabel: 'This week', previousLabel: 'Last week', formatValue: formatSets });
+
+  if (!view.muscle) view.muscle = MUSCLES.filter((m) => current[m] || previous[m]).sort((a, b) => current[b] - current[a])[0];
+  const picker = el('select', { id: 'muscle-pick', onchange: (e) => { view.muscle = e.target.value; rerender(); } },
+    ...MUSCLES.map((m) => el('option', { value: m, selected: m === view.muscle }, MUSCLE_LABELS[m])));
+  const lineHost = el('div', {});
+  card.append(el('div', { class: 'field', style: 'margin:0' }, el('label', { for: 'muscle-pick', text: 'Muscle, last 12 weeks' }), picker), lineHost);
+  renderChart(lineHost, muscleWeeklySeries(s.allSets, byId, view.muscle, today), {
+    title: `Weekly sets for ${MUSCLE_LABELS[view.muscle]} over 12 weeks`,
+    unitLabel: ' sets',
+    pointNoun: 'weeks',
+    formatValue: formatSets
+  });
+  return card;
 }
 
 function exercisesWithData() {
@@ -135,7 +178,7 @@ export function render(container) {
   chartCard.append(chartHost);
   renderChart(chartHost, points, {
     title: `${metric.label} over time`,
-    unitLabel: isHold || view.metric === 'reps' ? '' : ` ${unit}`,
+    unitLabel: isHold || view.metric === 'reps' || metric.count ? '' : ` ${unit}`,
     formatValue: (v) => (isHold ? formatDuration(v) : formatWeight(Math.round(v * 10) / 10))
   });
   chartCard.append(el('p', { class: 'small muted', style: 'margin-top:8px', text: `Green points are personal records (best ${isHold ? 'hold duration' : 'estimated 1RM'} to date).` }));
@@ -155,6 +198,7 @@ export function render(container) {
   }
 
   containerRef.append(isHold ? summaryCardHold(sets) : summaryCardReps(sets, unit));
+  containerRef.append(muscleCard(s, rerender));
 
   const recent = [...series].reverse().slice(0, 12);
   containerRef.append(el('div', { class: 'card' },

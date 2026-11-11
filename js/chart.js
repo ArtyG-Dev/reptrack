@@ -85,7 +85,7 @@ function el(name, attrs = {}) {
  * @param {{title:string, unitLabel:string, formatValue?:Function}} options
  */
 export function renderChart(container, points, options = {}) {
-  const { title = 'Progress', unitLabel = '', formatValue = (v) => String(Math.round(v * 10) / 10) } = options;
+  const { title = 'Progress', unitLabel = '', pointNoun = 'sessions', formatValue = (v) => String(Math.round(v * 10) / 10) } = options;
   container.textContent = '';
 
   if (!points.length) {
@@ -102,7 +102,7 @@ export function renderChart(container, points, options = {}) {
     viewBox: `0 0 ${c.width} ${c.height}`,
     preserveAspectRatio: 'xMidYMid meet',
     role: 'img',
-    'aria-label': `${title}. ${points.length} sessions, from ${formatValue(points[0].value)}${unitLabel} on ${points[0].label} to ${formatValue(points.at(-1).value)}${unitLabel} on ${points.at(-1).label}.`
+    'aria-label': `${title}. ${points.length} ${pointNoun}, from ${formatValue(points[0].value)}${unitLabel} on ${points[0].label} to ${formatValue(points.at(-1).value)}${unitLabel} on ${points.at(-1).label}.`
   });
 
   for (const tick of c.yTicks) {
@@ -149,5 +149,73 @@ export function renderChart(container, points, options = {}) {
     tbody.append(tr);
   }
   table.append(tbody);
+  container.append(table);
+}
+
+/* ---------- horizontal bars: this period vs the previous one ---------- */
+
+const BAR_DEFAULTS = { width: 640, rowHeight: 30, labelWidth: 120, valueWidth: 44, padTop: 4 };
+
+/**
+ * Pure geometry for a horizontal bar chart. Each row gets a solid bar for
+ * `value` and a thin, faint bar under it for `previous`; both share one scale,
+ * so a longer bar always means more.
+ * @param {Array<{label: string, value: number, previous?: number}>} rows
+ */
+export function computeBars(rows = [], options = {}) {
+  const o = { ...BAR_DEFAULTS, ...options };
+  const plotX = o.labelWidth;
+  const plotW = Math.max(10, o.width - o.labelWidth - o.valueWidth);
+  const max = Math.max(1, ...rows.flatMap((r) => [Number(r.value) || 0, Number(r.previous) || 0]));
+  const scale = (v) => Math.round(((Math.max(0, Number(v) || 0)) / max) * plotW * 100) / 100;
+  const barH = Math.round(o.rowHeight * 0.5);
+  const prevH = Math.max(2, Math.round(o.rowHeight * 0.18));
+  const bars = rows.map((r, i) => {
+    const y = o.padTop + i * o.rowHeight;
+    return {
+      ...r, value: Number(r.value) || 0, previous: Number(r.previous) || 0,
+      x: plotX, y, h: barH, w: scale(r.value),
+      prevY: y + barH + 2, prevH, prevW: scale(r.previous),
+      labelY: y + barH - 3
+    };
+  });
+  return { width: o.width, height: o.padTop * 2 + rows.length * o.rowHeight, plotX, plotW, max, bars };
+}
+
+/** Renders computeBars() into `container`, with a visually-hidden table of the numbers. */
+export function renderBars(container, rows, { title = 'Bars', currentLabel = 'This period', previousLabel = 'Previous', formatValue = (v) => String(v) } = {}) {
+  container.textContent = '';
+  const c = computeBars(rows);
+  const svg = el('svg', {
+    class: 'chart bars', viewBox: `0 0 ${c.width} ${c.height}`, preserveAspectRatio: 'xMidYMid meet',
+    role: 'img', 'aria-label': `${title}. ${rows.map((r) => `${r.label} ${formatValue(r.value)}`).join(', ')}.`
+  });
+  for (const b of c.bars) {
+    const label = el('text', { class: 'bar-label', x: c.plotX - 8, y: b.labelY, 'text-anchor': 'end' });
+    label.textContent = b.label;
+    svg.append(label);
+    svg.append(el('rect', { class: 'bar-prev', x: b.x, y: b.prevY, width: b.prevW, height: b.prevH, rx: 1 }));
+    svg.append(el('rect', { class: 'bar', x: b.x, y: b.y, width: b.w, height: b.h, rx: 2 }));
+    const value = el('text', { class: 'tick-label', x: b.x + b.w + 6, y: b.labelY });
+    value.textContent = formatValue(b.value);
+    svg.append(value);
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-wrap';
+  wrap.append(svg);
+  container.append(wrap);
+
+  const table = document.createElement('table');
+  table.className = 'visually-hidden';
+  const caption = document.createElement('caption');
+  caption.textContent = title;
+  const head = document.createElement('tr');
+  for (const h of ['Muscle', currentLabel, previousLabel]) { const th = document.createElement('th'); th.scope = 'col'; th.textContent = h; head.append(th); }
+  table.append(caption, head);
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    for (const text of [r.label, formatValue(r.value), formatValue(r.previous || 0)]) { const td = document.createElement('td'); td.textContent = text; tr.append(td); }
+    table.append(tr);
+  }
   container.append(table);
 }

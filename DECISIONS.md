@@ -1467,3 +1467,27 @@ didn't include it, so a rest time typed when *adding* an exercise was lost; edit
 existing one worked, which is the only path the Stage 1 test drove. Cause: a new field was
 added to the editor and to `updateExercise`, not to the constructor. Fix: `makeExercise()`
 keeps `restSec` (null when blank). A db test covers both cases.
+
+### 97. Stage 3: muscles and the weekly charts
+
+- **Taxonomy and mappings** as the brief lists them; the seed mappings are in
+  `exercises-seed.js` and the ones the brief spells out (Deadlift, Bench Press, Pull Up) are
+  pinned by `tests/muscles.test.js`. Child's Pose has none: it is a rest pose, and claiming
+  a muscle for it would put sets on the chart that weren't training. Downward Dog has only
+  secondaries (hamstrings, calves) for the same reason.
+- **The backfill's guess from `muscleGroup` is primaries only.** A guess that also claimed
+  secondaries would add half-sets nobody chose.
+- **Imports.** A Replace import brings the backup's settings, so the once-pass runs again
+  if the backup predates it; a Merge keeps this install's flag. Either way an exercise
+  arriving *without* the fields is filled, which is what "an old backup imports, then the
+  backfill fills it" needs, while an empty list chosen in the editor is never touched.
+- **Charts stay hand-rolled.** `computeBars()` is pure geometry beside `computeChart()`,
+  with tests; this week is solid, last week a thin faint bar under it, on one shared scale.
+  Rows are in taxonomy order (not sorted by count), so a muscle is always in the same place
+  week to week; untrained muscles are left out. The picker below draws any muscle's last
+  12 Monday-based weeks with the existing line chart.
+- **Volume for a bodyweight exercise is its total reps**, and the metric's label says so,
+  rather than a chart of zeros.
+- **Chips**, not a multi-select: 18 toggle buttons with `aria-pressed`, 44 px tall, updated
+  in place so keyboard focus stays on the chip just pressed.
+

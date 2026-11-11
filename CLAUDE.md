@@ -60,6 +60,7 @@ js/
   theme-engine.js       intensity driver, flash limiter, lightning scheduling, rotation cap (pure)
   graphic-view.js       the full-screen graphic view (View button on Today)
   reminders.js          when to show the backup reminder (pure)
+  muscles.js            weekly working sets per muscle, a muscle's 12-week series, backfill guess (pure)
   plans.js              plan checklist progress, prefill, plan-from-session, update-to-what-I-did (pure)
   wake.js               the session screen wake lock
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
@@ -87,7 +88,8 @@ out of the app — every colour it draws comes from CSS custom properties.
 ## Data model (IndexedDB `reptrack`, version 3)
 
 ```
-Exercise  { id, name, aliases[], muscleGroup, category, mode, isCustom, isBodyweight, restSec }
+Exercise  { id, name, aliases[], muscleGroup, primaryMuscles[], secondaryMuscles[], category, mode,
+            isCustom, isBodyweight, restSec }
 Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility,
             sessionType, className, instructor, location, attendance, planId, planMarks }
 SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
@@ -103,6 +105,18 @@ Indexes: `sessions.by_date`, `sets.by_session`, `sets.by_exercise`, `runs.by_dat
 
 Details that look redundant and are not:
 
+- **Muscles.** `MUSCLES` in `exercises-seed.js` is the 18-muscle taxonomy (chest,
+  front/side/rear delts, biceps, triceps, forearms, abs, obliques, lats, upper/lower back,
+  glutes, quads, hamstrings, calves, adductors, hip flexors). Each exercise lists
+  `primaryMuscles[]` and `secondaryMuscles[]` from it, never one muscle in both; the old
+  single `muscleGroup` stays, for the backfill and the Exercises list line. A working set
+  counts **1 per primary, 0.5 per secondary** (`js/muscles.js`); warm-ups count nothing.
+  No DB version bump: the fields are additive. **`settings.muscleBackfillDone`** gates a
+  once-per-install pass in `state.init()` that gives every exercise with no muscles the
+  starter mapping of the same name, else a primaries-only guess from `muscleGroup`
+  (`MUSCLE_GROUP_MUSCLES`), never overwriting a non-empty list. After that pass, only
+  records whose fields are *absent* (old-shaped exercises arriving from an import, in either
+  mode) are filled, so an empty list chosen in the editor stays empty.
 - **Plans** (version 3, backup `SCHEMA_VERSION` 2). A plan is a named, ordered list of
   exercises with targets; a hold-mode item uses `targetHoldSec` and leaves reps/weight
   `null`, a reps item the reverse. `Session.planId` (nullable) records which plan a session

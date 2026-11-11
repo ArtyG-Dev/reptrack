@@ -162,6 +162,13 @@ Also worth a quick look while you're in there:
 - **End session:** "Update plan to what I did?" appears with No highlighted. Either answer
   is fine; No must leave the plan as it was.
 
+## Check 6: muscles (about 1 minute)
+
+- **Exercises → edit Deadlift:** the muscle chips are easy to tap; Glutes, Hamstrings and
+  Lower back are on under Primary. Tapping a Secondary chip that's on under Primary moves it.
+- **Progress → Weekly sets by muscle:** after a session, the bars read sensibly on a
+  phone-width screen and the labels don't clip.
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.

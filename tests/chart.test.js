@@ -53,3 +53,23 @@ test('at most three x labels are drawn, first and last included', () => {
   assert.equal(c.xLabels[0].label, many[0].label);
   assert.equal(c.xLabels.at(-1).label, many.at(-1).label);
 });
+
+test('bars: one shared scale for this week and last, longest value fills the plot', async () => {
+  const { computeBars } = await import('../js/chart.js');
+  const c = computeBars([{ label: 'Chest', value: 10, previous: 5 }, { label: 'Lats', value: 2.5, previous: 12 }], { width: 400, labelWidth: 100, valueWidth: 40 });
+  assert.equal(c.max, 12);
+  assert.equal(c.plotW, 260);
+  assert.equal(c.bars[1].prevW, 260, 'the largest of either series fills the width');
+  assert.ok(Math.abs(c.bars[0].w - 260 * 10 / 12) < 0.01);
+  assert.ok(c.bars[1].y > c.bars[0].y + c.bars[0].h, 'rows do not overlap');
+  assert.ok(c.bars[0].prevY >= c.bars[0].y + c.bars[0].h, 'last week sits under this week');
+  assert.equal(c.height, 4 * 2 + 2 * 30);
+});
+
+test('bars: zeros and an empty chart stay finite', async () => {
+  const { computeBars } = await import('../js/chart.js');
+  const c = computeBars([{ label: 'Calves', value: 0 }]);
+  assert.equal(c.bars[0].w, 0);
+  assert.equal(c.bars[0].prevW, 0);
+  assert.equal(computeBars([]).bars.length, 0);
+});

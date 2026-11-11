@@ -559,4 +559,67 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
     assert.deepEqual((await plans(page))[0].items, plan.items);
     await context.close();
   });
+
+  /* ---------- Stage 3: muscles ---------- */
+
+  test('weekly sets by muscle: primaries 1, secondaries ½, warm-ups nothing; a muscle’s 12 weeks', async () => {
+    const { context, page, errors } = await fresh();
+    await page.click('#start-session');
+    for (let i = 0; i < 3; i += 1) await logPhrase(page, 'deadlift 140 kilos for 5');
+    await logPhrase(page, 'bench press 60 kilos for 8');
+    await logPhrase(page, 'warm up bench press 40 kilos for 10');
+    await page.click('#tab-progress');
+    await page.waitForSelector('#muscle-card svg.bars');
+    const table = await page.$$eval('#muscle-card table tr', (rows) => Object.fromEntries(rows.slice(1).map((r) => [r.cells[0].textContent, r.cells[1].textContent])));
+    assert.equal(table.Glutes, '3');
+    assert.equal(table.Quads, '1.5');
+    assert.equal(table.Chest, '1', 'the warm-up adds nothing');
+    assert.equal(table.Triceps, '0.5');
+    assert.equal(table.Calves, undefined, 'untrained muscles are left out');
+    await page.selectOption('#muscle-pick', 'chest');
+    assert.match(await page.getAttribute('#muscle-card svg[aria-label^="Weekly sets for Chest"]', 'aria-label'), /12 weeks, from 0 sets on \d{4}-\d\d-\d\d to 1 sets/);
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  test('progress offers total reps and volume per session; a bodyweight exercise says its volume is reps', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-session');
+    await logPhrase(page, 'bench press 60 kilos for 8');
+    await logPhrase(page, 'pull ups 10');
+    await page.click('#tab-progress');
+    await page.selectOption('#progress-exercise', { label: 'Bench Press' });
+    await page.click('[aria-label="Chart metric"] button:has-text("Volume per session")');
+    assert.match(await page.textContent('#view-progress h3'), /Volume per session — Bench Press/);
+    await page.click('[aria-label="Chart metric"] button:has-text("Total reps per session")');
+    await page.selectOption('#progress-exercise', { label: 'Pull Up' });
+    await page.click('[aria-label="Chart metric"] button:has-text("Volume per session")');
+    assert.match(await page.textContent('#view-progress h3'), /total reps — bodyweight/);
+    await context.close();
+  });
+
+  test('the exercise editor picks muscles with toggle buttons; primary and secondary never overlap', async () => {
+    const { context, page } = await fresh();
+    await page.click('#tab-exercises');
+    if (await page.getAttribute('#exercises-cat-strength-trigger', 'aria-expanded') !== 'true') await page.click('#exercises-cat-strength-trigger');
+    await page.click('button[aria-label="Edit Deadlift"]');
+    const chip = (kind, m) => `#ex-${kind}-muscles button[data-muscle="${m}"]`;
+    assert.equal(await page.getAttribute(chip('primary', 'glutes'), 'aria-pressed'), 'true');
+    assert.equal(await page.getAttribute(chip('secondary', 'quads'), 'aria-pressed'), 'true');
+    await page.focus(chip('primary', 'quads'));
+    await page.keyboard.press('Enter');
+    assert.equal(await page.getAttribute(chip('primary', 'quads'), 'aria-pressed'), 'true');
+    assert.equal(await page.getAttribute(chip('secondary', 'quads'), 'aria-pressed'), 'false', 'moving it to primary drops it from secondary');
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.muscle), 'quads', 'focus stays on the chip');
+    await page.click(chip('secondary', 'calves'));
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForSelector('#confirm-sheet', { state: 'hidden' });
+    const ex = await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => { const g = req.result.transaction('exercises').objectStore('exercises').getAll(); g.onsuccess = () => resolve(g.result.find((e) => e.name === 'Deadlift')); };
+    }));
+    assert.deepEqual(ex.primaryMuscles, ['lower-back', 'glutes', 'quads', 'hamstrings']);
+    assert.deepEqual(ex.secondaryMuscles, ['forearms', 'lats', 'upper-back', 'calves']);
+    await context.close();
+  });
 });

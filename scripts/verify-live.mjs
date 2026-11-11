@@ -120,6 +120,16 @@ try {
   check('stage 2: "Update plan to what I did?" offered', await page.waitForSelector('#confirm-sheet h2:has-text("Update plan")', { timeout: 8000 }).then(() => true, () => false));
   await page.click('#confirm-sheet button:has-text("No")');
 
+  // Stage 3: muscles on the exercises, the weekly bars, the new metrics.
+  await page.click('#tab-progress');
+  check('stage 3: weekly sets by muscle shows this week', await page.waitForSelector('#muscle-card svg.bars', { timeout: 8000 }).then(() => true, () => false));
+  check('stage 3: volume and total reps metrics offered', await page.locator('[aria-label="Chart metric"] button:has-text("Volume per session")').count() === 1);
+  const pullUp = await page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('reptrack');
+    req.onsuccess = () => { const g = req.result.transaction('exercises').objectStore('exercises').getAll(); g.onsuccess = () => resolve(g.result.find((e) => e.name === 'Pull Up')); };
+  }));
+  check('stage 3: the imported old backup’s exercises have muscles', pullUp?.primaryMuscles?.includes('lats'), JSON.stringify(pullUp?.primaryMuscles));
+
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await context.close();
 } finally {

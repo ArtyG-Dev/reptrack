@@ -77,3 +77,27 @@ test('the backfill matches by name case-insensitively, so an already-present sta
   const benchPresses = exercises.filter((ex) => ex.name.toLowerCase() === 'bench press');
   assert.equal(benchPresses.length, 1, 'the seed\'s "Bench Press" must not duplicate the existing lower-case one');
 });
+
+/* ---------- editing a logged set ---------- */
+
+test('editing a set can create a PR, and can take one away — flags are recomputed across the exercise', async () => {
+  await state.init();
+  const bench = state.getState().exercises.find((e) => e.name === 'Bench Press');
+  const [a] = await state.logSets(bench.id, [{ weight: 60, unit: 'kg', reps: 10 }]);
+  const [b] = await state.logSets(bench.id, [{ weight: 50, unit: 'kg', reps: 10 }]);
+  const flags = () => Object.fromEntries(state.getState().allSets.map((s) => [s.id, s.isPR]));
+  assert.deepEqual(flags(), { [a.id]: true, [b.id]: false });
+
+  // Edit the lighter set up past the first: it becomes the PR.
+  await state.updateSetEntry({ ...b, weight: 70 });
+  assert.deepEqual(flags(), { [a.id]: true, [b.id]: true }, 'a heavier later set is a PR');
+
+  // Edit the first set up: now the later 70 no longer beats it.
+  await state.updateSetEntry({ ...a, weight: 80 });
+  assert.deepEqual(flags(), { [a.id]: true, [b.id]: false }, 'an edit can remove a PR');
+
+  // And it is stored, not just in memory.
+  const stored = Object.fromEntries((await store.allSets()).map((s) => [s.id, s.isPR]));
+  assert.deepEqual(stored, flags());
+  assert.equal(state.getState().lastSet.weight, 70, 'the last set reflects its edit');
+});

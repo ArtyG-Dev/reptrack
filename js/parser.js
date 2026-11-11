@@ -8,6 +8,7 @@
  *   "squat 100 kilos 5 reps 3 sets"      → 3 sets, 100 kg × 5
  *   "deadlift 140 for 5"                 → unit falls back to the user setting
  *   "add another set"                    → repeat the last logged set
+ *   "make that 8" / "change that to 8"   → amend the reps of the last logged set
  *   "same as last time"                  → pull the previous session's entry
  *   "60 kilos 10, 65 for 8, 70 for 6"    → three sets against the current exercise
  *
@@ -341,6 +342,29 @@ export function parseTranscript(transcript, ctx = {}) {
   if (!normalized) return { ...base, error: 'Nothing was heard.' };
 
   const tokens = normalized.split(' ');
+
+  /* --- intent: amend the last set ("make that 8", "change that to 8") ---
+   * Edits the reps of the most recently logged set — or its seconds, for a
+   * hold, which has no reps. Like everything else it goes back through the
+   * confirm sheet; this only proposes the change. */
+  const amend = normalized.match(/^(?:make|change|set)\s+(?:that|it)(?:\s+to)?(?:\s+(\d+))?(?:\s+(?:reps?|seconds?|secs?))?$/);
+  if (amend) {
+    if (!lastSet) return { ...base, intent: 'amend-last', error: 'No set logged yet to change.' };
+    const value = Number(amend[1]);
+    if (!amend[1] || !(value > 0)) return { ...base, intent: 'amend-last', error: 'Change it to what? Say a number, like “make that 8”.' };
+    const changed = carrySet(lastSet);
+    if (changed.holdSeconds != null) changed.holdSeconds = value;
+    else changed.reps = value;
+    return {
+      ...base,
+      ok: true,
+      intent: 'amend-last',
+      targetSetId: lastSet.id ?? null,
+      exercise: lastSet.exercise ?? currentExercise,
+      exerciseConfidence: 1,
+      sets: [changed]
+    };
+  }
 
   /* --- intent: repeat the last set --- */
   if (/\b(add|log|do|one)\s+(another|more|again)\b/.test(normalized) || /\banother (one|set|rep|hold)\b/.test(normalized) || /\bsame again\b/.test(normalized)) {

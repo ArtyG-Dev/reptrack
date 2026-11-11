@@ -50,6 +50,11 @@ function exerciseSheet(existing = null) {
     );
 
     const bodyweight = el('input', { type: 'checkbox', id: 'ex-bodyweight', style: 'width:auto;min-height:auto', checked: Boolean(existing?.isBodyweight) });
+    const rest = el('input', {
+      type: 'number', id: 'ex-rest', min: '0', step: '5', inputmode: 'numeric',
+      value: existing?.restSec ? String(existing.restSec) : '',
+      placeholder: `Default (${state.getState().settings.defaultRestSec || 90})`
+    });
 
     return el('form', {
       method: 'dialog',
@@ -63,7 +68,8 @@ function exerciseSheet(existing = null) {
           muscleGroup: group.value,
           category: (chosenCategory.trim() || 'strength').toLowerCase(),
           mode: mode.value,
-          isBodyweight: bodyweight.checked
+          isBodyweight: bodyweight.checked,
+          restSec: Number(rest.value) > 0 ? Math.round(Number(rest.value)) : null   // blank: use the default
         });
       }
     },
@@ -78,6 +84,10 @@ function exerciseSheet(existing = null) {
       el('div', { class: 'field' },
         el('label', { for: 'ex-mode', text: 'How it’s logged' }), mode,
         el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'Reps covers strength and calisthenics (weight is optional). Hold covers yoga poses, pilates holds, and timed calisthenics like a plank.' })
+      ),
+      el('div', { class: 'field' },
+        el('label', { for: 'ex-rest', text: 'Rest after a set (seconds)' }), rest,
+        el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'Leave blank to use your default rest time.' })
       ),
       el('div', { class: 'field row' }, bodyweight, el('label', { for: 'ex-bodyweight', style: 'margin:0', text: 'Bodyweight exercise (a lone number means reps, in reps mode)' })),
       el('div', { class: 'sheet-actions' },

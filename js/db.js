@@ -75,6 +75,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // TINT), and whether the one-time "drag to recolour" hint has been shown.
   fractalColour: { hue: 0, warmth: 0 },
   fractalHintSeen: false,
+  // Rest timer and session conveniences, both on by default.
+  vibrateOnRest: true,
+  keepScreenOn: true,
+  // Backups: when the last export happened, and when the reminder last showed.
+  lastExportAt: null,
+  backupNudgeShownAt: null,
   // Set once state.init() has merged any starter exercises added to
   // exercises-seed.js after this install's dictionary was first created —
   // see the backfill note in state.js. Never re-checked after that, so a

@@ -13,7 +13,12 @@ function bytesToMB(bytes) {
   return Math.round((bytes / (1024 * 1024)) * 100) / 100;
 }
 
-async function doExport() {
+function lastBackupText(at) {
+  if (!at) return 'Never backed up';
+  return `Last backup: ${new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+}
+
+export async function doExport() {
   const data = await store.exportAll();
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -24,6 +29,7 @@ async function doExport() {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast(`Exported ${data.sessions.length} sessions and ${data.sets.length} sets.`);
+  await state.updateSettings({ lastExportAt: Date.now() });
 }
 
 async function doImport(file, mode) {
@@ -102,6 +108,18 @@ export function render(container) {
     el('h3', { text: 'Preferences' }),
     el('div', { class: 'field' }, el('label', { for: 'set-unit', text: 'Default unit' }), unitSelect),
     el('div', { class: 'field' }, el('label', { for: 'set-rest', text: 'Rest timer (seconds)' }), restInput),
+    el('div', { class: 'field row' },
+      el('input', {
+        type: 'checkbox', id: 'set-vibrate-rest', style: 'width:auto;min-height:auto', checked: s.settings.vibrateOnRest !== false,
+        onchange: async (e) => { await state.updateSettings({ vibrateOnRest: e.target.checked }); }
+      }),
+      el('label', { for: 'set-vibrate-rest', style: 'margin:0', text: 'Vibrate when rest ends' })),
+    el('div', { class: 'field row' },
+      el('input', {
+        type: 'checkbox', id: 'set-keep-screen-on', style: 'width:auto;min-height:auto', checked: s.settings.keepScreenOn !== false,
+        onchange: async (e) => { await state.updateSettings({ keepScreenOn: e.target.checked }); }
+      }),
+      el('label', { for: 'set-keep-screen-on', style: 'margin:0', text: 'Keep screen on during a session' })),
     el('div', { class: 'field' },
       el('label', { for: 'set-theme', text: 'Theme' }), themeSelect,
       isGlassSkin(currentTheme)
@@ -176,6 +194,7 @@ export function render(container) {
   containerRef.append(el('div', { class: 'card stack' },
     el('h3', { text: 'Your data' }),
     el('p', { class: 'small muted', text: 'Everything lives in this browser on this device. There is no account and nothing is uploaded, so an export is your only backup.' }),
+    el('p', { class: 'small muted', id: 'last-backup', style: 'margin:0', text: lastBackupText(s.settings.lastExportAt) }),
     el('button', { class: 'btn btn-primary btn-block', id: 'export-json', type: 'button', onclick: doExport }, 'Export backup (JSON)'),
     el('div', { class: 'field' }, el('label', { for: 'import-file', text: 'Import a backup' }), fileInput),
     el('button', {

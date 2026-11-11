@@ -32,10 +32,18 @@ export function clear(node) {
 }
 
 let toastTimer = null;
-export function toast(message, ms = 2600) {
+/** A brief status message. `action` adds one button (e.g. "Export now") —
+ *  still a toast: it never blocks anything and goes away on its own. */
+export function toast(message, ms = 2600, { action = null } = {}) {
   const node = document.getElementById('toast');
   if (!node) return;
   node.textContent = message;
+  if (action) {
+    node.append(' ', el('button', {
+      class: 'btn btn-sm toast-action', type: 'button',
+      onclick: () => { node.hidden = true; action.onClick(); }
+    }, action.label));
+  }
   node.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { node.hidden = true; }, ms);

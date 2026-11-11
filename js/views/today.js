@@ -3,6 +3,8 @@
 import * as state from '../state.js';
 import * as backdrop from '../backdrop.js';
 import { el, clear, toast, openSheet, promptSheet, confirmSheet, clockTime, disclosure, titleCase } from '../ui.js';
+import { backupNudgeDue } from '../reminders.js';
+import { doExport } from './settings.js';
 import { parseTranscript, describeSet, formatNumber } from '../parser.js';
 import { listenOnce, isSupported as voiceSupported, VoiceInputError } from '../voice.js';
 import { formatDuration, suggestProgression, totalVolume, formatVolumeLine } from '../progression.js';
@@ -28,12 +30,20 @@ export function startTicker() {
       if (restEndsAt) {
         const left = Math.max(0, Math.round((restEndsAt - Date.now()) / 1000));
         restNode.textContent = left > 0 ? `Rest ${formatDuration(left)}` : 'Rest done';
-        if (left === 0) restEndsAt = null;
+        if (left === 0) { restEndsAt = null; restDone(); }
       } else {
         restNode.textContent = '';
       }
     }
   }, 1000);
+}
+
+/** Rest is over. A buzz, if the device can and the user hasn't switched it
+ *  off — some Android browsers ignore vibration with the screen off. */
+const REST_BUZZ = [200, 100, 200];
+function restDone() {
+  if (state.getState().settings.vibrateOnRest === false) return;
+  try { navigator.vibrate?.(REST_BUZZ); } catch { /* unsupported: nothing to do */ }
 }
 
 /* ---------- set editor sheet ---------- */
@@ -50,7 +60,7 @@ function modeOf(exerciseId) {
  * calisthenics hold) — switching the exercise mid-sheet switches the fields.
  * @returns {Promise<{exerciseId: string, sets: Array}|null>}
  */
-function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = [] }) {
+function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = [], editing = false }) {
   const s = state.getState();
   const titleId = 'confirm-sheet-title';
 
@@ -65,6 +75,22 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
     let rows = sets.length ? sets.map((x) => makeRow(x)) : [makeRow()];
 
     const rowsWrap = el('div', { class: 'stack' });
+
+    /* Quick adjust: real buttons beside a field, nudging its value by a step
+     * without retyping. Reps ±1, weight ± the user's progression step, holds ±5 s. */
+    const nudger = (input, row, key, step, { min = 0, label, unitText = '' }) => {
+      const bump = (dir) => {
+        const now = Number(row[key]) || 0;
+        const next = Math.max(min, Math.round((now + dir * step()) * 100) / 100);
+        row[key] = next;
+        input.value = key === 'weight' ? formatNumber(next) : String(next);
+      };
+      return el('div', { class: 'adjust' },
+        el('button', { class: 'btn btn-adjust', type: 'button', 'aria-label': `${label} down${unitText ? ` by ${step()} ${unitText}` : ''}`, onclick: () => bump(-1) }, '−'),
+        el('button', { class: 'btn btn-adjust', type: 'button', 'aria-label': `${label} up${unitText ? ` by ${step()} ${unitText}` : ''}`, onclick: () => bump(1) }, '+')
+      );
+    };
+    const weightStep = (row) => () => (row.unit === 'lb' ? Number(s.settings.progressionStepLb) || 5 : Number(s.settings.progressionStepKg) || 2.5);
 
     const renderRows = () => {
       clear(rowsWrap);
@@ -85,7 +111,8 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
           );
 
           rowsWrap.append(el('div', { class: 'field-row' },
-            el('div', {}, el('label', { for: `row-hold-${index}`, text: `Hold ${index + 1} — seconds` }), durationInput),
+            el('div', {}, el('label', { for: `row-hold-${index}`, text: `Hold ${index + 1} — seconds` }), durationInput,
+              nudger(durationInput, row, 'holdSeconds', () => 5, { min: 1, label: `Hold ${index + 1} seconds`, unitText: 'seconds' })),
             el('div', {}, el('label', { for: `row-side-${index}`, text: 'Side' }), sideSelect),
             el('div', { class: 'row', style: 'align-items:flex-end;grid-column:1 / -1' },
               el('button', {
@@ -112,9 +139,11 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
           );
 
           rowsWrap.append(el('div', { class: 'field-row' },
-            el('div', {}, el('label', { for: `row-weight-${index}`, text: `Set ${index + 1} weight` }), weightInput),
+            el('div', {}, el('label', { for: `row-weight-${index}`, text: `Set ${index + 1} weight` }), weightInput,
+              nudger(weightInput, row, 'weight', weightStep(row), { label: `Set ${index + 1} weight`, unitText: row.unit })),
             el('div', {}, el('label', { for: `row-unit-${index}`, text: 'Unit' }), unitSelect),
-            el('div', {}, el('label', { for: `row-reps-${index}`, text: 'Reps' }), repsInput),
+            el('div', {}, el('label', { for: `row-reps-${index}`, text: 'Reps' }), repsInput,
+              nudger(repsInput, row, 'reps', () => 1, { min: 1, label: `Set ${index + 1} reps` })),
             el('div', { class: 'row', style: 'align-items:flex-end' },
               el('button', {
                 class: 'btn btn-sm btn-ghost', type: 'button',
@@ -128,7 +157,7 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
     };
 
     const exerciseSelect = el('select', {
-      id: 'sheet-exercise', 'aria-label': 'Exercise',
+      id: 'sheet-exercise', 'aria-label': 'Exercise', disabled: editing,
       onchange: (e) => { selectedId = e.target.value; mode = modeOf(selectedId); rows = [makeRow()]; renderRows(); }
     },
       ...s.exercises.map((ex) => el('option', { value: ex.id, selected: ex.id === exerciseId }, ex.name))
@@ -158,7 +187,7 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
       ...warnings.map((w) => el('p', { class: 'small muted', text: w })),
       el('div', { class: 'field' }, el('label', { for: 'sheet-exercise', text: 'Exercise' }), exerciseSelect),
       rowsWrap,
-      el('button', {
+      editing ? null : el('button', {
         class: 'btn btn-sm', type: 'button',
         onclick: () => { rows.push(makeRow(rows.at(-1) || {})); renderRows(); }
       }, mode === 'hold' ? '+ Another hold' : '+ Another set'),
@@ -176,8 +205,31 @@ async function commit(result) {
   if (!result) return;
   const created = await state.logSets(result.exerciseId, result.sets);
   const prs = created.filter((c) => c.isPR).length;
-  restEndsAt = Date.now() + (state.getState().settings.defaultRestSec || 90) * 1000;
+  restEndsAt = Date.now() + restSecondsFor(result.exerciseId) * 1000;
   toast(prs ? `Logged ${created.length} set${created.length > 1 ? 's' : ''} — ${prs} personal record!` : `Logged ${created.length} set${created.length > 1 ? 's' : ''}.`);
+}
+
+/** An exercise's own rest time if it has one, else the default. */
+function restSecondsFor(exerciseId) {
+  const own = Number(state.exerciseById(exerciseId)?.restSec);
+  return own > 0 ? own : (state.getState().settings.defaultRestSec || 90);
+}
+
+/** Reopens a logged set in the same sheet, prefilled; saving updates it (and
+ *  recomputes PRs for its exercise). `proposed` lets "make that 8" prefill the
+ *  change — it still has to be confirmed, like everything else. */
+async function editSet(entry, proposed = null, transcript = '') {
+  const result = await editSetsSheet({
+    title: 'Edit set',
+    exerciseId: entry.exerciseId,
+    sets: [proposed || entry],
+    transcript,
+    editing: true
+  });
+  if (!result) return;
+  const [row] = result.sets;
+  await state.updateSetEntry({ ...entry, ...row });
+  toast('Set updated.');
 }
 
 async function handleParsed(parsed) {
@@ -190,6 +242,10 @@ async function handleParsed(parsed) {
     });
     if (retry) await typeSet(parsed.transcript);
     return;
+  }
+  if (parsed.intent === 'amend-last') {
+    const target = state.getState().sessionSets.find((x) => x.id === parsed.targetSetId);
+    if (target) { await editSet(target, parsed.sets[0], parsed.transcript); return; }
   }
   const result = await editSetsSheet({
     title: 'Confirm sets',
@@ -396,7 +452,11 @@ function exerciseGroup(group, s) {
     ),
     el('ul', { class: 'list' }, ...group.sets.map((entry, i) => el('li', {},
       el('span', { class: 'set-index', text: String(i + 1) }),
-      el('span', { class: 'grow mono', text: describeSet(entry) }),
+      el('button', {
+        class: 'set-edit grow mono', type: 'button',
+        'aria-label': `Edit set ${i + 1} of ${exercise?.name || 'exercise'}: ${describeSet(entry)}`,
+        onclick: () => editSet(entry)
+      }, describeSet(entry)),
       entry.isPR ? el('span', { class: 'badge badge-pr', text: 'PR' }) : null,
       el('button', {
         class: 'btn btn-sm btn-ghost',
@@ -455,6 +515,16 @@ function setsCard(s) {
   );
 }
 
+/** After a session is finished — never during one — a quiet reminder to back
+ *  up, at most weekly. One toast with an action; no dialog, no count of days. */
+function maybeNudgeBackup() {
+  const s = state.getState();
+  const now = Date.now();
+  if (!backupNudgeDue({ lastExportAt: s.settings.lastExportAt, nudgeShownAt: s.settings.backupNudgeShownAt, sessionCount: s.allSessions.length, now })) return;
+  state.rememberSetting({ backupNudgeShownAt: now }).catch(() => {});
+  setTimeout(() => toast('Worth saving a backup of your training.', 9000, { action: { label: 'Export now', onClick: doExport } }), 2700);
+}
+
 function finishCard() {
   return el('div', { class: 'card stack' },
     el('button', {
@@ -466,7 +536,7 @@ function finishCard() {
           message: `${s.sessionSets.length} set${s.sessionSets.length === 1 ? '' : 's'} logged. The session is saved to your diary.`,
           confirmLabel: 'End session'
         });
-        if (yes) { await state.endSession(); restEndsAt = null; toast('Session saved.'); }
+        if (yes) { await state.endSession(); restEndsAt = null; toast('Session saved.'); maybeNudgeBackup(); }
       }
     }, 'End session'),
     el('button', {

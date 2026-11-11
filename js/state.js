@@ -4,7 +4,7 @@
 
 import * as store from './store.js';
 import { SEED_EXERCISES } from './exercises-seed.js';
-import { isPersonalRecord } from './progression.js';
+import { isPersonalRecord, recordScore } from './progression.js';
 import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
 import { activityVisualState, frostedDates } from './consistency.js';
 
@@ -219,13 +219,42 @@ export async function logSets(exerciseId, entries) {
   return created;
 }
 
+/** Saves an edited set, then recomputes the PR flags for that exercise: an
+ *  edit can make a set a record, or stop an earlier/later one being one. */
 export async function updateSetEntry(entry) {
   await store.updateSet(entry);
   const replace = (list) => list.map((s) => (s.id === entry.id ? entry : s));
   state.sessionSets = replace(state.sessionSets);
   state.allSets = replace(state.allSets);
+  await recomputePRs(entry.exerciseId);
+  const fresh = state.allSets.find((s) => s.id === entry.id) || entry;
+  if (state.lastSet?.id === entry.id) state.lastSet = withExercise(fresh);
   emit();
-  return entry;
+  return fresh;
+}
+
+/** PR flags for one exercise, recomputed in true chronological order (date,
+ *  then session start, then set order) and written back only where they
+ *  changed. */
+async function recomputePRs(exerciseId) {
+  const startOf = new Map(state.allSessions.map((x) => [x.id, x.startTs ?? 0]));
+  const ordered = state.allSets
+    .filter((x) => x.exerciseId === exerciseId)
+    .sort((x, y) => String(x.dateISO).localeCompare(String(y.dateISO))
+      || (startOf.get(x.sessionId) ?? 0) - (startOf.get(y.sessionId) ?? 0)
+      || (x.order ?? 0) - (y.order ?? 0));
+  let best = 0;
+  const changed = new Map();
+  for (const x of ordered) {
+    const score = recordScore(x);
+    const isPR = score > best + 1e-6;
+    if (isPR) best = score;
+    if (Boolean(x.isPR) !== isPR) changed.set(x.id, { ...x, isPR });
+  }
+  for (const x of changed.values()) await store.updateSet(x);
+  const apply = (list) => list.map((x) => changed.get(x.id) || x);
+  state.allSets = apply(state.allSets);
+  state.sessionSets = apply(state.sessionSets);
 }
 
 export async function removeSet(setId) {

@@ -2,6 +2,7 @@
 
 import * as state from './state.js';
 import * as backdrop from './backdrop.js';
+import * as wake from './wake.js';
 import { toast } from './ui.js';
 import * as todayView from './views/today.js';
 import * as diaryView from './views/diary.js';
@@ -142,7 +143,10 @@ async function boot() {
   wireTheme();
   todayView.startTicker();
 
-  state.subscribe(() => { pushActivity(); renderActive(); });
+  // Keep the screen on while a session is running (if the setting allows).
+  const syncWake = () => { const s = state.getState(); wake.keepAwake(Boolean(s.session) && s.settings.keepScreenOn !== false); };
+  syncWake();
+  state.subscribe(() => { pushActivity(); renderActive(); syncWake(); });
 
   const initial = location.hash.slice(1);
   await activate(VIEWS[initial] ? initial : 'today');

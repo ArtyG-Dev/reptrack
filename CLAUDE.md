@@ -59,6 +59,8 @@ js/
   gl.js                 hand-rolled WebGL2 core: programs, buffers, targets, matrices, lines
   theme-engine.js       intensity driver, flash limiter, lightning scheduling, rotation cap (pure)
   graphic-view.js       the full-screen graphic view (View button on Today)
+  reminders.js          when to show the backup reminder (pure)
+  wake.js               the session screen wake lock
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
   ui.js                 element builder, toasts, <dialog> sheets, disclosure, share/download
   exercises-seed.js     starter exercise dictionary + CATEGORIES suggestion list
@@ -84,7 +86,7 @@ out of the app — every colour it draws comes from CSS custom properties.
 ## Data model (IndexedDB `reptrack`, version 2)
 
 ```
-Exercise  { id, name, aliases[], muscleGroup, category, mode, isCustom, isBodyweight }
+Exercise  { id, name, aliases[], muscleGroup, category, mode, isCustom, isBodyweight, restSec }
 Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility,
             sessionType, className, instructor, location, attendance }
 SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
@@ -133,6 +135,13 @@ Details that look redundant and are not:
   its full-screen view (`TINT` / `tintDrag()` in `theme-engine.js`; hue in radians, wraps;
   warmth −1…1, clamped), saved when the view closes and applied by `app.js` on every state
   change except while the view is open. Reset in Settings and in the view itself.
+- **`Exercise.restSec`** (null = use `settings.defaultRestSec`) — that exercise's own rest
+  time, set in the Exercises editor; the timer started after a commit uses it.
+- **`settings.vibrateOnRest`**, **`settings.keepScreenOn`** (both default `true`) — the rest
+  buzz and the session wake lock (`js/wake.js`). **`settings.lastExportAt`** /
+  **`settings.backupNudgeShownAt`** (default `null`) — the backup reminder's clock
+  (`js/reminders.js`: after finishing a session only, 30+ days or never-with-5-sessions,
+  at most weekly).
 - **`settings.panelState`** — `{ [scope]: { [category]: boolean } }`, `scope` is
   `'exercises'` or `'session'`. Read/write only through `state.isPanelExpanded()` /
   `state.setPanelExpanded()`, which also supply the "most recently used category starts

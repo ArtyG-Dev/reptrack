@@ -232,3 +232,28 @@ test('"same as last time" replays previous holds', () => {
   assert.equal(r.exercise.id, plank.id);
   assert.deepEqual(r.sets, previous);
 });
+
+test('"make that 8" amends the reps of the most recently logged set', () => {
+  const lastSet = { id: 'set_9', weight: 80, unit: 'kg', reps: 10, rpe: null, exercise: byName('Bench Press') };
+  for (const phrase of ['make that 8', 'make that eight', 'change that to 8', 'make it 8 reps', 'change it to eight']) {
+    const r = parseTranscript(phrase, ctx({ lastSet }));
+    assert.equal(r.ok, true, phrase);
+    assert.equal(r.intent, 'amend-last', phrase);
+    assert.equal(r.targetSetId, 'set_9', 'it names the set it changes');
+    assert.equal(r.exercise.name, 'Bench Press');
+    assert.deepEqual(r.sets, [{ weight: 80, unit: 'kg', reps: 8, rpe: null }], phrase);
+  }
+});
+
+test('"make that 45" on a hold amends the seconds, since a hold has no reps', () => {
+  const lastSet = { id: 'h1', holdSeconds: 30, side: 'left', weight: 0, unit: 'kg', reps: 0, rpe: null, exercise: byName('Plank') };
+  const r = parseTranscript('make that 45', ctx({ lastSet }));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.sets, [{ weight: 0, unit: 'kg', reps: 0, rpe: null, holdSeconds: 45, side: 'left' }]);
+});
+
+test('"make that 8" with nothing logged, or no number, says why', () => {
+  assert.match(parseTranscript('make that 8', ctx()).error, /No set logged yet/);
+  const r = parseTranscript('make that', ctx({ lastSet: { id: 's', weight: 60, unit: 'kg', reps: 5, exercise: byName('Bench Press') } }));
+  assert.equal(r.ok, false);
+});

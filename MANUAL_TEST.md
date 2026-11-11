@@ -126,6 +126,19 @@ Also worth a quick look while you're in there:
 
 ---
 
+## Check 3: the session conveniences (about 3 minutes)
+
+- **Edit a set:** log a set, tap it in the list, change the reps with the − / + buttons, Save.
+  The set updates in place, and a PR badge appears or disappears if the change makes or
+  breaks a record. Say "make that 8": the editor opens with 8 filled in, waiting for Save.
+- **Rest buzz:** set a short rest (Settings → Rest timer, e.g. 15), log a set, and wait. The
+  phone should buzz twice when rest ends. **Some Android browsers ignore vibration while the
+  screen is off**, so check with the screen on first. Switch "Vibrate when rest ends" off and
+  it should stay silent.
+- **Screen on:** start a session and leave the phone untouched past its usual screen-off
+  time. With "Keep screen on during a session" on (the default), it should stay lit. End
+  the session and it should time out as usual again.
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.

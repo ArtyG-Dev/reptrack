@@ -15,7 +15,7 @@ import { listen } from '../scripts/serve.mjs';
 import { findChromium, launch } from './helpers/browser.mjs';
 import { maxInWindow, FLASH, ROTATION } from '../js/theme-engine.js';
 
-const SKINS = ['kemet', 'forge', 'fractal', 'terminal'];
+const SKINS = ['kemet', 'forge', 'fractal', 'terminal', 'monolith'];
 const VIEWPORT = { width: 393, height: 852 };      // a typical Android phone, CSS px
 
 /** streakLevel / monthPercent pairs that put the shared intensity at 0, 0.5, 1. */
@@ -858,4 +858,71 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     assert.deepEqual(failures, [], `worst ${worst.toFixed(2)}:1`);
     await context.close();
   });
+
+  /* ---------- Stage 5: Monolith ---------- */
+
+  const QUARTER = Math.PI / 2;
+  const offFace = (heading) => Math.abs(heading - Math.round(heading / QUARTER) * QUARTER);
+
+  test('Monolith: drag turns freely and tilts at most ±30°; release snaps to the nearest face in ~400 ms, then auto-rotation resumes', async () => {
+    const { context, page } = await open('monolith');
+    await intensity(page, 0.5);
+    await page.click('#view-graphic');
+    await page.waitForSelector('#graphic-view:not([hidden])');
+    const before = await frame(page);
+    await page.mouse.move(196, 426);
+    await page.mouse.down();
+    await page.mouse.move(196 + 130, 426 - 900, { steps: 12 });
+    const held = await diag(page);
+    assert.ok(Math.abs(held.orbit.pitch + Math.PI / 6) < 1e-6, `tilt is clamped at 30° (${(held.orbit.pitch * 180 / Math.PI).toFixed(1)}°)`);
+    assert.ok(changedFraction(before, await frame(page)) > 0.02, 'the drag visibly turns it');
+    await page.mouse.up();
+    const snapping = await diag(page);
+    assert.equal(snapping.snapping, true, 'a snap starts on release');
+    await page.waitForTimeout(550);
+    const landed = await diag(page);
+    assert.equal(landed.snapping, false, 'the snap is over in about 400 ms');
+    // It landed on a face; auto-rotation has since moved it on only a little.
+    assert.ok(offFace(landed.spin) < landed.rotationSpeed * 0.3 + 1e-3, `landed square to a face (${offFace(landed.spin).toFixed(4)} rad off)`);
+    await page.waitForTimeout(500);
+    assert.ok(Math.abs((await diag(page)).spin - landed.spin) > 1e-3, 'auto-rotation resumed');
+    await context.close();
+  });
+
+  test('Monolith under reduced motion: the snap is instant and the frame stays held', async () => {
+    const { context, page } = await open('monolith', { context: { reducedMotion: 'reduce' } });
+    await intensity(page, 0.5);
+    await page.click('#view-graphic');
+    await page.mouse.move(196, 426);
+    await page.mouse.down();
+    await page.mouse.move(196 + 61, 426, { steps: 4 });
+    await page.mouse.up();
+    const d = await diag(page);
+    assert.equal(d.snapping, false);
+    assert.ok(offFace(d.spin) < 1e-9, `square to a face at once (${offFace(d.spin)})`);
+    assert.equal(d.running, false);
+    const a = await page.screenshot();
+    await page.waitForTimeout(600);
+    assert.ok(a.equals(await page.screenshot()), 'still one held frame');
+    await context.close();
+  });
+
+  test('Monolith: this week is the front face, a training day lights its bar, a frosted day stays visible', async () => {
+    const { context, page } = await open('monolith', { context: { reducedMotion: 'reduce' } });
+    const states = new Array(28).fill(0);
+    const frost = new Array(28).fill(0);
+    await page.evaluate(([s, f]) => window.__backdrop.setSkinData({ monolith: { states: s, frost: f } }), [states, frost]);
+    const dark = await frame(page);
+    states[0] = 1; states[1] = 2;                       // Monday trained, Tuesday a PR, on the front face
+    await page.evaluate(([s, f]) => window.__backdrop.setSkinData({ monolith: { states: s, frost: f } }), [states, frost]);
+    const lit = await frame(page);
+    assert.ok(changedFraction(dark, lit) > 0.001, 'training days light bars on the face toward the camera');
+    states[0] = 0; states[1] = 0; frost[0] = 1;
+    await page.evaluate(([s, f]) => window.__backdrop.setSkinData({ monolith: { states: s, frost: f } }), [states, frost]);
+    const frosted = await frame(page);
+    assert.ok(changedFraction(dark, frosted) > 0, 'a frosted bar is drawn, cooled — not removed');
+    assert.equal((await diag(page)).scene.monolith.frontFace, 0, 'at rest the front is this week');
+    await context.close();
+  });
+
 });

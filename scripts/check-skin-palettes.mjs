@@ -101,6 +101,48 @@ const THEMES = {
     'on-danger': '#2b0209',
     ok: '#7fe0b4',
     warn: '#ffcf6b'
+  },
+  monolith: {
+    backdropBase: '#06080a',
+    backdropInk: '#dff3ec',
+    glass: '#0b0e11',
+    glassAlpha: 0.92,
+    text: '#eef2f3',
+    muted: '#b3bec6',
+    accent: '#7fd6c8',
+    'on-accent': '#04201c',
+    danger: '#ff8f9c',
+    'on-danger': '#2b0209',
+    ok: '#86e3b0',
+    warn: '#f2c768'
+  },
+  constellation: {
+    backdropBase: '#03050c',
+    backdropInk: '#eef2ff',
+    glass: '#080b17',
+    glassAlpha: 0.92,
+    text: '#eef1fb',
+    muted: '#b1b9d6',
+    accent: '#a9bdff',
+    'on-accent': '#0a1236',
+    danger: '#ff929f',
+    'on-danger': '#2b0209',
+    ok: '#86e0b6',
+    warn: '#f5cd72'
+  },
+  orrery: {
+    backdropBase: '#070605',
+    backdropInk: '#fff0d4',
+    glass: '#0f0c0a',
+    glassAlpha: 0.92,
+    text: '#f6eee4',
+    muted: '#c8bbab',
+    accent: '#f0b56e',
+    'on-accent': '#2a1704',
+    danger: '#ff9198',
+    'on-danger': '#2b0209',
+    ok: '#8fe0b1',
+    warn: '#f7d070'
   }
 };
 

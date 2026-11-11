@@ -761,7 +761,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
 
   /* ---------- frosted-glass skins ---------- */
 
-  const GLASS_SKINS = ['terminal', 'fractal', 'forge', 'kemet'];
+  const GLASS_SKINS = ['terminal', 'fractal', 'forge', 'kemet', 'monolith'];
 
   /** Writes sessions straight into IndexedDB so a profile with real history can
    *  be simulated. Returns after the write commits; caller reloads to pick it up. */
@@ -868,7 +868,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await page.click('#tab-settings');
 
     const options = await page.$$eval('#set-theme option', (opts) => opts.map((o) => o.value));
-    assert.deepEqual(options, ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet']);
+    assert.deepEqual(options, ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet', 'monolith']);
 
     for (const theme of GLASS_SKINS) {
       await page.selectOption('#set-theme', theme);
@@ -879,7 +879,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await page.reload({ waitUntil: 'load' });
     // Wait for boot to have applied a theme rather than racing it.
     await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') !== null, null, { timeout: 5000 });
-    assert.equal(await page.getAttribute('html', 'data-theme'), 'kemet', 'the choice survives a reload');
+    assert.equal(await page.getAttribute('html', 'data-theme'), GLASS_SKINS.at(-1), 'the choice survives a reload');
     assert.equal(await page.getAttribute('html', 'data-glass'), '1');
 
     // …and switching back to a flat theme takes the glass and the canvas away.

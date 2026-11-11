@@ -224,6 +224,82 @@ uniform vec3 uColor;
 uniform float uStrength;
 void main() { float d = length(gl_PointCoord - 0.5); o = vec4(uColor * vA * uStrength * smoothstep(0.5, 0.0, d), 1.0); }`;
 
+/* ---------- Monolith ---------- */
+
+/* A cube. Faces 0–3 are the sides — the last four weeks, this week on the
+ * front (+z) — each with seven bars, Monday → Sunday left to right as seen
+ * from outside. Face 4 is the top: the month's rings. Face 5, the bottom,
+ * never faces the camera (tilt is clamped to ±30°). */
+const MONO_HALF = 0.62;
+const MONO_RINGS = 5;
+const MONO_VS = `#version 300 es
+layout(location = 0) in vec3 aP;
+layout(location = 1) in vec3 aN;
+layout(location = 2) in vec2 aUv;
+layout(location = 3) in float aFace;
+uniform mat4 uMVP, uModel;
+out vec3 vN;
+out vec2 vUv;
+flat out int vFace;
+void main() { vN = mat3(uModel) * aN; vUv = aUv; vFace = int(aFace + 0.5); gl_Position = uMVP * vec4(aP, 1.0); }`;
+const MONO_FS = `${HEAD}
+in vec3 vN;
+in vec2 vUv;
+flat in int vFace;
+uniform float uDays[28];
+uniform float uFrost[28];
+uniform float uK, uMonth;
+uniform vec3 uStone, uBar, uLit, uPr, uFrostC, uRing;
+void main() {
+  float diff = max(dot(normalize(vN), normalize(vec3(-0.45, 0.6, 0.7))), 0.0);
+  vec3 col = uStone * (0.5 + 0.7 * diff);
+  vec2 e = min(vUv, 1.0 - vUv);
+  col *= 0.8 + 0.2 * smoothstep(0.0, 0.03, min(e.x, e.y));
+  if (vFace < 4) {
+    float x = vUv.x * 7.0;
+    int d = int(clamp(floor(x), 0.0, 6.0));
+    float fx = fract(x);
+    float s = uDays[vFace * 7 + d];
+    bool inBar = fx > 0.22 && fx < 0.78 && vUv.y > 0.1 && vUv.y < 0.88;
+    if (inBar && s > -0.5) {
+      // Present always; lit on a training day, brighter with intensity; a
+      // frosted day only cools — it is never removed.
+      vec3 bar = uFrost[vFace * 7 + d] > 0.5 ? uFrostC : uBar;
+      if (s > 0.5) bar = mix(uBar, uLit, 0.6 + 0.4 * uK) * (1.0 + 0.35 * uK);
+      col = bar * (0.85 + 0.2 * diff);
+      if (s > 1.5 && vUv.y > 0.8) col = uPr;                 // a PR day's bright cap
+    }
+  } else if (vFace == 4) {
+    float r = length(vUv * 2.0 - 1.0) * float(${MONO_RINGS}) / 0.95;
+    float i = floor(r);
+    float band = 1.0 - smoothstep(0.12, 0.2, abs(fract(r) - 0.5));
+    if (i < float(${MONO_RINGS})) {
+      float lit = clamp(uMonth * float(${MONO_RINGS}) - i, 0.0, 1.0);
+      vec3 ring = lit > 0.0 ? uRing * (0.5 + 0.5 * lit) * (1.0 + 0.4 * uK) : uBar * 0.8;
+      col = mix(col, ring, band);
+    }
+  }
+  o = vec4(col, 1.0);
+}`;
+
+function monolithMesh() {
+  const H = MONO_HALF;
+  const faces = [
+    { n: [0, 0, 1], c: [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]] },
+    { n: [1, 0, 0], c: [[1, -1, 1], [1, -1, -1], [1, 1, -1], [1, 1, 1]] },
+    { n: [0, 0, -1], c: [[1, -1, -1], [-1, -1, -1], [-1, 1, -1], [1, 1, -1]] },
+    { n: [-1, 0, 0], c: [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]] },
+    { n: [0, 1, 0], c: [[-1, 1, 1], [1, 1, 1], [1, 1, -1], [-1, 1, -1]] },
+    { n: [0, -1, 0], c: [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]] }
+  ];
+  const uv = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const out = [];
+  faces.forEach((f, k) => {
+    for (const i of [0, 1, 2, 0, 2, 3]) out.push(...f.c[i].map((v) => v * H), ...f.n, ...uv[i], k);
+  });
+  return new Float32Array(out);
+}
+
 /* ---------- Forge ---------- */
 
 const FORGE_BG_FS = `${HEAD}
@@ -695,11 +771,13 @@ export function createGLBackdrop(canvas) {
     post: [POST_FS], line: [LINE_FS, LINE_VS], sprite: [SPRITE_FS, SPRITE_VS],
     sky: [SKY_FS], pyramid: [PYRAMID_FS, PYRAMID_VS], ring: [RING_FS, RING_VS], spark: [POINT_FS, SPARK_VS],
     forgeBg: [FORGE_BG_FS], barbell: [BARBELL_FS, BARBELL_VS], ember: [EMBER_FS, EMBER_VS],
-    bloom: [BLOOM_FS], mandel: [MANDEL_FS], floor: [FLOOR_FS], glyph: [GLYPH_FS, GLYPH_VS]
+    bloom: [BLOOM_FS], mandel: [MANDEL_FS], floor: [FLOOR_FS], glyph: [GLYPH_FS, GLYPH_VS],
+    mono: [MONO_FS, MONO_VS]
   };
   const MAKERS = {
     pyramidMesh: () => vao(gl, pyramidMesh(), [[0, 3], [1, 3], [2, 2], [3, 1]]),
     barbellMesh: () => vao(gl, barbellMesh(), [[0, 3], [1, 3], [2, 1]]),
+    monolithMesh: () => vao(gl, monolithMesh(), [[0, 3], [1, 3], [2, 2], [3, 1]]),
     plateMesh: () => vao(gl, plateMesh(), [[0, 3], [1, 3], [2, 1]]),
     seeds: () => vao(gl, Float32Array.from({ length: PARTICLES }, (_, i) => i), [[0, 1]]),
     glyphs: () => vao(gl, glyphColumns(), [[0, 4]]),
@@ -1104,7 +1182,29 @@ export function createGLBackdrop(canvas) {
     gl.drawArrays(gl.POINTS, 0, r.glyphs.count);
   }
 
-  const SCENES = { kemet, forge, fractal, terminal };
+  function monolith(f) {
+    const P = f.palette;
+    blend(null);
+    r.sky.use().rgb('uSky', P.sky).rgb('uBase', P.base).rgb('uStar', P.stone).f('uTime', f.t).f('uAspect', size.w / size.h);
+    fullscreen();
+    const cam = camera(f, f.full ? { targetY: 0, needH: 1.05, needW: 1.15, tilt: 0.38 } : { targetY: 0, needH: 0.98, needW: 1.4, tilt: 0.38 });
+    const orbit = multiply(rotationX(f.orbit.pitch), rotationY(f.orbit.yaw));
+    const model = rotationY(f.spin);
+    const world = multiply(orbit, model);
+    const { states, frost } = f.data.monolith;
+    gl.enable(gl.DEPTH_TEST);
+    r.mono.use().m4('uMVP', multiply(cam.vp, world)).m4('uModel', world)
+      .fv('uDays', states).fv('uFrost', frost).f('uK', f.k).f('uMonth', f.month)
+      .rgb('uStone', P.stone).rgb('uBar', P.bar).rgb('uLit', P.barLit).rgb('uPr', P.barPr).rgb('uFrostC', P.frost).rgb('uRing', P.ring);
+    gl.bindVertexArray(r.monolithMesh.va);
+    gl.drawArrays(gl.TRIANGLES, 0, r.monolithMesh.count);
+    gl.disable(gl.DEPTH_TEST);
+    // For tests: which face is toward the camera (0 = this week) and the heading.
+    const heading = Math.atan2(Math.sin(f.spin + f.orbit.yaw), Math.cos(f.spin + f.orbit.yaw));
+    info.monolith = { heading, frontFace: ((Math.round(-heading / (Math.PI / 2)) % 4) + 4) % 4, centre: project(cam.vp, [0, 0, 0]) };
+  }
+
+  const SCENES = { kemet, forge, fractal, terminal, monolith };
 
   return {
     gl,

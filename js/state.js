@@ -4,9 +4,10 @@
 
 import * as store from './store.js';
 import { SEED_EXERCISES } from './exercises-seed.js';
-import { isPersonalRecord, recordScore } from './progression.js';
+import { isPersonalRecord, recordScore, workingSets as progressionWorking } from './progression.js';
 import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
-import { activityVisualState, frostedDates } from './consistency.js';
+import { activityVisualState, frostedDates, trainingDays, effectiveToday } from './consistency.js';
+import { monolithFaces } from './skin-data.js';
 import { itemsFromSets, updatedItems } from './plans.js';
 import { hasMuscles, guessMuscles } from './muscles.js';
 
@@ -477,6 +478,19 @@ function activityInput() {
 /** Glow / frost state the skins render from. See js/consistency.js. */
 export function activityVisual() {
   return activityVisualState(activityInput());
+}
+
+/** What the Stage 5 skins draw (js/skin-data.js), as of the same effective
+ *  date as every other activity visual, so "Pause activity effects" freezes
+ *  these too. */
+export function skinData() {
+  const input = activityInput();
+  const todayISO = effectiveToday(input);
+  const trained = new Set(trainingDays(input));
+  const prs = new Set(progressionWorking(state.allSets).filter((s) => s.isPR).map((s) => s.dateISO));
+  return {
+    monolith: monolithFaces({ trained, prs, frosted: frostedDates(input), todayISO })
+  };
 }
 
 /** Calendar days that show frost — always a Set, empty unless genuinely earned. */

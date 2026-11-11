@@ -254,6 +254,46 @@
   --frost-sheen: rgba(190, 222, 236, .2);
 }
 
+[data-theme="monolith"] {
+  --bg: #06080a;
+  --surface: #0b0e11;
+  --surface-2: #171a1d;
+  --text: #eef2f3;
+  --muted: #b3bec6;
+  --border: #2a3036;
+  --accent: #7fd6c8;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #172223;
+  --heat-1: #375a57;
+  --heat-2: #58928a;
+  --heat-3: #7fd6c8;
+  --on-accent: #04201c;
+  --danger: #ff8f9c;
+  --on-danger: #2b0209;
+  --ok: #86e3b0;
+  --warn: #f2c768;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .7), 0 10px 30px rgba(0, 0, 0, .55);
+
+  --glass: 11 14 17;
+  --glass-2: 23 26 29;
+  --glass-alpha: .92;
+  /* The backdrop range; every colour the Monolith draws sits inside it. */
+  --backdrop-base: #06080a;
+  --backdrop-ink: #dff3ec;
+  --backdrop-sky: #0f151a;
+  --backdrop-stone: #232a30;
+  --backdrop-bar: #1d3a37;     /* a day not trained: present, unlit */
+  --backdrop-bar-lit: #3fa596; /* a training day */
+  --backdrop-bar-pr: #c9f1e6;  /* a PR day's bright cap */
+  --backdrop-frost: #4c6f86;   /* a frosted day: cooled, never gone */
+  --backdrop-ring: #2f7d74;    /* the month rings on the top face */
+
+  --frost-edge: #86b4c4;
+  --frost-sheen: rgba(190, 222, 236, .2);
+}
+
+
+
 *, *::before, *::after { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }

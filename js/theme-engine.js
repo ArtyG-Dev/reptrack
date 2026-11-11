@@ -148,7 +148,10 @@ export const LIGHTNING_TRACKS = Object.freeze({
   kemet: ['pyramid', 'halo'],
   fractal: ['boundary'],
   forge: [],
-  terminal: []
+  terminal: [],
+  monolith: [],            // the three Stage 5 skins have no lightning at all
+  constellation: [],
+  orrery: []
 });
 
 function meanDelay(level) {
@@ -216,8 +219,35 @@ const DEG = Math.PI / 180;
 export const ORBIT_STYLE = Object.freeze({
   kemet: Object.freeze({ limits: null, settleSeconds: ORBIT.settleSeconds, stillRelease: 'stay' }),
   forge: Object.freeze({ limits: null, settleSeconds: ORBIT.settleSeconds, stillRelease: 'stay' }),
-  terminal: Object.freeze({ limits: Object.freeze({ yaw: 40 * DEG, pitch: 25 * DEG }), settleSeconds: 0.3, stillRelease: 'home' })
+  terminal: Object.freeze({ limits: Object.freeze({ yaw: 40 * DEG, pitch: 25 * DEG }), settleSeconds: 0.3, stillRelease: 'home' }),
+  // Monolith: turn freely, tilt at most ±30°; on release it snaps to the nearest
+  // face (MONOLITH_SNAP) instead of easing back.
+  monolith: Object.freeze({ limits: Object.freeze({ yaw: null, pitch: 30 * DEG }), settleSeconds: ORBIT.settleSeconds, stillRelease: 'stay', snap: true }),
+  constellation: Object.freeze({ limits: null, settleSeconds: ORBIT.settleSeconds, stillRelease: 'stay' }),
+  orrery: Object.freeze({ limits: null, settleSeconds: ORBIT.settleSeconds, stillRelease: 'stay' })
 });
+
+/* ---------- Monolith: snapping to a face ---------- */
+
+export const MONOLITH_SNAP = Object.freeze({ step: Math.PI / 2, seconds: 0.4 });
+
+/** The nearest face heading (a multiple of 90°) to `heading`. */
+export function snapTarget(heading) {
+  return Math.round(heading / MONOLITH_SNAP.step) * MONOLITH_SNAP.step;
+}
+
+/** A snap in progress: from → to over MONOLITH_SNAP.seconds, eased. */
+export function createSnap(from) {
+  return { from, to: snapTarget(from), elapsed: 0 };
+}
+
+/** Advance a snap; returns the heading now and whether it has arrived. */
+export function stepSnap(snap, dt) {
+  snap.elapsed = Math.min(snap.elapsed + Math.max(dt, 0), MONOLITH_SNAP.seconds);
+  const t = snap.elapsed / MONOLITH_SNAP.seconds;
+  const eased = t * t * (3 - 2 * t);
+  return { heading: snap.from + (snap.to - snap.from) * eased, done: t >= 1 };
+}
 
 export function createOrbit() {
   return { yaw: 0, pitch: 0, dragging: false };

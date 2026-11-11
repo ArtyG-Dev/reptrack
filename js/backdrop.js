@@ -36,7 +36,7 @@ import {
   createFlashLimiter, intensity, approach, rotationSpeed,
   createOrbit, orbitGrab, orbitDrag, orbitRelease, orbitSettle, orbitHome, ORBIT_STYLE,
   createPlateRack, setRackTarget, snapRack, stepRack, rackPlates, rackSettled, platesForLevel,
-  TINT, normaliseTint, tintDrag
+  TINT, normaliseTint, tintDrag, createSnap, stepSnap, snapTarget
 } from './theme-engine.js';
 import { createGLBackdrop } from './backdrop-gl.js';
 
@@ -51,8 +51,8 @@ const MAX_GL_PIXELS = 2_400_000;     // a desktop-monitor guard; no phone reache
  * Mandelbrot, a ten-tier pyramid) rather than a soft wash — detail you can
  * resolve is the entire point of them, and it does not survive being drawn at
  * an eighth scale and blown back up. */
-const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.34, kemet: 0.4 };
-const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet']);
+const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.34, kemet: 0.4, monolith: 0.5 };
+const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet', 'monolith']);
 
 /** Which --backdrop-* tokens each skin's renderer actually reads. Exported so
  *  tests/contrast.test.js can assert every skin *declares* the tokens it draws
@@ -62,7 +62,8 @@ export const SKIN_TOKENS = Object.freeze({
   terminal: ['base', 'ink', 'grid', 'stream', 'stream-2'],
   fractal: ['base', 'ink', 'bloom-a', 'bloom-b'],
   forge: ['base', 'ink', 'glow', 'iron', 'ember', 'spark', 'heat-a', 'heat-b', 'heat-c', 'plate-red', 'plate-blue', 'plate-green'],
-  kemet: ['base', 'ink', 'star', 'halo', 'halo-hot', 'sky', 'stone', 'gold', 'gold-hot', 'glyph', 'arc']
+  kemet: ['base', 'ink', 'star', 'halo', 'halo-hot', 'sky', 'stone', 'gold', 'gold-hot', 'glyph', 'arc'],
+  monolith: ['base', 'ink', 'sky', 'stone', 'bar', 'bar-lit', 'bar-pr', 'frost', 'ring']
 });
 
 // Lightning — a flicker-hazard budget, not a suggestion. The floor applies at
@@ -167,6 +168,12 @@ let platesSeen = null;
 let platesSettledReport = null;      // callback(level) once the rack settles on a new level
 let lastReportedPlates = null;
 let spin = 0;                        // radians; integrated from rotationSpeed(), or the user's drag
+let snap = null;                     // Monolith: a face snap in progress after a drag (theme-engine createSnap)
+/* What the Stage 5 scenes draw, from js/skin-data.js via app.js. Empty until
+ * app.js pushes it, so every scene must draw its base state from nothing. */
+let skinData = {
+  monolith: { states: new Array(28).fill(0), frost: new Array(28).fill(0) }
+};
 // What is on screen, eased toward `activity` so nothing snaps (theme-engine approach()).
 let shown = { level: 0, month: 0, glow: 0.5, heat: 0, k: 0 };
 let snapOnNextActivity = true;
@@ -266,7 +273,12 @@ function readPalette() {
     arc: read('--backdrop-arc', '#7a5cc4'),
     plateRed: read('--backdrop-plate-red', '#a8392c'),
     plateBlue: read('--backdrop-plate-blue', '#3a5fae'),
-    plateGreen: read('--backdrop-plate-green', '#3f8a4f')
+    plateGreen: read('--backdrop-plate-green', '#3f8a4f'),
+    bar: read('--backdrop-bar', '#1d3a37'),
+    barLit: read('--backdrop-bar-lit', '#3fa596'),
+    barPr: read('--backdrop-bar-pr', '#c9f1e6'),
+    frost: read('--backdrop-frost', '#4c6f86'),
+    ring: read('--backdrop-ring', '#2f7d74')
   };
 }
 
@@ -1107,7 +1119,90 @@ function snapTiers() {
 
 /* ---------- loop ---------- */
 
-const RENDERERS = { terminal: drawTerminal, fractal: drawFractal, forge: drawForge, kemet: drawKemet };
+/* ---------- Monolith (2D fallback) ----------
+ * The same cube as the WebGL scene, projected by hand: four side faces for the
+ * last four weeks (this week on the front at heading 0), seven bars each,
+ * Monday → Sunday, and the month's rings on top. Token colours only, plain
+ * source-over: an unlit bar is `bar`, a training day `bar-lit`, a PR day gets a
+ * `bar-pr` cap, a frosted day is `frost` — cooled, never removed. */
+const MONO_FACES = [
+  // corners: bottom-left, bottom-right, top-right, top-left, seen from outside
+  { n: [0, 0, 1], c: [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]] },
+  { n: [1, 0, 0], c: [[1, -1, 1], [1, -1, -1], [1, 1, -1], [1, 1, 1]] },
+  { n: [0, 0, -1], c: [[1, -1, -1], [-1, -1, -1], [-1, 1, -1], [1, 1, -1]] },
+  { n: [-1, 0, 0], c: [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]] }
+];
+export const MONOLITH_RINGS = 5;
+
+function drawMonolith() {
+  const { w, h } = dims;
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, rgba(palette.sky, 1));
+  sky.addColorStop(1, rgba(palette.base, 1));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+
+  const band = featureBand();
+  const size = Math.min(band.h * 0.36, w * (fullView ? 0.3 : 0.2));
+  const cx = w / 2;
+  const cy = band.y + band.h * 0.52;
+  const heading = spin + orbit.yaw;
+  const pitch = 0.38 + orbit.pitch;
+  const ch = Math.cos(heading); const sh = Math.sin(heading);
+  const cp = Math.cos(pitch); const sp = Math.sin(pitch);
+  const rot = ([x, y, z]) => {
+    const x1 = x * ch + z * sh; const z1 = -x * sh + z * ch;
+    return [x1, y * cp - z1 * sp, y * sp + z1 * cp];
+  };
+  const P = (v) => { const [x, y] = rot(v); return [cx + x * size, cy - y * size]; };
+  const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const quad = (pts, colour, alpha) => {
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.closePath();
+    ctx.fillStyle = rgba(colour, alpha);
+    ctx.fill();
+  };
+  const k = shown.k;
+  const { states, frost } = skinData.monolith;
+
+  const visible = MONO_FACES.map((f, i) => ({ f, i, z: rot(f.n)[2] })).filter((x) => x.z > 0.02).sort((a, b) => a.z - b.z);
+  for (const { f, i, z } of visible) {
+    const [bl, br, tr, tl] = f.c;
+    quad([bl, br, tr, tl].map(P), palette.stone, 0.75 + 0.25 * z);
+    for (let d = 0; d < 7; d += 1) {
+      const s = states[i * 7 + d];
+      if (s < 0) continue;                                   // a day still to come
+      const u0 = (d + 0.22) / 7; const u1 = (d + 0.78) / 7;
+      const at = (u, v) => lerp3(lerp3(bl, br, u), lerp3(tl, tr, u), v);
+      const v0 = 0.1; const v1 = 0.88;
+      const colour = s > 0 ? palette.barLit : (frost[i * 7 + d] ? palette.frost : palette.bar);
+      quad([at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)].map(P), colour, s > 0 ? 0.6 + 0.4 * k : 0.85);
+      if (s > 1) quad([at(u0, v1 - 0.08), at(u1, v1 - 0.08), at(u1, v1), at(u0, v1)].map(P), palette.barPr, 1);
+    }
+  }
+
+  // Top face and the month's rings: ring i lights once the month reaches it.
+  if (rot([0, 1, 0])[2] > 0.02) {
+    quad([[-1, 1, 1], [1, 1, 1], [1, 1, -1], [-1, 1, -1]].map(P), palette.stone, 0.95);
+    const month = shown.month * MONOLITH_RINGS;
+    for (let r = 0; r < MONOLITH_RINGS; r += 1) {
+      const lit = Math.min(Math.max(month - r, 0), 1);
+      const radius = 0.18 * (r + 1);
+      ctx.beginPath();
+      for (let a = 0; a <= 32; a += 1) {
+        const ang = (a / 32) * Math.PI * 2;
+        const [x, y] = P([Math.cos(ang) * radius, 1, Math.sin(ang) * radius]);
+        if (a) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.strokeStyle = lit > 0 ? rgba(palette.ring, 0.35 + 0.65 * lit) : rgba(palette.bar, 0.6);
+      ctx.lineWidth = Math.max(1, size * 0.035);
+      ctx.stroke();
+    }
+  }
+}
+
+const RENDERERS = { terminal: drawTerminal, fractal: drawFractal, forge: drawForge, kemet: drawKemet, monolith: drawMonolith };
 
 const rand = Math.random;
 
@@ -1129,6 +1224,7 @@ function draw() {
       k: shown.k,
       spin,
       orbit: { yaw: orbit.yaw, pitch: orbit.pitch },
+      data: skinData,
       tint,
       plates: rackPlates(rack),
       band: glBand(),
@@ -1168,7 +1264,12 @@ function settleShown(dt) {
   const t = targets();
   for (const key of Object.keys(t)) shown[key] = dt === null ? t[key] : approach(shown[key], t[key], dt);
   shown.k = intensity({ streakLevel: shown.level * STREAK_LEVELS, monthPercent: shown.month });
-  if (dt !== null && !orbit.dragging) spin = (spin + rotationSpeed(shown.k) * dt) % (Math.PI * 2);
+  if (snap && dt !== null) {
+    // Monolith: turning to the nearest face after a drag; auto-rotation waits.
+    const step = stepSnap(snap, dt);
+    spin = step.heading;
+    if (step.done) snap = null;
+  } else if (dt !== null && !orbit.dragging) spin = (spin + rotationSpeed(shown.k) * dt) % (Math.PI * 2);
   if (dt !== null) { orbitSettle(orbit, dt, orbitStyle().settleSeconds); stepRack(rack, dt); }
   reportPlates();
 }
@@ -1284,6 +1385,7 @@ export function setSkin(name) {
   clock = 0;
   tierGlow = new Float64Array(STREAK_LEVELS);
   mandelbrot = null;
+  snap = null;
   boltTrack = makeBoltTrack();
   haloTrack = makeBoltTrack();
   lastFlashAt = -Infinity;
@@ -1340,6 +1442,13 @@ export function setPlatesMemory(level, onSettled) {
   platesSettledReport = onSettled;
 }
 
+/** app.js: what the Stage 5 scenes draw (js/skin-data.js). Only the keys
+ *  given are replaced. A held (static) frame is redrawn to stay current. */
+export function setSkinData(next = {}) {
+  skinData = { ...skinData, ...next };
+  if (isStatic()) sync();
+}
+
 /** Speech recognition is starting/finishing — the backdrop gets out of the way. */
 export function setVoiceActive(active) {
   voiceActive = Boolean(active);
@@ -1389,6 +1498,7 @@ function orbitStyle() {
 }
 
 export function grab() {
+  snap = null;                             // a new drag takes over from a snap in progress
   orbitGrab(orbit);
 }
 
@@ -1399,6 +1509,13 @@ export function dragBy(dxPx, dyPx = 0) {
 
 export function release() {
   orbitRelease(orbit);
+  if (orbitStyle().snap) {
+    // Fold the drag into the heading, then turn to the nearest face: over
+    // ~400 ms normally, at once under reduced motion. Tilt eases back as usual.
+    spin += orbit.yaw;
+    orbit.yaw = 0;
+    if (isStatic()) { spin = snapTarget(spin); snap = null; } else snap = createSnap(spin);
+  }
   // Reduced motion: no ease. Kemet/Forge stay where they were let go;
   // Terminal snaps straight back to its straight-on view.
   if (isStatic() && orbitStyle().stillRelease === 'home') orbitHome(orbit);
@@ -1439,6 +1556,7 @@ export function getDiagnostics() {
     tint: { ...tint },
     plates: { target: [...rack.target], seated: [...rack.seated], moving: rack.moving ? { ...rack.moving } : null, settled: rackSettled(rack) },
     spin,
+    snapping: Boolean(snap),
     rotationSpeed: rotationSpeed(shown.k),
     intensity: shown.k,
     flashLog: [...flashLog],         // ms of scene clock, the same clock as `clock`

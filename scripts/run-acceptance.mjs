@@ -25,7 +25,7 @@ function run(label, args) {
 const tests = run('Test suite', ['--test', 'tests/browser.test.js', 'tests/chart.test.js', 'tests/consistency.test.js',
   'tests/contrast.test.js', 'tests/db.test.js', 'tests/parser.test.js', 'tests/progression.test.js',
   'tests/pwa-static.test.js', 'tests/state.test.js', 'tests/summary.test.js', 'tests/theme-engine.test.js',
-  'tests/visuals.test.js', 'tests/sweep.test.js', 'tests/features.test.js', 'tests/reminders.test.js', 'tests/plans.test.js', 'tests/muscles.test.js']);
+  'tests/visuals.test.js', 'tests/sweep.test.js', 'tests/features.test.js', 'tests/reminders.test.js', 'tests/plans.test.js', 'tests/muscles.test.js', 'tests/skin-data.test.js']);
 const pass = Number(tests.output.match(/^# pass (\d+)$/m)?.[1] ?? 0);
 const fail = Number(tests.output.match(/^# fail (\d+)$/m)?.[1] ?? 0);
 const skipped = Number(tests.output.match(/^# skipped (\d+)$/m)?.[1] ?? 0);
@@ -75,7 +75,7 @@ const rows = [
   ['Lighthouse — Performance', scores.performance ?? 'n/a', true],
   ['Lighthouse — Best practices', scores['best-practices'] ?? 'n/a', true],
   ['Lighthouse — SEO', scores.seo ?? 'n/a', true],
-  ...(skins ? ['terminal', 'fractal', 'forge', 'kemet'].map((skin) => [
+  ...(skins ? ['terminal', 'fractal', 'forge', 'kemet', 'monolith'].map((skin) => [
     `Skin CPU — ${THEME_LABELS[skin]} (${skins.runs[skin].animated.renderer}; see note below)`,
     `app JS +${skins.runs[skin].overBaselinePercent}% vs Light · main thread ${skins.runs[skin].animated.cpuPercent}% incl. waiting on SwiftShader · GPU proc ${skins.runs[skin].animated.gpuProcessPercent ?? 'n/a'}% (CPU-emulated) · ${skins.runs[skin].animated.fps} fps · 2D fallback ${skins.runs[skin].fallback2d.cpuPercent}%`,
     skins.runs[skin].withinBudget
@@ -119,7 +119,7 @@ writeFileSync(join(ROOT, '.reports/acceptance.json'), `${JSON.stringify({
   skins
 }, null, 2)}\n`);
 
-const skinsWithinBudget = !skins || ['terminal', 'fractal', 'forge', 'kemet'].every((s) => skins.runs[s].withinBudget);
+const skinsWithinBudget = !skins || ['terminal', 'fractal', 'forge', 'kemet', 'monolith'].every((s) => skins.runs[s].withinBudget);
 const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90
   && everyThemeAccessible && skinsWithinBudget;
 console.log(`\n${green ? '✅ All headless acceptance criteria pass.' : '❌ Acceptance criteria not met.'}`);

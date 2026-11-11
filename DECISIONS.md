@@ -1561,3 +1561,22 @@ SwiftShader to seven. The flash cap held on every skin, but the check that the l
 skins are really busy at maximum failed for Fractal: its scene clock ran only 3.4 s in 10 s
 of wall time, too little to count strikes. The test was calibrated at four pages, so it now
 runs in batches of at most four. What it asserts is unchanged.
+
+### 103. Stage 5 — Monolith
+
+- **Data, not decoration.** The four faces are the last four calendar weeks, Monday-based
+  like the weekly summary, this week on the front. A day still to come has no bar; a past
+  rest day has an unlit one, so the weeks read as a pattern, not a score. A PR day's cap is
+  the brightest token the skin has (`--backdrop-bar-pr`).
+- **The snap folds the drag into the heading first**, then eases the heading to the
+  nearest multiple of 90° with a smoothstep over 0.4 s, which is short enough to read as
+  settling, not as a second animation. Auto-rotation waits for it, then resumes from the
+  face. A new grab cancels a snap in progress. Under reduced motion it is instant and the
+  frame stays held. Tilt is clamped to ±30° so the bottom face (no data) never shows.
+- **Shared plumbing added here**: `js/skin-data.js` (pure), `state.skinData()`,
+  `backdrop.setSkinData()`/`getSkinData()`, and `f.data`/`f.frost` for the GL scenes. The
+  backdrop now imports one pure module; it still reads nothing back out of the app.
+- A test that hard-coded Kemet as the last theme in the picker (to check the last pick
+  survives a reload) now uses the list's last entry. That is a value this stage changes on
+  purpose; what it checks is unchanged.
+

@@ -294,3 +294,32 @@ test('fractal colours: one screen width is a full turn of hue and wraps; warmth 
   assert.deepEqual(normaliseTint({ hue: 'red', warmth: 7 }), { hue: 0, warmth: 1 });
   assert.deepEqual(tintDrag({ hue: 1, warmth: 0.2 }, 0, 0), { hue: 1, warmth: 0.2 }, 'no movement, no change — a tap cannot jump the colours');
 });
+
+/* ---------- Stage 5 ---------- */
+
+test('monolith: release snaps to the nearest face in about 400 ms, and tilt is clamped to ±30°', async () => {
+  const { MONOLITH_SNAP, snapTarget, createSnap, stepSnap, ORBIT_STYLE, createOrbit, orbitDrag, ORBIT } = await import('../js/theme-engine.js');
+  assert.equal(snapTarget(0.7), Math.PI / 2 * 0);
+  assert.equal(snapTarget(0.9), Math.PI / 2);
+  assert.equal(snapTarget(-2.5), -Math.PI);
+  const snap = createSnap(1.2);
+  let out = stepSnap(snap, 0.2);
+  assert.equal(out.done, false);
+  assert.ok(out.heading > 1.2 && out.heading < Math.PI / 2);
+  out = stepSnap(snap, 0.25);
+  assert.equal(out.done, true);
+  assert.equal(out.heading, Math.PI / 2);
+  assert.equal(MONOLITH_SNAP.seconds, 0.4);
+  const orbit = createOrbit();
+  orbitDrag(orbit, 5000, 5000, ORBIT_STYLE.monolith.limits);
+  assert.ok(Math.abs(orbit.pitch - Math.PI / 6) < 1e-9, 'tilt stops at 30°');
+  assert.ok(orbit.yaw > Math.PI, 'turning is free');
+  assert.ok(ORBIT.radPerPx > 0);
+});
+
+test('the three new skins have no lightning tracks, and drag freely like Kemet', async () => {
+  const { LIGHTNING_TRACKS, ORBIT_STYLE } = await import('../js/theme-engine.js');
+  for (const skin of ['monolith', 'constellation', 'orrery']) assert.deepEqual(LIGHTNING_TRACKS[skin], []);
+  assert.equal(ORBIT_STYLE.constellation.limits, null);
+  assert.equal(ORBIT_STYLE.orrery.limits, null);
+});

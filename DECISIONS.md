@@ -1367,3 +1367,19 @@ captured. Cause: the test read `getDiagnostics()` straight after boot and assert
 `frames > 0`, and under heavy SwiftShader load the first frame of an animated skin can land
 a moment after the shell is interactive. Fix: wait for the first frame before asserting.
 Every assertion is unchanged; only the read is no longer racing the renderer.
+
+### 91. Stage 1 live verification, and a GitHub-side deploy failure
+
+`scripts/verify-live.mjs` (new; run after every stage) against the deployed site: service
+worker scoped to `/reptrack/` with the single cache `reptrack-shell-v8`; the app reloads with
+the network cut off after one visit; the real pre-work backup
+(`tests/fixtures/backup-live-schema1.json`) imports complete (1 session, 5 sets, 1 run, 29
+exercises); a logged set is tappable to edit and quick adjust works; the new Settings
+controls are present; no console errors. All pass.
+
+The first Pages run for the Stage 1 push failed **after** the tests passed. The artifact
+uploaded, then `deploy-pages` reported "No artifacts named github-pages were found" and named
+GitHub's own API as the likely cause. Re-running the failed job then hit the opposite
+problem: the first attempt's artifact had appeared late, leaving two. A fresh run of the
+workflow (`workflow_dispatch` on `main`) deployed cleanly. No code changed; nothing in the
+repo caused it.

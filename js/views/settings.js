@@ -119,9 +119,16 @@ export function render(container) {
     onchange: async (e) => { await state.updateSettings({ theme: e.target.value }); applyTheme(e.target.value); render(containerRef); }
   }, ...THEMES.map(([value, label]) => el('option', { value, selected: currentTheme === value }, label)));
 
+  const figureSelect = el('select', {
+    id: 'set-body-figure',
+    onchange: async (e) => { await state.updateSettings({ bodyFigure: e.target.value }); toast('Body map figure changed.'); }
+  }, ...[['neutral', 'Neutral'], ['male', 'Male'], ['female', 'Female']]
+    .map(([value, label]) => el('option', { value, selected: (s.settings.bodyFigure || 'neutral') === value }, label)));
+
   containerRef.append(el('div', { class: 'card stack' },
     el('h3', { text: 'Preferences' }),
     el('div', { class: 'field' }, el('label', { for: 'set-unit', text: 'Default unit' }), unitSelect),
+    el('div', { class: 'field' }, el('label', { for: 'set-body-figure', text: 'Body map figure' }), figureSelect),
     el('div', { class: 'field' }, el('label', { for: 'set-rest', text: 'Rest timer (seconds)' }), restInput),
     el('div', { class: 'field row' },
       el('input', {

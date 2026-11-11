@@ -169,6 +169,15 @@ Also worth a quick look while you're in there:
 - **Progress → Weekly sets by muscle:** after a session, the bars read sensibly on a
   phone-width screen and the labels don't clip.
 
+## Check 7: the body map (about 2 minutes)
+
+- **Progress → This week's muscles:** after a session, the trained muscles are coloured.
+  Tap a thigh, a pec and a hamstring with a thumb: each opens its sheet first time.
+- **Flip** shows the back. **Settings → Body map figure** changes the outline.
+- In the sheet, **Log this** opens the normal set sheet; Save logs it.
+- After 6+ chest sets today, tapping a pec shows "Trained recently — rest may serve it
+  better", and Log this still works.
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.

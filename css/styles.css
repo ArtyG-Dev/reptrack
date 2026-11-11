@@ -34,6 +34,11 @@
   --muted: #4a5361;
   --border: #d3d9e2;
   --accent: #0b5fbe;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #e7eff8;
+  --heat-1: #a2c2e6;
+  --heat-2: #5e95d4;
+  --heat-3: #0b5fbe;
   --on-accent: #ffffff;
   --danger: #a3242b;
   --on-danger: #ffffff;
@@ -58,6 +63,11 @@
   --muted: #9fd9d0;
   --border: #263341;
   --accent: #00e5ff;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #0b252d;
+  --heat-1: #07616f;
+  --heat-2: #049db0;
+  --heat-3: #00e5ff;
   --on-accent: #001318;
   --danger: #ff5c7a;
   --on-danger: #2a0009;
@@ -88,6 +98,11 @@
   --muted: #9db4c2;
   --border: #223240;
   --accent: #63d0e6;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #112028;
+  --heat-1: #2b5763;
+  --heat-2: #448e9e;
+  --heat-3: #63d0e6;
   --on-accent: #04141a;
   --danger: #ff8a9c;
   --on-danger: #2a0008;
@@ -116,6 +131,11 @@
   --muted: #b3a9d0;
   --border: #2b2440;
   --accent: #b39cf5;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #1e192d;
+  --heat-1: #4c416b;
+  --heat-2: #7b6aaa;
+  --heat-3: #b39cf5;
   --on-accent: #100726;
   --danger: #ff8fa8;
   --on-danger: #2c0210;
@@ -143,6 +163,11 @@
   --muted: #c4a894;
   --border: #3a2a20;
   --accent: #ff9d4d;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #291a0e;
+  --heat-1: #6b4222;
+  --heat-2: #ae6b35;
+  --heat-3: #ff9d4d;
   --on-accent: #2a1200;
   --danger: #ff8a86;
   --on-danger: #2c0604;
@@ -195,6 +220,11 @@
   --muted: #bdb4c9;
   --border: #2c2748;
   --accent: #f2c85a;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #221d20;
+  --heat-1: #635232;
+  --heat-2: #a38744;
+  --heat-3: #f2c85a;
   --on-accent: #241a02;
   --danger: #ff8fa0;
   --on-danger: #2b0209;
@@ -522,6 +552,35 @@ textarea { min-height: 84px; resize: vertical; }
 .chart .point { fill: var(--accent); }
 .chart .point-pr { fill: var(--ok); stroke: var(--surface); stroke-width: 2; }
 .chart .tick-label { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+/* Body map (Stage 4). Fills are the four heat tokens only; outline weight is
+   set per muscle from its definition level. No animation: glow is a static
+   opacity recomputed on render. */
+.body-views { display: flex; justify-content: center; gap: 12px; }
+.body-view { flex: 1 1 0; max-width: 220px; }
+.body-map { width: 100%; height: auto; display: block; }
+.body-map .body-outline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.body-map .body-head { fill: var(--heat-0); stroke: var(--muted); stroke-width: 1; }
+.body-map .muscle { stroke: var(--muted); stroke-linejoin: round; cursor: pointer; }
+.body-map .muscle[aria-hidden="true"] { cursor: default; }
+.body-map .muscle:focus { outline: none; }
+.body-map .muscle:focus-visible { stroke: var(--text); stroke-width: 3; }
+.body-map .muscle-detail { fill: none; stroke: var(--muted); stroke-width: 1; pointer-events: none; }
+.muscle.heat-0 { fill: var(--heat-0); }
+.muscle.heat-1 { fill: var(--heat-1); }
+.muscle.heat-2 { fill: var(--heat-2); }
+.muscle.heat-3 { fill: var(--heat-3); }
+.body-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .85rem; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-swatch { width: 14px; height: 14px; }
+.legend-swatch .muscle { stroke: var(--muted); stroke-width: 1; }
+.body-flip { display: none; }
+@media (max-width: 520px) {
+  .body-flip { display: inline-flex; }
+  .body-views[data-show="front"] .body-view[data-side="back"],
+  .body-views[data-show="back"] .body-view[data-side="front"] { display: none; }
+  .body-view { max-width: 260px; }
+}
+
 .chart .bar { fill: var(--accent); }
 .chart .bar-prev { fill: var(--muted); opacity: .45; }
 .chart .bar-label { fill: var(--text); font-size: 13px; }

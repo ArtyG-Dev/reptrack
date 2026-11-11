@@ -332,6 +332,22 @@ async function manualAdd() {
   await commit(result);
 }
 
+/** "Log this" from the body map: the normal confirm sheet for that exercise,
+ *  prefilled from its last set. A session starts only once something is saved;
+ *  in a plan session an unplanned exercise simply shows under Extra. */
+export async function logExercise(exerciseId) {
+  const last = state.setsForExerciseSync(exerciseId).filter((x) => !x.isWarmup).at(-1);
+  const result = await editSetsSheet({
+    title: 'Confirm sets',
+    exerciseId,
+    sets: last ? [{ weight: last.weight, unit: last.unit, reps: last.reps, holdSeconds: last.holdSeconds ?? null, side: last.side ?? null }] : []
+  });
+  if (!result) return false;
+  if (!state.getState().session) await state.startSession();
+  await commit(result);
+  return true;
+}
+
 /* ---------- runs / cardio ---------- */
 
 /** A run is a few fields, not a form: distance, unit, time. Pace is derived. */

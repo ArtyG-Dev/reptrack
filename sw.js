@@ -3,7 +3,7 @@
  * in the background. The app never talks to a network at runtime, so a cache
  * miss only ever happens for a file we forgot to list in PRECACHE.
  */
-const CACHE = 'reptrack-shell-v11';
+const CACHE = 'reptrack-shell-v12';
 
 const PRECACHE = [
   './',
@@ -19,6 +19,8 @@ const PRECACHE = [
   './js/reminders.js',
   './js/plans.js',
   './js/muscles.js',
+  './js/bodymap.js',
+  './js/views/muscle-sheet.js',
   './js/wake.js',
   './js/consistency.js',
   './js/db.js',

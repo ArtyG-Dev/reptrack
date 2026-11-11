@@ -68,3 +68,66 @@ export function muscleWeeklySeries(sets, exercisesById, muscle, todayISO, weeks 
   }
   return points;
 }
+
+/* ---------- Stage 4: the body map ---------- */
+
+/** Heat level from this week's weighted sets: 0 none, 1 under 4, 2 under 10, 3 ten or more.
+ *  The one place these thresholds live. */
+export const HEAT_THRESHOLDS = [4, 10];
+export function heatLevel(weightedSets) {
+  const n = Number(weightedSets) || 0;
+  if (n <= 0) return 0;
+  if (n < HEAT_THRESHOLDS[0]) return 1;
+  if (n < HEAT_THRESHOLDS[1]) return 2;
+  return 3;
+}
+
+/** Weighted sets in the last 48 hours at or above this suggest resting the muscle. */
+export const RECOVERY_SETS = 6;
+
+/** Sets carry a date, not a time, so "the last 48 hours" is today and yesterday. */
+export function recentlyTrained(muscle, sets, exercisesById, todayISO) {
+  const counts = muscleSets(sets, exercisesById, shiftDays(todayISO, -1), todayISO);
+  return (counts[muscle] || 0) >= RECOVERY_SETS;
+}
+
+/**
+ * The user's own exercises that hit `muscle`: primary first, then the fewest
+ * working sets this week, then the least recently trained (never-trained first).
+ * @returns {Array<{exercise, role: 'primary'|'secondary', setsThisWeek, lastISO}>}
+ */
+export function suggestionsFor(muscle, exercises = [], sets = [], todayISO) {
+  const { startISO, endISO } = weekRange(todayISO);
+  const working = workingSets(sets);
+  const out = [];
+  for (const exercise of exercises) {
+    const role = (exercise.primaryMuscles || []).includes(muscle) ? 'primary'
+      : (exercise.secondaryMuscles || []).includes(muscle) ? 'secondary' : null;
+    if (!role) continue;
+    const mine = working.filter((s) => s.exerciseId === exercise.id);
+    out.push({
+      exercise,
+      role,
+      setsThisWeek: mine.filter((s) => s.dateISO >= startISO && s.dateISO <= endISO).length,
+      lastISO: mine.reduce((latest, s) => (s.dateISO > latest ? s.dateISO : latest), '')
+    });
+  }
+  return out.sort((a, b) => (a.role === b.role ? 0 : a.role === 'primary' ? -1 : 1)
+    || a.setsThisWeek - b.setsThisWeek
+    || a.lastISO.localeCompare(b.lastISO)
+    || a.exercise.name.localeCompare(b.exercise.name));
+}
+
+/**
+ * Definition 0–5 for a muscle, from everything ever done for it: lifetime
+ * weighted sets plus five per PR on an exercise where it is primary. Both only
+ * ever grow with time, so a lapse — however long — never lowers it. It is about
+ * work done, never about how a body looks.
+ */
+export const DEFINITION_STEPS = [20, 60, 150, 300, 500];
+export function definitionLevel(muscle, sets = [], exercisesById = new Map()) {
+  const lifetime = muscleSets(sets, exercisesById)[muscle] || 0;
+  const prs = workingSets(sets).filter((s) => s.isPR && exercisesById.get(s.exerciseId)?.primaryMuscles?.includes(muscle)).length;
+  const score = lifetime + 5 * prs;
+  return DEFINITION_STEPS.filter((step) => score >= step).length;
+}

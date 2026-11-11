@@ -60,7 +60,8 @@ js/
   theme-engine.js       intensity driver, flash limiter, lightning scheduling, rotation cap (pure)
   graphic-view.js       the full-screen graphic view (View button on Today)
   reminders.js          when to show the backup reminder (pure)
-  muscles.js            weekly working sets per muscle, a muscle's 12-week series, backfill guess (pure)
+  bodymap.js            the body-map SVG: pure geometry for three figures × front/back, and its renderer
+  muscles.js            heat levels, recovery guard, suggestion order, definition; weekly working sets per muscle, a muscle's 12-week series, backfill guess (pure)
   plans.js              plan checklist progress, prefill, plan-from-session, update-to-what-I-did (pure)
   wake.js               the session screen wake lock
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
@@ -72,6 +73,7 @@ js/
     progress.js         per-exercise charts (mode-aware), personal bests, nudge
     exercises.js        exercise dictionary CRUD, grouped into collapsible categories
     settings.js         preferences incl. theme, export/import, wipe, storage estimate
+    muscle-sheet.js     a muscle's (or region's) exercise suggestions, "Log this", "Add an exercise for …"
 
 scripts/                serve, icons, footprint, Lighthouse (all themes), skin CPU, acceptance loop
 tests/                  node:test — unit, IndexedDB (fake-indexeddb) and Playwright browser
@@ -117,6 +119,20 @@ Details that look redundant and are not:
   (`MUSCLE_GROUP_MUSCLES`), never overwriting a non-empty list. After that pass, only
   records whose fields are *absent* (old-shaped exercises arriving from an import, in either
   mode) are filled, so an empty list chosen in the editor stays empty.
+- **The body map** (Progress → "This week's muscles"). One `<path>` per muscle per view,
+  each muscle a `role="button"` on exactly one view (`VIEW_OF` in `bodymap.js`). Fill is
+  this week's weighted sets through `heatLevel()` (`HEAT_THRESHOLDS` — the one place the
+  0 / <4 / 4–<10 / ≥10 cut-offs live) into `--heat-0…--heat-3`, declared in every theme
+  block and checked by `contrast.test.js`. Outline weight and inner lines show
+  `definitionLevel()` (0–5, lifetime weighted sets + 5 per PR on exercises where the muscle
+  is primary): it only depends on work ever done, so a lapse can't lower it. **It never
+  shows leanness, body fat or size, and no copy talks about size.** The figure's outline
+  glow is `glow × (1 − 0.35 × frostHint)`, as the Forge. **`settings.bodyFigure`**
+  (`'neutral' | 'male' | 'female'`, default `neutral`) picks the proportions. A tap opens
+  `views/muscle-sheet.js`: the user's exercises for it, primary first, then fewest working
+  sets this week, then least recently trained. `RECOVERY_SETS` (6 weighted sets "in the last
+  48 h" — today and yesterday, since sets carry dates, not times) shows a note and blocks
+  nothing.
 - **Plans** (version 3, backup `SCHEMA_VERSION` 2). A plan is a named, ordered list of
   exercises with targets; a hold-mode item uses `targetHoldSec` and leaves reps/weight
   `null`, a reps item the reverse. `Session.planId` (nullable) records which plan a session
@@ -536,7 +552,7 @@ feature module, needs to change.
 ### Adding a colour scheme
 Six exist: Light (`:root`, default), High-Contrast Neon, and the four animated skins
 (Terminal, Fractal, Forge, Kemet). Add another the same way — a new `[data-theme="..."]` block in
-`css/styles.css` overriding only the colour custom properties (never introduce a hardcoded
+`css/styles.css` overriding only the colour custom properties (including `--heat-0…3`) (never introduce a hardcoded
 colour in component CSS), an entry in `THEMES` in `views/settings.js`, and it flows through
 `applyTheme()`, `run-lighthouse.mjs` and `run-acceptance.mjs` automatically. Then run
 `tests/contrast.test.js` (which checks every pair in every `[data-theme]` block it finds)

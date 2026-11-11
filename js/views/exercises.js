@@ -20,7 +20,7 @@ function muscleChips(kind, chosen, other, sync) {
     }, MUSCLE_LABELS[m])));
 }
 
-function exerciseSheet(existing = null, { preselectMuscle = null } = {}) {
+export function exerciseSheet(existing = null, { preselectMuscle = null } = {}) {
   const titleId = 'confirm-sheet-title';
   return openSheet('confirm-sheet', (ctx) => {
     const primary = new Set(existing?.primaryMuscles || (preselectMuscle ? [preselectMuscle] : []));

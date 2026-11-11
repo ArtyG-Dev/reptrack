@@ -130,6 +130,13 @@ try {
   }));
   check('stage 3: the imported old backup’s exercises have muscles', pullUp?.primaryMuscles?.includes('lats'), JSON.stringify(pullUp?.primaryMuscles));
 
+  // Stage 4: the body map and its sheet.
+  check('stage 4: the body map has one control per muscle', await page.locator('#body-card path.muscle[role="button"]').count() === 18);
+  await page.focus('#body-card path.muscle[data-muscle="chest"][role="button"]');
+  await page.keyboard.press('Enter');
+  check('stage 4: a muscle opens its exercise suggestions', await page.waitForSelector('#muscle-sheet li', { timeout: 8000 }).then(() => true, () => false));
+  await page.click('#muscle-sheet button:has-text("Close")');
+
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await context.close();
 } finally {

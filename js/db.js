@@ -87,7 +87,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // see the backfill note in state.js. Never re-checked after that, so a
   // starter exercise a user deliberately deletes doesn't come back.
   seedBackfillDone: false,
-  muscleBackfillDone: false
+  muscleBackfillDone: false,
+  bodyFigure: 'neutral'
 });
 
 let dbPromise = null;

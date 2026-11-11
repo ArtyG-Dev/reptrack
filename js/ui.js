@@ -68,7 +68,10 @@ export function openSheet(dialogId, build, { labelledBy } = {}) {
       if (previous instanceof HTMLElement) previous.focus();
       resolve(value);
     };
-    const onClose = () => finish(null);
+    // dialog.close() queues its 'close' event, so a sheet opened in the same
+    // dialog straight after another would receive the old one's event and
+    // shut at once. A close event while the dialog is open again is that stale one.
+    const onClose = () => { if (!dialog.open) finish(null); };
 
     const ctx = { close: (value) => { dialog.close(); finish(value); } };
 

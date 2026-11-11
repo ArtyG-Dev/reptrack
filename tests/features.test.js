@@ -622,4 +622,130 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
     assert.deepEqual(ex.secondaryMuscles, ['forearms', 'lats', 'upper-back', 'calves']);
     await context.close();
   });
+
+  /* ---------- Stage 4: the body map ---------- */
+
+  const muscle = (m) => `#body-card path.muscle[data-muscle="${m}"][role="button"]`;
+  /* A paired muscle's box centre is the gap between left and right, so tap the
+   * left shape: just inside its left edge, half way down. */
+  const tapMuscle = async (page, m) => {
+    let box = null;
+    for (let i = 0; i < 50 && !box; i += 1) {
+      await page.locator(muscle(m)).waitFor();
+      box = await page.locator(muscle(m)).boundingBox();     // null if a re-render swapped it meanwhile
+    }
+    await page.locator(muscle(m)).click({ position: { x: 4, y: box.height / 2 } });
+  };
+
+  test('body map: heat follows this week’s sets, labels state the count, keyboard opens suggestions', async () => {
+    const { context, page, errors } = await fresh({ init: () => { /* narrow phone */ } });
+    await page.setViewportSize({ width: 393, height: 900 });
+    await page.click('#start-session');
+    for (let i = 0; i < 3; i += 1) await logPhrase(page, 'deadlift 140 kilos for 5');
+    for (let i = 0; i < 4; i += 1) await logPhrase(page, 'squat 100 kilos for 5');
+    await page.click('#tab-progress');
+    await page.waitForSelector('#body-card');
+    // Glutes: 3 deadlift + 4 squat primaries = 7 → level 2. Quads: 4 + 1.5 = 5.5 → 2. Chest: 0.
+    assert.match(await page.getAttribute('#body-card path.muscle[data-muscle="glutes"]', 'class'), /heat-2/);
+    assert.match(await page.getAttribute('#body-card path.muscle[data-muscle="lats"]', 'class'), /heat-1/);
+    assert.match(await page.getAttribute('#body-card path.muscle[data-muscle="chest"]', 'class'), /heat-0/);
+    assert.equal(await page.getAttribute('#body-card path.muscle[data-muscle="hamstrings"][role="button"]', 'aria-label'), 'Hamstrings: 5 sets this week');
+    assert.equal(await page.locator('#body-card path.muscle[role="button"]').count(), 18, 'each muscle is one control');
+
+    // Narrow: one side at a time, with a flip button.
+    assert.equal(await page.isVisible('.body-view[data-side="back"]'), false);
+    await page.click('#body-flip');
+    assert.equal(await page.isVisible('.body-view[data-side="back"]'), true);
+
+    await page.focus(muscle('hamstrings'));
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#muscle-sheet');
+    const names = await page.$$eval('#muscle-sheet li strong', (els) => els.map((e) => e.textContent));
+    const roles = await page.$$eval('#muscle-sheet li .badge', (els) => els.map((e) => e.textContent));
+    assert.deepEqual(roles, [...roles].sort((a, b) => (a === b ? 0 : a === 'Primary' ? -1 : 1)), 'primary first');
+    assert.ok(names.indexOf('Leg Curl') < names.indexOf('Deadlift'), 'fewest sets this week first: Leg Curl (0) before Deadlift (3)');
+    assert.equal(await page.isVisible('#recovery-note'), false, '5 weighted sets is under the guard');
+    await page.click('#muscle-sheet button:has-text("Close")');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  test('the recovery guard shows a note and still lets you log; "Log this" goes through the confirm sheet', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-session');
+    for (let i = 0; i < 6; i += 1) await logPhrase(page, 'bench press 60 kilos for 8');
+    await page.click('#tab-progress');
+    await tapMuscle(page, 'chest');
+    await page.waitForSelector('#recovery-note');
+    assert.match(await page.textContent('#recovery-note'), /Trained recently — rest may serve it better/);
+    await page.click('#muscle-sheet button[aria-label="Log Incline Bench Press"]');
+    await page.waitForSelector('#confirm-sheet button[type="submit"]');
+    await page.fill('#row-weight-0', '50');
+    await page.fill('#row-reps-0', '8');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await waitSets(page, (s) => s.length === 7);
+    await context.close();
+  });
+
+  test('a muscle none of your exercises work offers to add one, pre-selected; "Log this" with no session starts one only on save', async () => {
+    const { context, page } = await fresh();
+    await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => {
+        const tx = req.result.transaction('exercises', 'readwrite');
+        const st = tx.objectStore('exercises');
+        st.getAll().onsuccess = (e) => { for (const ex of e.target.result) st.put({ ...ex, primaryMuscles: ex.primaryMuscles.filter((m) => m !== 'hip-flexors'), secondaryMuscles: ex.secondaryMuscles.filter((m) => m !== 'hip-flexors') }); };
+        tx.oncomplete = resolve;
+      };
+    }));
+    await page.reload();
+    await page.click('#start-session');
+    await logPhrase(page, 'plank 60 seconds');
+    await page.click('#view-today button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("End session")');
+    await page.click('#tab-progress');
+    await tapMuscle(page, 'hip-flexors');
+    await page.click('#add-exercise-for-muscle');
+    await page.waitForSelector('#ex-name');
+    assert.equal(await page.getAttribute('#ex-primary-muscles button[data-muscle="hip-flexors"]', 'aria-pressed'), 'true');
+    await page.fill('#ex-name', 'Hanging Knee Raise');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await page.waitForSelector('#confirm-sheet', { state: 'hidden' });
+
+    await tapMuscle(page, 'hip-flexors');
+    await page.click('#muscle-sheet button[aria-label="Log Hanging Knee Raise"]');
+    await page.click('#confirm-sheet button:has-text("Cancel")');
+    await page.click('#tab-today');
+    assert.ok(await page.$('#start-session'), 'cancelling started no session');
+    await context.close();
+  });
+
+  test('the body figure follows the setting; definition never drops after a lapse', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-session');
+    await logPhrase(page, 'deadlift 140 kilos for 5');
+    await page.click('#tab-progress');
+    const outline = () => page.getAttribute('.body-view[data-side="front"] .body-outline', 'd');
+    const neutral = await outline();
+    await page.click('#tab-settings');
+    await page.selectOption('#set-body-figure', 'female');
+    await page.click('#tab-progress');
+    assert.notEqual(await outline(), neutral);
+    const level = () => page.getAttribute('#body-card path.muscle[data-muscle="glutes"][role="button"]', 'data-definition');
+    const before = await level();
+    // Move every set 60 days into the past: lifetime work is unchanged, so is definition.
+    await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => {
+        const tx = req.result.transaction('sets', 'readwrite');
+        const st = tx.objectStore('sets');
+        st.getAll().onsuccess = (e) => { for (const x of e.target.result) st.put({ ...x, dateISO: '2020-01-01' }); };
+        tx.oncomplete = resolve;
+      };
+    }));
+    await page.reload();
+    await page.click('#tab-progress');
+    assert.equal(await level(), before);
+    await context.close();
+  });
 });

@@ -183,6 +183,37 @@ function rgbLuminance([r, g, b]) {
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
+/* ---------- body-map heat (Stage 4) ----------
+ * Heat is a fill, not text, so the bar is WCAG 1.4.11's 3:1 for the strongest
+ * level against the card it sits on — for glass, the card composited over both
+ * backdrop extremes. Each level must also step clearly away from the one below,
+ * and further from the card, so the four levels read in order. The set counts
+ * are always in the legend, tooltips and labels too: colour is never the only cue.
+ */
+for (const [themeName, selector] of [...FLAT_THEMES, ...GLASS_THEMES]) {
+  test(`${themeName}: the four heat levels are declared, ordered, and the top one holds 3:1 on its card`, () => {
+    const raw = block(selector);
+    const palette = tokens(selector);
+    const heat = [0, 1, 2, 3].map((n) => palette[`heat-${n}`]);
+    assert.ok(heat.every(Boolean), `--heat-0…--heat-3 missing from ${themeName}`);
+    let cards = [palette.surface];
+    if (palette['backdrop-base']) {
+      const alpha = Number(raw.match(/--glass-alpha:\s*([\d.]+)\s*;/)[1]);
+      const glass = tripletOf(raw, 'glass');
+      cards = [palette.surface, compositeOver(glass, alpha, palette['backdrop-base']), compositeOver(glass, alpha, palette['backdrop-ink'])];   // + the opaque fallback
+    }
+    for (const card of cards) {
+      assert.ok(contrast(heat[3], card) >= 3, `${themeName} heat-3 on ${card}: ${contrast(heat[3], card).toFixed(2)}:1`);
+      for (let n = 1; n < 4; n += 1) {
+        assert.ok(contrast(heat[n], card) > contrast(heat[n - 1], card), `${themeName} heat-${n} must sit further from the card than heat-${n - 1}`);
+      }
+    }
+    for (let n = 1; n < 4; n += 1) {
+      assert.ok(contrast(heat[n], heat[n - 1]) >= 1.5, `${themeName} heat-${n} vs heat-${n - 1}: ${contrast(heat[n], heat[n - 1]).toFixed(2)}:1`);
+    }
+  });
+}
+
 test('forge\'s mixed colours never escape the backdrop range', () => {
   const palette = tokens('[data-theme="forge"]');
   const lo = luminance(palette['backdrop-base']);

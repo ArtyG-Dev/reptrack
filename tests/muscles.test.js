@@ -66,3 +66,80 @@ test('a muscle’s 12-week series is oldest first, one point per Monday, zeros i
   assert.equal(series.at(-1).value, 1);
   assert.equal(series.reduce((a, p) => a + p.value, 0), 1, 'a set before the window is not counted');
 });
+
+/* ---------- Stage 4 ---------- */
+
+import { heatLevel, HEAT_THRESHOLDS, recentlyTrained, RECOVERY_SETS, suggestionsFor, definitionLevel } from '../js/muscles.js';
+import { bodyGeometry, FIGURES, VIEW_OF, strokeFor } from '../js/bodymap.js';
+
+test('heat levels: 0 none, 1 under 4, 2 from 4 to under 10, 3 at 10 or more', () => {
+  assert.deepEqual(HEAT_THRESHOLDS, [4, 10]);
+  assert.deepEqual([0, 0.5, 3.5, 4, 9.5, 10, 25].map(heatLevel), [0, 1, 1, 2, 2, 3, 3]);
+});
+
+test('the recovery guard: 6+ weighted sets today and yesterday, never older', () => {
+  const six = Array.from({ length: 6 }, (_, i) => set('bench', i < 3 ? '2026-11-11' : '2026-11-10'));
+  assert.equal(RECOVERY_SETS, 6);
+  assert.equal(recentlyTrained('chest', six, byId, '2026-11-11'), true);
+  assert.equal(recentlyTrained('chest', six.slice(1), byId, '2026-11-11'), false, '5 is not enough');
+  assert.equal(recentlyTrained('chest', six, byId, '2026-11-13'), false, 'two days later it has passed');
+  assert.equal(recentlyTrained('triceps', six, byId, '2026-11-11'), false, '6 secondary sets weigh 3');
+});
+
+test('suggestions: primary first, then fewest sets this week, then least recently trained', () => {
+  const exercises = [
+    { id: 'a', name: 'A', primaryMuscles: ['chest'], secondaryMuscles: [] },
+    { id: 'b', name: 'B', primaryMuscles: ['chest'], secondaryMuscles: [] },
+    { id: 'c', name: 'C', primaryMuscles: ['chest'], secondaryMuscles: [] },
+    { id: 'd', name: 'D', primaryMuscles: ['triceps'], secondaryMuscles: ['chest'] },
+    { id: 'e', name: 'E', primaryMuscles: ['quads'], secondaryMuscles: [] }
+  ];
+  const sets = [set('a', '2026-11-10'), set('a', '2026-11-11'), set('b', '2026-11-10'), set('c', '2026-10-01'), set('c', '2026-11-03', { isWarmup: true })];
+  const out = suggestionsFor('chest', exercises, sets, '2026-11-11');
+  assert.deepEqual(out.map((s) => s.exercise.id), ['c', 'b', 'a', 'd']);
+  assert.deepEqual(out.map((s) => s.role), ['primary', 'primary', 'primary', 'secondary']);
+  assert.equal(out[0].lastISO, '2026-10-01', 'a warm-up is not training');
+  assert.deepEqual(suggestionsFor('calves', exercises, sets, '2026-11-11'), []);
+});
+
+test('definition only grows with work done, and a 60-day lapse leaves it exactly where it was', () => {
+  const history = [];
+  let last = 0;
+  for (let i = 0; i < 120; i += 1) {
+    history.push(set('dl', `2026-0${1 + Math.floor(i / 30)}-${String(1 + (i % 28)).padStart(2, '0')}`, { isPR: i % 10 === 0 }));
+    const level = definitionLevel('glutes', history, byId);
+    assert.ok(level >= last, 'never decreases as sets accumulate');
+    last = level;
+  }
+  assert.ok(last >= 2 && last <= 5);
+  // 60 days off: nothing is added, and nothing about the calendar enters the sum.
+  assert.equal(definitionLevel('glutes', history, byId), last);
+  assert.equal(definitionLevel('glutes', [...history, set('dl', '2026-08-01', { isWarmup: true })], byId), last, 'warm-ups add nothing');
+  assert.equal(definitionLevel('calves', history, byId), 0);
+});
+
+test('the body map: every muscle is one control on exactly one view, for every figure', () => {
+  for (const figure of Object.keys(FIGURES)) {
+    const controls = [];
+    for (const view of ['front', 'back']) {
+      const g = bodyGeometry(figure, view);
+      for (const m of g.muscles) {
+        assert.match(m.d, /^M[-\d.,a-zMZ ]+$/, `${figure} ${view} ${m.muscle}`);
+        assert.ok(!/NaN|Infinity/.test(m.d + g.outline));
+        if (m.interactive) controls.push(m.muscle);
+      }
+    }
+    assert.deepEqual(controls.sort(), [...MUSCLES].sort(), figure);
+  }
+  assert.deepEqual(Object.keys(VIEW_OF).sort(), [...MUSCLES].sort());
+  assert.notEqual(bodyGeometry('male').outline, bodyGeometry('female').outline);
+});
+
+test('definition shows as outline weight and inner lines, never as size', () => {
+  const chest = (fig) => bodyGeometry(fig, 'front').muscles.find((m) => m.muscle === 'chest');
+  assert.equal(chest('neutral').detail(2), '');
+  assert.ok(chest('neutral').detail(3).length > 0);
+  assert.ok(chest('neutral').detail(5).length > chest('neutral').detail(3).length);
+  for (let l = 1; l <= 5; l += 1) assert.ok(strokeFor(l) > strokeFor(l - 1));
+  assert.equal(chest('neutral').d, chest('neutral').d, 'the shape itself takes no level');
+});

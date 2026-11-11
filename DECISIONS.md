@@ -1497,5 +1497,40 @@ keeps `restSec` (null when blank). A db test covers both cases.
 `scripts/verify-live.mjs reptrack-shell-v11`: 22/22 on the deployed site, including the
 restSec repair (#96), which shipped in this push. The pre-work schema-1 backup imports and
 its exercises come out with muscles (Pull Up → lats), the weekly-sets bars draw, and the
-volume and total-reps metrics are offered. No console errors. Tests 320 → 337; Lighthouse
+volume and total-reps metrics are offered. No console errors. Tests 320 → 336; Lighthouse
 a11y 100 in all six themes; skins within budget.
+
+### 99. Stage 4: the body map
+
+- **Hand-built and parametric.** `bodymap.js` draws the figure from ellipses and one
+  outline polygon, generated from three proportions (shoulder, waist, hip half-widths), so
+  neutral, male and female are the same drawing at different widths. It is a schematic,
+  not anatomy: its job is to be tappable and readable at phone width. Muscles that show on
+  both views (side delts, forearms, calves) are a control on one view only, so each of the
+  18 muscles is exactly one button; the other drawing is `aria-hidden`.
+- **Heat** uses four tokens per theme, mixed from each theme's card colour towards its
+  accent. Heat is a fill, so `contrast.test.js` holds the top level to WCAG 1.4.11's 3:1
+  against its card (for glass: the opaque fallback and the scrim over both backdrop
+  extremes) and requires each level to step ≥1.5:1 from the one below and further from
+  the card. The set count is always also in the legend, the tooltip and the accessible
+  name ("Hamstrings: 5 sets this week"), so colour is never the only cue.
+- **Definition is lifetime and monotonic by construction**: lifetime weighted sets plus
+  five per PR on an exercise where the muscle is primary, through fixed steps
+  (20/60/150/300/500). No date enters the sum, which is why a 60-day lapse can't change it
+  (tested in node and, by moving every set 60 days back, in Chromium). Deleting sets can
+  lower it, which is the record being corrected rather than a lapse.
+- **No leanness, body fat or size, anywhere.** Definition is drawn as outline weight and
+  inner lines; the shapes themselves never change with any level. A future opt-in could
+  use Phase 2 bodyweight data, and only if the user asks for it. It is not built and
+  nothing here depends on it.
+- **"The last 48 hours"** is today and yesterday, because sets carry a date and not a time.
+  The guard is a line of text. Every button still works.
+- **"Log this"** opens the normal confirm sheet; a session starts only if a set is saved,
+  so cancelling leaves nothing behind. In a plan session the exercise shows under Extra
+  without any special case.
+- **Found on the way, a real `openSheet()` bug:** `dialog.close()` queues its `close`
+  event, so a sheet opened in the same `<dialog>` straight after another got the old
+  sheet's event and closed at once. Nothing before this stage chained two sheets in the
+  same dialog, so it never showed. `onClose` now ignores a close event while the dialog is
+  open again. The "Log this" browser test covers it.
+

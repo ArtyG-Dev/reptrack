@@ -38,7 +38,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SAMPLE_MS = Number(process.env.SAMPLE_MS || 6000);
 const SETTLE_MS = 1500;
 const BUDGET_PERCENT = 5;             // the brief's budget, on a mid-range Android
-const SKINS = ['terminal', 'fractal', 'forge', 'kemet', 'monolith'];
+const SKINS = ['terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation'];
 
 if (!findChromium()) {
   console.error('No Chromium available — cannot measure skins.');

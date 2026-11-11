@@ -15,7 +15,7 @@ import { listen } from '../scripts/serve.mjs';
 import { findChromium, launch } from './helpers/browser.mjs';
 import { maxInWindow, FLASH, ROTATION } from '../js/theme-engine.js';
 
-const SKINS = ['kemet', 'forge', 'fractal', 'terminal', 'monolith'];
+const SKINS = ['kemet', 'forge', 'fractal', 'terminal', 'monolith', 'constellation'];
 const VIEWPORT = { width: 393, height: 852 };      // a typical Android phone, CSS px
 
 /** streakLevel / monthPercent pairs that put the shared intensity at 0, 0.5, 1. */
@@ -922,6 +922,79 @@ describe('visuals', { skip: findChromium() ? false : 'no Chromium build availabl
     const frosted = await frame(page);
     assert.ok(changedFraction(dark, frosted) > 0, 'a frosted bar is drawn, cooled — not removed');
     assert.equal((await diag(page)).scene.monolith.frontFace, 0, 'at rest the front is this week');
+    await context.close();
+  });
+
+  /* ---------- Stage 5: Constellation ---------- */
+
+  /** Mean relative luminance of each 48×48-pixel block of a readPixels() frame. */
+  const blockLuminance = (px, size = 48) => {
+    const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const out = [];
+    for (let by = 0; by + size <= px.height; by += size) {
+      for (let bx = 0; bx + size <= px.width; bx += size) {
+        let sum = 0;
+        for (let y = by; y < by + size; y += 2) {
+          for (let x = bx; x < bx + size; x += 2) {
+            const i = (y * px.width + x) * 4;
+            sum += 0.2126 * lin(px.data[i]) + 0.7152 * lin(px.data[i + 1]) + 0.0722 * lin(px.data[i + 2]);
+          }
+        }
+        out.push(sum / ((size / 2) * (size / 2)));
+      }
+    }
+    return out;
+  };
+
+  test('Constellation: at maximum intensity, twinkle moves any area’s luminance far below the WCAG flash threshold', async () => {
+    const { context, page } = await open('constellation');
+    const stars = [];
+    for (let i = 0; i < 300; i += 1) stars.push({ dateISO: `2026-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`, lon: (i / 300) * Math.PI * 2, lat: ((i * 37) % 84) / 100 - 0.42, pr: i % 7 === 0, phase: i });
+    await page.evaluate((st) => window.__backdrop.setSkinData({ constellation: { stars: st, links: [], peakLevel: 10 } }), stars);
+    await intensity(page, 1);
+    await page.click('#view-graphic');                 // full screen: the stars at their largest
+    await page.waitForTimeout(400);
+    const worstChange = async () => {
+      const frames = [];
+      for (let i = 0; i < 24; i += 1) {
+        frames.push(blockLuminance(await page.evaluate(() => { const p = window.__backdrop.readPixels(); return { width: p.width, height: p.height, data: Array.from(p.data) }; })));
+        await page.waitForTimeout(40);
+      }
+      let worst = 0;
+      for (let i = 1; i < frames.length; i += 1) for (let b = 0; b < frames[i].length; b += 1) worst = Math.max(worst, Math.abs(frames[i][b] - frames[i - 1][b]));
+      return worst;
+    };
+    // WCAG 2.3.1 counts a flash at a 10% change in relative luminance. Turning
+    // at full speed, stars crossing block edges stay well under it:
+    const moving = await worstChange();
+    assert.ok(moving < 0.1, `turning at maximum speed: ${(moving * 100).toFixed(3)}% (WCAG threshold 10%)`);
+    // Held still by a press that doesn't move (auto-rotation waits while held),
+    // only the twinkle is left, and it must sit at a tenth of the threshold.
+    await page.mouse.move(196, 426);
+    await page.mouse.down();
+    const twinkleOnly = await worstChange();
+    await page.mouse.up();
+    assert.ok(twinkleOnly < 0.01, `twinkle alone: ${(twinkleOnly * 100).toFixed(3)}% (limit 1%)`);
+    assert.equal((await diag(page)).flashLog.length, 0, 'no lightning, no flash requests at all');
+    await context.close();
+  });
+
+  test('Constellation: one star per training day reaches the scene; drag is unclamped and eases back', async () => {
+    const { context, page } = await open('constellation');
+    const stars = [0, 1, 2, 3, 4].map((i) => ({ dateISO: `2026-11-0${i + 1}`, lon: i * 0.05, lat: 0.1 * i, pr: i === 2, phase: i }));
+    await page.evaluate((st) => window.__backdrop.setSkinData({ constellation: { stars: st, links: [{ from: 0, to: 1, bright: true }], peakLevel: 3 } }), stars);
+    await page.waitForTimeout(100);
+    assert.equal((await diag(page)).scene.constellation.stars, 5);
+    await page.click('#view-graphic');
+    await page.mouse.move(196, 426);
+    await page.mouse.down();
+    await page.mouse.move(196 + 900, 426 + 500, { steps: 12 });
+    const held = (await diag(page)).orbit;
+    assert.ok(Math.abs(held.yaw) > Math.PI / 2 && Math.abs(held.pitch) > Math.PI / 6, `turns past where Terminal or Monolith would stop (${held.yaw.toFixed(2)}, ${held.pitch.toFixed(2)})`);
+    await page.mouse.up();
+    await page.waitForTimeout(2500);
+    const home = (await diag(page)).orbit;
+    assert.ok(Math.hypot(home.yaw, home.pitch) < 0.05, 'eases back after release');
     await context.close();
   });
 

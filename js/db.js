@@ -88,7 +88,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // starter exercise a user deliberately deletes doesn't come back.
   seedBackfillDone: false,
   muscleBackfillDone: false,
-  bodyFigure: 'neutral'
+  bodyFigure: 'neutral',
+  constellationPeakLevel: 0
 });
 
 let dbPromise = null;

@@ -292,6 +292,41 @@
   --frost-sheen: rgba(190, 222, 236, .2);
 }
 
+[data-theme="constellation"] {
+  --bg: #03050c;
+  --surface: #080b17;
+  --surface-2: #141723;
+  --text: #eef1fb;
+  --muted: #b1b9d6;
+  --border: #252b45;
+  --accent: #a9bdff;
+  /* body-map heat, surface → accent: none, under 4, 4–9, 10+ weekly sets */
+  --heat-0: #181d2e;
+  --heat-1: #454f6f;
+  --heat-2: #7280b0;
+  --heat-3: #a9bdff;
+  --on-accent: #0a1236;
+  --danger: #ff929f;
+  --on-danger: #2b0209;
+  --ok: #86e0b6;
+  --warn: #f5cd72;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .7), 0 10px 30px rgba(0, 0, 0, .55);
+
+  --glass: 8 11 23;
+  --glass-2: 20 23 35;
+  --glass-alpha: .92;
+  --backdrop-base: #03050c;
+  --backdrop-ink: #eef2ff;          /* the brightest star — the ceiling */
+  --backdrop-sky: #0e1736;          /* the night sky overhead */
+  --backdrop-sky-cool: #0a1a24;     /* frost cools the sky toward this */
+  --backdrop-star: #9fb0e0;         /* a training day */
+  --backdrop-star-pr: #eef2ff;      /* a PR day: brighter, and drawn larger */
+  --backdrop-line: #6a7fc4;         /* the figure's lines, at the current level */
+  --backdrop-line-faint: #263160;   /* a line only the peak level reached: a trace */
+
+  --frost-edge: #86b4c4;
+  --frost-sheen: rgba(190, 222, 236, .2);
+}
 
 
 *, *::before, *::after { box-sizing: border-box; }

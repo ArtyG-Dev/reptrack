@@ -1580,3 +1580,23 @@ runs in batches of at most four. What it asserts is unchanged.
   survives a reload) now uses the list's last entry. That is a value this stage changes on
   purpose; what it checks is unchanged.
 
+### 104. Stage 5 — Constellation
+
+- **Latitude is a hash of the date over ±24°, not ±54°.** The first pass used most of the
+  sphere, so consecutive days jumped far up and down and the figure read as long vertical
+  streaks. A band keeps the figure legible. Longitude stays the day of the year, so a
+  month's figure is a 30° arc and the sky slowly fills as the year goes on.
+- **"Lines never deleted by a later drop"** is the peak level's window: links exist for
+  every consecutive pair inside it; inside the current level's window they are bright,
+  outside it a trace (25%). Lines ease in when new. The first data push opens on the real
+  figure rather than drawing it from nothing. The window is relative to today, so a line
+  can still age out of it with time. A lower level never removes one.
+- **Flash safety, measured.** No lightning at all. Twinkle is a ≤15% brightness swing at
+  ≤1 Hz per star. `visuals.test.js` reads real frames at maximum intensity, full screen,
+  300 stars: turning at full speed, the largest frame-to-frame change in any 48 px block
+  stays under WCAG's 10% (stars crossing block edges); held still so only twinkle is left,
+  it must stay under 1%. The first version of that test mixed the two and measured 3%,
+  which was motion, not flashing. Both are now asserted separately.
+- A faint graticule (three latitude rings) is always drawn, so a fresh install with no
+  stars still shows a sky rather than an empty background.
+

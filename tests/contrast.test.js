@@ -66,7 +66,8 @@ const GLASS_THEMES = [
   ['fractal', '[data-theme="fractal"] {'],
   ['forge', '[data-theme="forge"] {'],
   ['kemet', '[data-theme="kemet"] {'],
-  ['monolith', '[data-theme="monolith"] {']
+  ['monolith', '[data-theme="monolith"] {'],
+  ['constellation', '[data-theme="constellation"] {']
 ];
 
 for (const [themeName, selector] of [...FLAT_THEMES, ...GLASS_THEMES]) {

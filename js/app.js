@@ -113,7 +113,13 @@ function wireTheme() {
 function pushActivity() {
   const { glow, frostHint, streakLevel, streakFraction, monthPercent } = state.activityVisual();
   backdrop.setActivity({ glow, frostHint, streakLevel, streakFraction, monthPercent });
-  backdrop.setSkinData(state.skinData());
+  const data = state.skinData();
+  backdrop.setSkinData(data);
+  // The Constellation's lines are kept at the highest level ever reached, so a
+  // later drop dims them instead of deleting them. Bookkeeping only: no re-render.
+  if (data.constellation.peakLevel > (Number(state.getState().settings.constellationPeakLevel) || 0)) {
+    state.rememberSetting({ constellationPeakLevel: data.constellation.peakLevel }).catch(() => {});
+  }
   // The saved Fractal colours — applied on boot, after Reset colours in Settings
   // and after a JSON import. Not while the full-screen view is open: there the
   // user's live drag is the truth, saved when they leave.

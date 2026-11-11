@@ -300,6 +300,47 @@ function monolithMesh() {
   return new Float32Array(out);
 }
 
+/* ---------- Constellation ---------- */
+
+const STAR_FLOATS = 6;                 // position 3, size, twinkle phase, PR
+const NIGHT_FS = `${HEAD}
+in vec2 vUv;
+uniform vec3 uSky, uCool, uBase;
+uniform float uFrost;
+void main() {
+  // Frost cools the sky; it never touches a star.
+  vec3 sky = mix(uSky, uCool, uFrost * 0.7);
+  o = vec4(mix(uBase, sky, smoothstep(0.0, 1.0, vUv.y)), 1.0);
+}`;
+const STAR_VS = `#version 300 es
+layout(location = 0) in vec3 aP;
+layout(location = 1) in float aSize;
+layout(location = 2) in float aPhase;
+layout(location = 3) in float aPr;
+uniform mat4 uMVP, uModel;
+uniform float uTime, uHz, uSwing, uPx, uK;
+out float vB;
+out float vPr;
+void main() {
+  vec4 c = uMVP * vec4(aP, 1.0);
+  gl_Position = c;
+  // Twinkle: brightness only, within [1 - swing, 1], at most uHz (<= 1 Hz).
+  float tw = 1.0 - uSwing * 0.5 * (1.0 + sin(6.2831853 * uHz * uTime + aPhase));
+  float z = (uModel * vec4(aP, 1.0)).z;
+  vB = tw * (0.45 + 0.55 * (z + 1.0) * 0.5) * (0.75 + 0.25 * uK);
+  vPr = aPr;
+  gl_PointSize = clamp(uPx * aSize / c.w, 2.0, 14.0);
+}`;
+const STAR_FS = `${HEAD}
+in float vB;
+in float vPr;
+uniform vec3 uStar, uStarPr;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  float a = smoothstep(0.5, 0.15, d);
+  o = vec4(mix(uStar, uStarPr, vPr) * vB * a, 1.0);
+}`;
+
 /* ---------- Forge ---------- */
 
 const FORGE_BG_FS = `${HEAD}
@@ -772,12 +813,13 @@ export function createGLBackdrop(canvas) {
     sky: [SKY_FS], pyramid: [PYRAMID_FS, PYRAMID_VS], ring: [RING_FS, RING_VS], spark: [POINT_FS, SPARK_VS],
     forgeBg: [FORGE_BG_FS], barbell: [BARBELL_FS, BARBELL_VS], ember: [EMBER_FS, EMBER_VS],
     bloom: [BLOOM_FS], mandel: [MANDEL_FS], floor: [FLOOR_FS], glyph: [GLYPH_FS, GLYPH_VS],
-    mono: [MONO_FS, MONO_VS]
+    mono: [MONO_FS, MONO_VS], night: [NIGHT_FS], star: [STAR_FS, STAR_VS]
   };
   const MAKERS = {
     pyramidMesh: () => vao(gl, pyramidMesh(), [[0, 3], [1, 3], [2, 2], [3, 1]]),
     barbellMesh: () => vao(gl, barbellMesh(), [[0, 3], [1, 3], [2, 1]]),
     monolithMesh: () => vao(gl, monolithMesh(), [[0, 3], [1, 3], [2, 2], [3, 1]]),
+    starMesh: () => ({ ...vao(gl, new Float32Array(400 * STAR_FLOATS), [[0, 3], [1, 1], [2, 1], [3, 1]], gl.DYNAMIC_DRAW), source: null, n: 0 }),
     plateMesh: () => vao(gl, plateMesh(), [[0, 3], [1, 3], [2, 1]]),
     seeds: () => vao(gl, Float32Array.from({ length: PARTICLES }, (_, i) => i), [[0, 1]]),
     glyphs: () => vao(gl, glyphColumns(), [[0, 4]]),
@@ -1204,7 +1246,61 @@ export function createGLBackdrop(canvas) {
     info.monolith = { heading, frontFace: ((Math.round(-heading / (Math.PI / 2)) % 4) + 4) % 4, centre: project(cam.vp, [0, 0, 0]) };
   }
 
-  const SCENES = { kemet, forge, fractal, terminal, monolith };
+  function constellation(f) {
+    const P = f.palette;
+    blend(null);
+    r.night.use().rgb('uSky', P.sky).rgb('uCool', P.skyCool).rgb('uBase', P.base).f('uFrost', f.frost || 0);
+    fullscreen();
+    const cam = camera(f, f.full ? { targetY: 0, needH: 1.15, needW: 1.15, tilt: 0.22 } : { targetY: 0, needH: 1.05, needW: 1.6, tilt: 0.22 });
+    const orbit = multiply(rotationX(f.orbit.pitch), rotationY(f.orbit.yaw));
+    const model = multiply(rotationX(-0.32), rotationY(f.spin * 0.5));   // slow: half the shared speed
+    const world = multiply(orbit, model);
+    const vp = multiply(cam.vp, world);
+    const toNDC = (p) => project(vp, p);
+    const onSphere = (lon, lat) => [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
+
+    // A faint graticule, always there: a fresh install still has a sky.
+    blend('add');
+    for (const lat of [-0.6, 0, 0.6]) {
+      const ring = [];
+      for (let a = 0; a <= 64; a += 1) ring.push(toNDC(onSphere((a / 64) * Math.PI * 2, lat)));
+      lines(ring, 1.2 * f.dpr, P.lineFaint, 0.55);
+    }
+
+    const { stars, links, alpha } = f.data.constellation;
+    links.forEach((l, i) => {
+      const a = alpha?.[i] ?? 0;
+      if (a <= 0.01 || !stars[l.from] || !stars[l.to]) return;
+      const A = onSphere(stars[l.from].lon, stars[l.from].lat);
+      const B = onSphere(stars[l.to].lon, stars[l.to].lat);
+      const seg = [];
+      for (let s = 0; s <= 8; s += 1) {               // along the sphere, not through it
+        const p = A.map((v, j) => v + (B[j] - v) * (s / 8));
+        const len = Math.hypot(...p) || 1;
+        seg.push(toNDC(p.map((v) => v / len)));
+      }
+      lines(seg, (l.bright ? 1.8 : 1.2) * f.dpr, l.bright ? P.line : P.lineFaint, a);
+    });
+
+    const mesh = r.starMesh;
+    if (mesh.source !== stars) {
+      const data = new Float32Array(Math.max(stars.length, 1) * STAR_FLOATS);
+      stars.forEach((s, i) => data.set([...onSphere(s.lon, s.lat), s.pr ? 0.085 : 0.05, s.phase, s.pr ? 1 : 0], i * STAR_FLOATS));
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+      mesh.source = stars;
+      mesh.n = stars.length;
+    }
+    if (mesh.n) {
+      r.star.use().m4('uMVP', vp).m4('uModel', world).f('uTime', f.still ? 0 : f.t).f('uHz', f.twinkle.hz).f('uSwing', f.twinkle.swing)
+        .f('uPx', size.h).f('uK', f.k).rgb('uStar', P.star).rgb('uStarPr', P.starPr);
+      gl.bindVertexArray(mesh.va);
+      gl.drawArrays(gl.POINTS, 0, mesh.n);
+    }
+    info.constellation = { stars: mesh.n, links: links.length, centre: project(cam.vp, [0, 0, 0]) };
+  }
+
+  const SCENES = { kemet, forge, fractal, terminal, monolith, constellation };
 
   return {
     gl,

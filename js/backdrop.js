@@ -38,6 +38,7 @@ import {
   createPlateRack, setRackTarget, snapRack, stepRack, rackPlates, rackSettled, platesForLevel,
   TINT, normaliseTint, tintDrag, createSnap, stepSnap, snapTarget
 } from './theme-engine.js';
+import { twinkle, twinkleHz, TWINKLE } from './skin-data.js';
 import { createGLBackdrop } from './backdrop-gl.js';
 
 const FPS = 30;
@@ -51,8 +52,8 @@ const MAX_GL_PIXELS = 2_400_000;     // a desktop-monitor guard; no phone reache
  * Mandelbrot, a ten-tier pyramid) rather than a soft wash — detail you can
  * resolve is the entire point of them, and it does not survive being drawn at
  * an eighth scale and blown back up. */
-const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.34, kemet: 0.4, monolith: 0.5 };
-const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet', 'monolith']);
+const SCALE = { terminal: 0.5, forge: 0.5, fractal: 0.34, kemet: 0.4, monolith: 0.5, constellation: 0.5 };
+const GLASS_SKINS = new Set(['terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation']);
 
 /** Which --backdrop-* tokens each skin's renderer actually reads. Exported so
  *  tests/contrast.test.js can assert every skin *declares* the tokens it draws
@@ -63,7 +64,8 @@ export const SKIN_TOKENS = Object.freeze({
   fractal: ['base', 'ink', 'bloom-a', 'bloom-b'],
   forge: ['base', 'ink', 'glow', 'iron', 'ember', 'spark', 'heat-a', 'heat-b', 'heat-c', 'plate-red', 'plate-blue', 'plate-green'],
   kemet: ['base', 'ink', 'star', 'halo', 'halo-hot', 'sky', 'stone', 'gold', 'gold-hot', 'glyph', 'arc'],
-  monolith: ['base', 'ink', 'sky', 'stone', 'bar', 'bar-lit', 'bar-pr', 'frost', 'ring']
+  monolith: ['base', 'ink', 'sky', 'stone', 'bar', 'bar-lit', 'bar-pr', 'frost', 'ring'],
+  constellation: ['base', 'ink', 'sky', 'sky-cool', 'star', 'star-pr', 'line', 'line-faint']
 });
 
 // Lightning — a flicker-hazard budget, not a suggestion. The floor applies at
@@ -172,8 +174,14 @@ let snap = null;                     // Monolith: a face snap in progress after 
 /* What the Stage 5 scenes draw, from js/skin-data.js via app.js. Empty until
  * app.js pushes it, so every scene must draw its base state from nothing. */
 let skinData = {
-  monolith: { states: new Array(28).fill(0), frost: new Array(28).fill(0) }
+  monolith: { states: new Array(28).fill(0), frost: new Array(28).fill(0) },
+  constellation: { stars: [], links: [], peakLevel: 0, alpha: [] }
 };
+/* Constellation lines ease in (and down to a trace) rather than switching:
+ * alpha per line, keyed by its two stars' dates so it survives a data push. */
+const linkAlpha = new Map();
+let linksSeeded = false;
+const LINE_TRACE = 0.25;
 // What is on screen, eased toward `activity` so nothing snaps (theme-engine approach()).
 let shown = { level: 0, month: 0, glow: 0.5, heat: 0, k: 0 };
 let snapOnNextActivity = true;
@@ -278,7 +286,11 @@ function readPalette() {
     barLit: read('--backdrop-bar-lit', '#3fa596'),
     barPr: read('--backdrop-bar-pr', '#c9f1e6'),
     frost: read('--backdrop-frost', '#4c6f86'),
-    ring: read('--backdrop-ring', '#2f7d74')
+    ring: read('--backdrop-ring', '#2f7d74'),
+    skyCool: read('--backdrop-sky-cool', '#0a1a24'),
+    starPr: read('--backdrop-star-pr', '#eef2ff'),
+    line: read('--backdrop-line', '#6a7fc4'),
+    lineFaint: read('--backdrop-line-faint', '#263160')
   };
 }
 
@@ -1202,7 +1214,84 @@ function drawMonolith() {
   }
 }
 
-const RENDERERS = { terminal: drawTerminal, fractal: drawFractal, forge: drawForge, kemet: drawKemet, monolith: drawMonolith };
+/* ---------- Constellation (2D fallback) ----------
+ * One star per training day on a slowly turning celestial sphere; the figure's
+ * lines join recent stars in date order. A faint graticule is always drawn, so
+ * a fresh install still shows a sky. Token colours, source-over only. */
+function sphereProjector(size, cx, cy) {
+  const heading = spin * 0.5 + orbit.yaw;
+  const pitch = 0.32 + orbit.pitch;
+  const ch = Math.cos(heading); const sh = Math.sin(heading);
+  const cp = Math.cos(pitch); const sp = Math.sin(pitch);
+  return ([x, y, z]) => {
+    const x1 = x * ch + z * sh; const z1 = -x * sh + z * ch;
+    const y2 = y * cp - z1 * sp; const z2 = y * sp + z1 * cp;
+    return [cx + x1 * size, cy - y2 * size, z2];
+  };
+}
+const onSphere = (lon, lat) => [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
+
+function drawConstellation(t) {
+  const { w, h } = dims;
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, rgba(palette.sky, 1));
+  sky.addColorStop(1, rgba(palette.base, 1));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+  if (activity.frostHint > 0) {                       // frost cools the sky; the stars are untouched
+    ctx.fillStyle = rgba(palette.skyCool, 0.6 * activity.frostHint);
+    ctx.fillRect(0, 0, w, h);
+  }
+  const band = featureBand();
+  const size = Math.min(band.h * 0.46, w * (fullView ? 0.42 : 0.3));
+  const P = sphereProjector(size, w / 2, band.y + band.h * 0.5);
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = rgba(palette.lineFaint, 0.7);
+  for (const lat of [-0.6, 0, 0.6]) {
+    ctx.beginPath();
+    for (let a = 0; a <= 48; a += 1) { const [x, y] = P(onSphere((a / 48) * Math.PI * 2, lat)); if (a) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+    ctx.stroke();
+  }
+
+  const { stars, links, alpha } = skinData.constellation;
+  const pts = stars.map((s) => P(onSphere(s.lon, s.lat)));
+  links.forEach((l, i) => {
+    const a = alpha[i] ?? 0;
+    if (a <= 0.01) return;
+    ctx.strokeStyle = rgba(l.bright ? palette.line : palette.lineFaint, a);
+    ctx.lineWidth = Math.max(1, size * 0.008);
+    ctx.beginPath();
+    ctx.moveTo(pts[l.from][0], pts[l.from][1]);
+    ctx.lineTo(pts[l.to][0], pts[l.to][1]);
+    ctx.stroke();
+  });
+  const k = shown.k;
+  stars.forEach((s, i) => {
+    const [x, y, z] = pts[i];
+    const depth = 0.45 + 0.55 * (z + 1) / 2;
+    const b = twinkle(isStatic() ? 0 : t, s.phase, k) * depth;
+    ctx.fillStyle = rgba(s.pr ? palette.starPr : palette.star, b);
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(1.5, size * (s.pr ? 0.032 : 0.02)), 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+/** Ease each line toward full (inside the current level's window) or a trace
+ *  (only the peak reached it). New lines grow in; nothing is ever deleted. */
+function settleLinks(dt) {
+  const c = skinData.constellation;
+  c.alpha = c.links.map((l) => {
+    const key = `${c.stars[l.from]?.dateISO}>${c.stars[l.to]?.dateISO}`;
+    const target = l.bright ? 1 : LINE_TRACE;
+    const next = dt === null || !linksSeeded ? target : approach(linkAlpha.get(key) ?? 0, target, dt);
+    linkAlpha.set(key, next);
+    return next;
+  });
+}
+
+const RENDERERS = { terminal: drawTerminal, fractal: drawFractal, forge: drawForge, kemet: drawKemet, monolith: drawMonolith, constellation: drawConstellation };
 
 const rand = Math.random;
 
@@ -1225,6 +1314,8 @@ function draw() {
       spin,
       orbit: { yaw: orbit.yaw, pitch: orbit.pitch },
       data: skinData,
+      frost: activity.frostHint,
+      twinkle: { hz: twinkleHz(shown.k), swing: TWINKLE.maxSwing },
       tint,
       plates: rackPlates(rack),
       band: glBand(),
@@ -1271,6 +1362,7 @@ function settleShown(dt) {
     if (step.done) snap = null;
   } else if (dt !== null && !orbit.dragging) spin = (spin + rotationSpeed(shown.k) * dt) % (Math.PI * 2);
   if (dt !== null) { orbitSettle(orbit, dt, orbitStyle().settleSeconds); stepRack(rack, dt); }
+  settleLinks(dt);
   reportPlates();
 }
 
@@ -1446,6 +1538,11 @@ export function setPlatesMemory(level, onSettled) {
  *  given are replaced. A held (static) frame is redrawn to stay current. */
 export function setSkinData(next = {}) {
   skinData = { ...skinData, ...next };
+  if (next.constellation) {
+    skinData.constellation = { alpha: [], ...next.constellation };
+    settleLinks(linksSeeded ? 0 : null);   // the first push opens on the real figure; later lines grow in
+    linksSeeded = true;
+  }
   if (isStatic()) sync();
 }
 

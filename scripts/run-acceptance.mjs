@@ -75,7 +75,7 @@ const rows = [
   ['Lighthouse — Performance', scores.performance ?? 'n/a', true],
   ['Lighthouse — Best practices', scores['best-practices'] ?? 'n/a', true],
   ['Lighthouse — SEO', scores.seo ?? 'n/a', true],
-  ...(skins ? ['terminal', 'fractal', 'forge', 'kemet', 'monolith'].map((skin) => [
+  ...(skins ? ['terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation'].map((skin) => [
     `Skin CPU — ${THEME_LABELS[skin]} (${skins.runs[skin].animated.renderer}; see note below)`,
     `app JS +${skins.runs[skin].overBaselinePercent}% vs Light · main thread ${skins.runs[skin].animated.cpuPercent}% incl. waiting on SwiftShader · GPU proc ${skins.runs[skin].animated.gpuProcessPercent ?? 'n/a'}% (CPU-emulated) · ${skins.runs[skin].animated.fps} fps · 2D fallback ${skins.runs[skin].fallback2d.cpuPercent}%`,
     skins.runs[skin].withinBudget
@@ -119,7 +119,7 @@ writeFileSync(join(ROOT, '.reports/acceptance.json'), `${JSON.stringify({
   skins
 }, null, 2)}\n`);
 
-const skinsWithinBudget = !skins || ['terminal', 'fractal', 'forge', 'kemet', 'monolith'].every((s) => skins.runs[s].withinBudget);
+const skinsWithinBudget = !skins || ['terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation'].every((s) => skins.runs[s].withinBudget);
 const green = fail === 0 && footprint?.withinBudget && (scores.pwa ?? 0) >= 90
   && everyThemeAccessible && skinsWithinBudget;
 console.log(`\n${green ? '✅ All headless acceptance criteria pass.' : '❌ Acceptance criteria not met.'}`);

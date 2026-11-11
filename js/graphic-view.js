@@ -15,8 +15,8 @@ import * as state from './state.js';
 import { el } from './ui.js';
 import { TINT } from './theme-engine.js';
 
-const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal', monolith: 'Monolith' };
-const DRAGGABLE = new Set(['kemet', 'forge', 'terminal', 'monolith']);   // all through the one shared orbit
+const NAMES = { kemet: 'Kemet', forge: 'Forge', fractal: 'Fractal', terminal: 'Terminal', monolith: 'Monolith', constellation: 'Constellation' };
+const DRAGGABLE = new Set(['kemet', 'forge', 'terminal', 'monolith', 'constellation']);   // all through the one shared orbit
 const TAP_SLOP_PX = 6;
 const KEY_NUDGE_PX = 14;          // an arrow key turns the scene as far as a 14px drag
 const SHELL = ['.app-bar', '#main', '.tabbar', '.skip-link'];

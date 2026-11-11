@@ -761,7 +761,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
 
   /* ---------- frosted-glass skins ---------- */
 
-  const GLASS_SKINS = ['terminal', 'fractal', 'forge', 'kemet', 'monolith'];
+  const GLASS_SKINS = ['terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation'];
 
   /** Writes sessions straight into IndexedDB so a profile with real history can
    *  be simulated. Returns after the write commits; caller reloads to pick it up. */
@@ -868,7 +868,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     await page.click('#tab-settings');
 
     const options = await page.$$eval('#set-theme option', (opts) => opts.map((o) => o.value));
-    assert.deepEqual(options, ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet', 'monolith']);
+    assert.deepEqual(options, ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation']);
 
     for (const theme of GLASS_SKINS) {
       await page.selectOption('#set-theme', theme);

@@ -7,7 +7,7 @@ import { SEED_EXERCISES } from './exercises-seed.js';
 import { isPersonalRecord, recordScore, workingSets as progressionWorking } from './progression.js';
 import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
 import { activityVisualState, frostedDates, trainingDays, effectiveToday } from './consistency.js';
-import { monolithFaces } from './skin-data.js';
+import { monolithFaces, starField, constellationLinks } from './skin-data.js';
 import { itemsFromSets, updatedItems } from './plans.js';
 import { hasMuscles, guessMuscles } from './muscles.js';
 
@@ -488,8 +488,12 @@ export function skinData() {
   const todayISO = effectiveToday(input);
   const trained = new Set(trainingDays(input));
   const prs = new Set(progressionWorking(state.allSets).filter((s) => s.isPR).map((s) => s.dateISO));
+  const { streakLevel } = activityVisualState(input);
+  const peakLevel = Math.max(Number(state.settings.constellationPeakLevel) || 0, streakLevel);
+  const stars = starField({ trained, prs, todayISO });
   return {
-    monolith: monolithFaces({ trained, prs, frosted: frostedDates(input), todayISO })
+    monolith: monolithFaces({ trained, prs, frosted: frostedDates(input), todayISO }),
+    constellation: { stars, links: constellationLinks(stars, { level: streakLevel, peakLevel, todayISO }), peakLevel }
   };
 }
 

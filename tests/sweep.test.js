@@ -13,7 +13,7 @@ import { listen } from '../scripts/serve.mjs';
 import { findChromium, launch } from './helpers/browser.mjs';
 
 const LIVE_BACKUP = new URL('./fixtures/backup-live-schema1.json', import.meta.url);
-const THEMES = ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet', 'monolith'];
+const THEMES = ['light', 'neon', 'terminal', 'fractal', 'forge', 'kemet', 'monolith', 'constellation'];
 
 describe('regression sweep', { skip: findChromium() ? false : 'no Chromium build available' }, () => {
   let server;

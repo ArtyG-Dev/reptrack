@@ -379,3 +379,9 @@ test('a session records the plan it was started from (planId, null otherwise)', 
   const planned = await db.startSession({ planId: 'plan_x' });
   assert.equal(planned.planId, 'plan_x');
 });
+
+test('a new exercise keeps its own rest time', async () => {
+  const ex = await db.addExercise({ name: 'Cable Fly', restSec: 75 });
+  assert.equal((await db.listExercises()).find((e) => e.id === ex.id).restSec, 75);
+  assert.equal((await db.addExercise({ name: 'Pec Deck' })).restSec, null, 'none given: use the default');
+});

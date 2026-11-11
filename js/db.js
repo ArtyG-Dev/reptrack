@@ -268,7 +268,7 @@ export async function listExercises() {
 
 export function makeExercise({
   name, aliases = [], muscleGroup = 'other', category = 'strength', mode = 'reps',
-  isCustom = true, isBodyweight = false
+  isCustom = true, isBodyweight = false, restSec = null
 }) {
   return {
     id: uid('ex'),
@@ -278,7 +278,8 @@ export function makeExercise({
     category: (category || 'strength').trim().toLowerCase(),
     mode: mode === 'hold' ? 'hold' : 'reps',
     isCustom,
-    isBodyweight
+    isBodyweight,
+    restSec: Number(restSec) > 0 ? Math.round(Number(restSec)) : null
   };
 }
 

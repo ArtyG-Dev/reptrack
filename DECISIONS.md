@@ -1458,3 +1458,12 @@ it and tapping an item prefills its target, the item ticks at its target, and fi
 offers "Update plan to what I did?". No console errors.
 Test count 303 → 320. Acceptance: Lighthouse a11y 100 in all six themes, PWA 100, skins
 +0.8–1.0% app JS.
+
+### 96. Repair: a new exercise's own rest time was dropped
+
+Found while reading `db.makeExercise()` for Stage 3. Stage 1 added `restSec` to the
+Exercises editor, but `makeExercise()` built the record from a fixed list of fields that
+didn't include it, so a rest time typed when *adding* an exercise was lost; editing an
+existing one worked, which is the only path the Stage 1 test drove. Cause: a new field was
+added to the editor and to `updateExercise`, not to the constructor. Fix: `makeExercise()`
+keeps `restSec` (null when blank). A db test covers both cases.

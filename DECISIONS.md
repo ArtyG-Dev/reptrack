@@ -1414,3 +1414,13 @@ doing them before Stage 2.
   unchanged.
 - **Found on the way:** `.btn` sets `display`, which beats the `hidden` attribute, so a
   hidden button stayed visible. `.btn[hidden] { display: none }` fixes it for every button.
+
+### 93. Stage 1b live verification
+
+`scripts/verify-live.mjs reptrack-shell-v9`: 15/15 on the deployed site, on repeated runs.
+Cache v9 under `/reptrack/`, offline reload, the pre-work schema-1 backup imports complete,
+the Stage 1 checks, and Stage 1b on the live build: "Log an earlier session" offered, a
+spoken warm-up pre-ticks the box beside the RPE field, an open session can change date,
+Settings states the storage protection, and no console errors. Two checks first failed
+because the *script* read the page before an asynchronous re-render; both now wait for the
+element. The app was right both times.

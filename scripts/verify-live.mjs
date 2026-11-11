@@ -83,7 +83,7 @@ try {
   await page.click('#tab-today');
   const endBtn = page.locator('#view-today button:has-text("End session")');
   if (await endBtn.count()) { await endBtn.click(); await page.click('#confirm-sheet button:has-text("End session")'); }
-  check('stage 1b: "Log an earlier session" is offered', await page.$('#start-earlier-session'));
+  check('stage 1b: "Log an earlier session" is offered', await page.waitForSelector('#start-earlier-session', { timeout: 8000 }).then(() => true, () => false));
   await page.click('#start-session');
   await page.click('#mic-button');
   await page.fill('#prompt-input', 'warm up bench press 40 kilos for 10');
@@ -93,7 +93,7 @@ try {
   await page.click('#confirm-sheet button:has-text("Cancel")');
   check('stage 1b: an open session can change date', await page.$('#change-session-date'));
   await page.click('#tab-settings');
-  check('stage 1b: Settings states the storage protection', /protected|does not say/i.test(await page.textContent('#persist-line')));
+  check('stage 1b: Settings states the storage protection', await page.waitForFunction(() => /protected|does not say/i.test(document.getElementById('persist-line')?.textContent || ''), null, { timeout: 8000 }).then(() => true, () => false));
 
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await context.close();

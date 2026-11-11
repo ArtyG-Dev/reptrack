@@ -1316,3 +1316,13 @@ nothing. Keys are now handled at document level while the view is open. This aff
 and Forge too, and has its own test.
 
 The 2D fallback renderer is not tinted. It only runs without WebGL2.
+
+### 88. Baseline before the plans / body-map / three-skins pass (Stage 0)
+
+`npm ci`, `npm test` and `npm run acceptance` on `960cb93`, before any change: **272 tests
+passing, 0 failing**. Lighthouse: PWA 100; Accessibility 100 on all six themes; Performance
+85 (Light), Best practices 100, SEO 92 (the deliberate noindex, #27). The four animated
+themes score Performance 50–55 on this machine because headless Chromium here renders WebGL2
+on the CPU (#78); it is recorded, not gated. Skin cost, app JS over baseline: Terminal +0.8%,
+Fractal +0.7%, Forge +0.9%, Kemet +1.0%. Footprint 3.508 MB of 50 MB. Nothing was failing,
+so no Stage 0 repair was needed.

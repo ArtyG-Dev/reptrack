@@ -3,6 +3,7 @@
 import * as state from '../state.js';
 import { el, clear, toast, openSheet, confirmSheet, disclosure, titleCase } from '../ui.js';
 import { CATEGORIES } from '../exercises-seed.js';
+import { describeTarget } from '../plans.js';
 
 let filter = '';
 let containerRef = null;
@@ -145,6 +146,126 @@ function orderedCategories(rows) {
   return [...known, ...extra];
 }
 
+/* ---------- plans ---------- */
+
+/** Create / edit a plan: a name and an ordered list of exercises with targets.
+ *  The target fields follow the chosen exercise's mode, as the set sheet does. */
+export function planSheet(existing = null, { preselect = null } = {}) {
+  const titleId = 'confirm-sheet-title';
+  const exercises = state.getState().exercises;
+  return openSheet('confirm-sheet', (ctx) => {
+    const name = el('input', { type: 'text', id: 'plan-name', value: existing?.name || '', required: true, 'data-autofocus': '' });
+    let items = (existing?.items || []).map((i) => ({ ...i }));
+    if (!items.length) items.push(blankItem(preselect || exercises[0]?.id));
+    const wrap = el('div', { class: 'stack' });
+
+    function blankItem(exerciseId) {
+      return { exerciseId, targetSets: 3, targetReps: 8, targetWeight: null, unit: state.getState().settings.unit, targetHoldSec: null, note: '' };
+    }
+    const isHold = (id) => state.exerciseById(id)?.mode === 'hold';
+
+    const renderItems = () => {
+      clear(wrap);
+      items.forEach((item, i) => {
+        const num = (key, attrs = {}) => el('input', {
+          type: 'number', min: '0', inputmode: 'decimal', id: `plan-${key}-${i}`,
+          value: item[key] == null ? '' : String(item[key]), ...attrs,
+          oninput: (e) => { item[key] = e.target.value === '' ? null : Number(e.target.value); }
+        });
+        const exSelect = el('select', {
+          id: `plan-ex-${i}`,
+          onchange: (e) => { item.exerciseId = e.target.value; if (isHold(item.exerciseId)) item.targetHoldSec = item.targetHoldSec ?? 30; renderItems(); }
+        }, ...exercises.map((ex) => el('option', { value: ex.id, selected: ex.id === item.exerciseId }, ex.name)));
+        const move = (dir) => { const j = i + dir; if (j < 0 || j >= items.length) return; [items[i], items[j]] = [items[j], items[i]]; renderItems(); };
+        const label = state.exerciseById(item.exerciseId)?.name || `item ${i + 1}`;
+        wrap.append(el('div', { class: 'card stack plan-item' },
+          el('div', { class: 'field' }, el('label', { for: `plan-ex-${i}`, text: `Exercise ${i + 1}` }), exSelect),
+          el('div', { class: 'field-row' },
+            el('div', {}, el('label', { for: `plan-targetSets-${i}`, text: 'Sets' }), num('targetSets', { min: '1', step: '1' })),
+            ...(isHold(item.exerciseId)
+              ? [el('div', {}, el('label', { for: `plan-targetHoldSec-${i}`, text: 'Hold (seconds)' }), num('targetHoldSec', { step: '5' }))]
+              : [
+                el('div', {}, el('label', { for: `plan-targetReps-${i}`, text: 'Reps' }), num('targetReps', { step: '1' })),
+                el('div', {}, el('label', { for: `plan-targetWeight-${i}`, text: `Weight (${item.unit || 'kg'})` }), num('targetWeight', { step: '0.5' }))
+              ])
+          ),
+          el('div', { class: 'field' }, el('label', { for: `plan-note-${i}`, text: 'Note (optional)' }),
+            el('input', { type: 'text', id: `plan-note-${i}`, value: item.note || '', oninput: (e) => { item.note = e.target.value; } })),
+          el('div', { class: 'row' },
+            el('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Move ${label} up`, disabled: i === 0, onclick: () => move(-1) }, '↑'),
+            el('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Move ${label} down`, disabled: i === items.length - 1, onclick: () => move(1) }, '↓'),
+            el('button', { class: 'btn btn-sm btn-ghost', type: 'button', 'aria-label': `Remove ${label} from the plan`, onclick: () => { items.splice(i, 1); renderItems(); } }, 'Remove')
+          )
+        ));
+      });
+    };
+    renderItems();
+
+    return el('form', {
+      method: 'dialog',
+      onsubmit: (e) => {
+        e.preventDefault();
+        if (!name.value.trim()) { toast('Give the plan a name.'); return; }
+        if (!items.length) { toast('Add at least one exercise.'); return; }
+        // Keep only the fields that fit each exercise's mode.
+        ctx.close({
+          name: name.value.trim(),
+          items: items.map((i) => ({
+            ...i,
+            targetSets: Math.max(1, Math.round(Number(i.targetSets) || 1)),
+            ...(isHold(i.exerciseId) ? { targetReps: null, targetWeight: null } : { targetHoldSec: null })
+          }))
+        });
+      }
+    },
+      el('h2', { id: titleId, text: existing ? 'Edit plan' : 'New plan' }),
+      el('div', { class: 'field' }, el('label', { for: 'plan-name', text: 'Plan name' }), name),
+      wrap,
+      el('button', { class: 'btn btn-sm', type: 'button', id: 'plan-add-item', onclick: () => { items.push(blankItem(items.at(-1)?.exerciseId || exercises[0]?.id)); renderItems(); } }, '+ Add exercise to plan'),
+      el('div', { class: 'sheet-actions' },
+        el('button', { class: 'btn', type: 'button', onclick: () => ctx.close(null) }, 'Cancel'),
+        el('button', { class: 'btn btn-primary', type: 'submit' }, 'Save plan')
+      )
+    );
+  }, { labelledBy: titleId });
+}
+
+function plansSection(rerender) {
+  const { plans } = state.getState();
+  const rows = plans.map((plan, i) => el('li', {},
+    el('div', { class: 'grow' },
+      el('strong', { text: plan.name }),
+      el('p', { class: 'small muted', style: 'margin:0', text: plan.items.map((it) => `${state.exerciseById(it.exerciseId)?.name || '?'} ${describeTarget(it)}`).join(' · ') || 'No exercises yet' })
+    ),
+    el('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Move plan ${plan.name} up`, disabled: i === 0, onclick: () => state.movePlan(plan.id, -1) }, '↑'),
+    el('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Move plan ${plan.name} down`, disabled: i === plans.length - 1, onclick: () => state.movePlan(plan.id, 1) }, '↓'),
+    el('button', {
+      class: 'btn btn-sm', type: 'button', 'aria-label': `Edit plan ${plan.name}`,
+      onclick: async () => { const next = await planSheet(plan); if (next) { await state.savePlan({ ...plan, ...next }); toast(`Saved ${next.name}.`); } }
+    }, 'Edit'),
+    el('button', {
+      class: 'btn btn-sm btn-ghost', type: 'button', 'aria-label': `Delete plan ${plan.name}`,
+      onclick: async () => {
+        const yes = await confirmSheet({ title: 'Delete plan?', message: `“${plan.name}” will be removed. Sessions already logged from it are kept.`, confirmLabel: 'Delete', danger: true });
+        if (yes) { await state.deletePlan(plan.id); toast('Plan deleted.'); }
+      }
+    }, '✕')
+  ));
+  return disclosure({
+    id: 'exercises-plans',
+    summary: `Plans (${plans.length})`,
+    expanded: state.isPanelExpanded('exercises', '__plans'),
+    onToggle: async (next) => { await state.setPanelExpanded('exercises', '__plans', next); rerender(); },
+    content: el('div', { class: 'stack' },
+      plans.length ? el('ul', { class: 'list', id: 'plan-list' }, ...rows) : el('p', { class: 'empty', text: 'No plans yet. Build one here, or use “Save as plan” on a finished session in the Diary.' }),
+      el('button', {
+        class: 'btn btn-block', type: 'button', id: 'new-plan',
+        onclick: async () => { const next = await planSheet(null); if (next) { await state.savePlan(next); toast(`Saved ${next.name}.`); } }
+      }, '+ New plan')
+    )
+  });
+}
+
 export function render(container) {
   containerRef = container || containerRef;
   if (!containerRef) return;
@@ -176,6 +297,8 @@ export function render(container) {
       }
     }, '+ Add exercise')
   ));
+
+  containerRef.append(el('div', { class: 'card' }, plansSection(rerender)));
 
   const listCard = el('div', { class: 'card' });
   const list = el('div', { id: 'exercise-list' });

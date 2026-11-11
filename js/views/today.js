@@ -12,6 +12,7 @@ import { pace } from '../summary.js';
 import * as store from '../store.js';
 import { todayISO } from '../store.js';
 import * as graphicView from '../graphic-view.js';
+import { planProgress, prefillFor, describeTarget } from '../plans.js';
 
 let listening = false;
 let restEndsAt = null;
@@ -413,7 +414,10 @@ function idleCard(s) {
   return el('div', { class: 'card stack' },
     el('h2', { text: 'Ready when you are' }),
     el('p', { class: 'muted', text: 'Start a session, then log sets by voice or by hand. Everything stays on this device.' }),
-    el('button', { class: 'btn btn-primary btn-lg btn-block', id: 'start-session', onclick: () => state.startSession() }, 'Start session'),
+    el('div', { class: 'row' },
+      el('button', { class: 'btn btn-primary btn-lg grow', id: 'start-session', onclick: () => state.startSession() }, 'Start session'),
+      s.plans.length ? el('button', { class: 'btn btn-lg grow', id: 'start-from-plan', type: 'button', onclick: startFromPlan }, 'Start from plan') : null
+    ),
     el('button', {
       class: 'btn btn-block', id: 'start-earlier-session', type: 'button',
       onclick: async () => { const d = await pickDate('Log an earlier session', 'Which day was it?'); if (d) await state.startSession(d); }
@@ -421,6 +425,81 @@ function idleCard(s) {
     el('button', { class: 'btn btn-block', id: 'log-run-idle', type: 'button', onclick: addRun }, '🏃 Log a run'),
     recent ? el('p', { class: 'small muted', text: `Last training day: ${recent.dateISO}` }) : null
   );
+}
+
+/* ---------- plan sessions ---------- */
+
+function startFromPlan() {
+  const titleId = 'confirm-sheet-title';
+  return openSheet('confirm-sheet', (ctx) => el('div', {},
+    el('h2', { id: titleId, text: 'Start from plan' }),
+    el('ul', { class: 'list' }, ...state.getState().plans.map((plan) => el('li', {},
+      el('button', {
+        class: 'btn btn-block', type: 'button', 'aria-label': `Start ${plan.name}`,
+        onclick: () => ctx.close(plan.id)
+      }, plan.name)
+    ))),
+    el('div', { class: 'sheet-actions' }, el('button', { class: 'btn', type: 'button', 'data-autofocus': '', onclick: () => ctx.close(null) }, 'Cancel'))
+  ), { labelledBy: titleId }).then((planId) => (planId ? state.startSession(null, planId) : null));
+}
+
+/** Tapping an item opens the normal confirm sheet, prefilled with its target. */
+async function logPlanItem(item) {
+  const result = await editSetsSheet({
+    title: 'Confirm sets',
+    exerciseId: item.exerciseId,
+    sets: prefillFor(item, { holdMode: modeOf(item.exerciseId) === 'hold' })
+  });
+  await commit(result);
+}
+
+function planCard(s) {
+  const plan = s.session.planId ? state.planById(s.session.planId) : null;
+  if (!plan) return null;
+  const progress = planProgress(plan, s.sessionSets, s.session.planMarks);
+  const nameOf = (id) => state.exerciseById(id)?.name || 'Unknown exercise';
+  return el('div', { class: 'card stack', id: 'plan-checklist' },
+    el('h2', { text: plan.name }),
+    el('ul', { class: 'list' }, ...progress.items.map((item) => el('li', { class: item.skipped ? 'muted' : '' },
+      el('button', {
+        class: 'btn btn-sm', type: 'button', 'aria-pressed': item.ticked ? 'true' : 'false',
+        'aria-label': `${nameOf(item.exerciseId)} done`,
+        onclick: () => state.setPlanMark(item.index, item.ticked ? 'open' : 'done')
+      }, item.ticked ? '✓' : '○'),
+      el('button', {
+        class: 'set-edit grow', type: 'button',
+        'aria-label': `Log ${nameOf(item.exerciseId)}: ${describeTarget(item)}, ${item.done} of ${item.target} sets done`,
+        onclick: () => logPlanItem(item)
+      },
+        el('strong', { text: nameOf(item.exerciseId) }), ' ',
+        el('span', { class: 'mono small', text: describeTarget(item) }),
+        item.note ? el('span', { class: 'small muted', text: ` — ${item.note}` }) : null
+      ),
+      el('span', { class: 'mono plan-count', text: item.skipped ? 'Skipped' : `${item.done} / ${item.target}` }),
+      el('button', {
+        class: 'btn btn-sm btn-ghost', type: 'button', 'aria-pressed': item.skipped ? 'true' : 'false',
+        'aria-label': `Skip ${nameOf(item.exerciseId)} this session`,
+        onclick: () => state.setPlanMark(item.index, item.skipped ? null : 'skipped')
+      }, 'Skip')
+    ))),
+    progress.extras.length ? el('div', { id: 'plan-extra' },
+      el('h3', { text: 'Extra' }),
+      el('p', { class: 'small', text: progress.extras.map(nameOf).join(', ') })
+    ) : null
+  );
+}
+
+/** After a plan session: offer to make the plan match what was done. A sheet,
+ *  default No — the plan changes only if asked to. */
+async function offerPlanUpdate(finished) {
+  if (!finished?.planId || !state.planById(finished.planId)) return;
+  const yes = await confirmSheet({
+    title: 'Update plan to what I did?',
+    message: 'The plan’s targets become this session’s set counts and top sets. Exercises you didn’t do keep their targets.',
+    confirmLabel: 'Update plan',
+    cancelLabel: 'No'
+  });
+  if (yes) { await state.updatePlanFromSession(finished.planId, finished.id); toast('Plan updated.'); }
 }
 
 /** A date, today or earlier — for a session logged after the fact. */
@@ -589,7 +668,11 @@ function finishCard() {
           message: `${s.sessionSets.length} set${s.sessionSets.length === 1 ? '' : 's'} logged. The session is saved to your diary.`,
           confirmLabel: 'End session'
         });
-        if (yes) { await state.endSession(); restEndsAt = null; toast('Session saved.'); store.requestPersistence(); maybeNudgeBackup(); }
+        if (!yes) return;
+        const finished = await state.endSession();
+        restEndsAt = null; toast('Session saved.'); store.requestPersistence();
+        await offerPlanUpdate(finished);
+        maybeNudgeBackup();
       }
     }, 'End session'),
     el('button', {
@@ -648,6 +731,7 @@ export function render(container) {
   containerRef.append(
     el('h2', { class: 'visually-hidden', text: 'Active session' }),
     activeCard(s),
+    ...[planCard(s)].filter(Boolean),
     setsCard(s),
     ...(runs ? [runs] : []),
     finishCard()

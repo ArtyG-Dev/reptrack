@@ -95,6 +95,31 @@ try {
   await page.click('#tab-settings');
   check('stage 1b: Settings states the storage protection', await page.waitForFunction(() => /protected|does not say/i.test(document.getElementById('persist-line')?.textContent || ''), null, { timeout: 8000 }).then(() => true, () => false));
 
+  // Stage 2: build a plan, start from it, log an item from the checklist, decline the update.
+  await page.click('#tab-today');
+  const endOpen = page.locator('#view-today button:has-text("End session")');
+  if (await endOpen.count()) { await endOpen.click(); await page.click('#confirm-sheet button:has-text("End session")'); await page.waitForSelector('#start-session'); }
+  await page.click('#tab-exercises');
+  if (await page.getAttribute('#exercises-plans-trigger', 'aria-expanded') !== 'true') await page.click('#exercises-plans-trigger');
+  await page.click('#new-plan');
+  await page.fill('#plan-name', 'Live check');
+  await page.selectOption('#plan-ex-0', { label: 'Bench Press' });
+  await page.fill('#plan-targetSets-0', '2');
+  await page.fill('#plan-targetWeight-0', '60');
+  await page.click('#confirm-sheet button:has-text("Save plan")');
+  check('stage 2: a plan saves and is listed', await page.waitForFunction(() => /Live check/.test(document.getElementById('plan-list')?.textContent || ''), null, { timeout: 8000 }).then(() => true, () => false));
+  await page.click('#tab-today');
+  await page.click('#start-from-plan');
+  await page.click('#confirm-sheet button[aria-label="Start Live check"]');
+  await page.click('#plan-checklist button[aria-label^="Log Bench Press"]');
+  check('stage 2: tapping an item prefills its target', await page.inputValue('#row-weight-1') === '60');
+  await page.click('#confirm-sheet button[type="submit"]');
+  check('stage 2: the item ticks at its target', await page.waitForSelector('#plan-checklist button[aria-label="Bench Press done"][aria-pressed="true"]', { timeout: 8000 }).then(() => true, () => false));
+  await page.click('#view-today button:has-text("End session")');
+  await page.click('#confirm-sheet button:has-text("End session")');
+  check('stage 2: "Update plan to what I did?" offered', await page.waitForSelector('#confirm-sheet h2:has-text("Update plan")', { timeout: 8000 }).then(() => true, () => false));
+  await page.click('#confirm-sheet button:has-text("No")');
+
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await context.close();
 } finally {

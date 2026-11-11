@@ -20,7 +20,7 @@ beforeEach(freshDatabase);
 
 test('opens with every store and index the app relies on', async () => {
   const handle = await db.openDB();
-  assert.deepEqual([...handle.objectStoreNames].sort(), ['exercises', 'runs', 'sessions', 'sets', 'settings']);
+  assert.deepEqual([...handle.objectStoreNames].sort(), ['exercises', 'plans', 'runs', 'sessions', 'sets', 'settings']);
   const tx = handle.transaction(['sets', 'sessions', 'runs'], 'readonly');
   assert.deepEqual([...tx.objectStore('sets').indexNames].sort(), ['by_exercise', 'by_session']);
   assert.deepEqual([...tx.objectStore('sessions').indexNames], ['by_date']);
@@ -278,7 +278,7 @@ test('a version-1 database migrates: existing sessions become gym, sets and runs
   });
 
   const handle = await db.openDB();
-  assert.equal(handle.version, 2);
+  assert.equal(handle.version, db.DB_VERSION, 'v1 runs every upgrade in turn, up to the current version');
   const [session] = await db.getAll('sessions');
   assert.equal(session.sessionType, 'gym');
   assert.equal(session.attendance, null);
@@ -307,4 +307,75 @@ test('the Fractal colours travel in the JSON export and come back on import', as
   assert.deepEqual((await db.getSettings()).fractalColour, { hue: 2.5, warmth: -0.4 });
   await db.wipeAll();
   assert.deepEqual((await db.getSettings()).fractalColour, { hue: 0, warmth: 0 }, 'and default to the theme’s own');
+});
+
+/* ---------- Stage 2: plans (DB v3, backup schema 2) ---------- */
+
+test('the database is version 3 and has a plans store', async () => {
+  const handle = await db.openDB();
+  assert.equal(db.DB_VERSION, 3);
+  assert.equal(handle.version, 3);
+  assert.ok(handle.objectStoreNames.contains('plans'));
+});
+
+test('a version-2 database upgrades to 3: plans appear, everything else is untouched', async () => {
+  db._resetConnection();
+  await new Promise((resolve, reject) => {
+    const req = indexedDB.open(db.DB_NAME, 2);
+    req.onupgradeneeded = () => {
+      const h = req.result;
+      h.createObjectStore('exercises', { keyPath: 'id' }).createIndex('by_name', 'name');
+      h.createObjectStore('sessions', { keyPath: 'id' }).createIndex('by_date', 'dateISO');
+      const sets = h.createObjectStore('sets', { keyPath: 'id' });
+      sets.createIndex('by_session', 'sessionId');
+      sets.createIndex('by_exercise', 'exerciseId');
+      h.createObjectStore('runs', { keyPath: 'id' }).createIndex('by_date', 'dateISO');
+      h.createObjectStore('settings', { keyPath: 'key' });
+      req.transaction.objectStore('sessions').put({ id: 's2', dateISO: '2026-01-01', startTs: 1, sessionType: 'gym', visibility: 'private', lastModified: 1 });
+    };
+    req.onsuccess = () => { req.result.close(); resolve(); };
+    req.onerror = () => reject(req.error);
+  });
+  const handle = await db.openDB();
+  assert.equal(handle.version, 3);
+  assert.ok(handle.objectStoreNames.contains('plans'));
+  assert.equal((await db.getAll('sessions'))[0].id, 's2');
+  assert.deepEqual(await db.listPlans(), []);
+});
+
+test('plans: create, read, update, delete — with UUID, lastModified and private visibility', async () => {
+  const plan = await db.savePlan(db.makePlan({ name: 'Push', items: [{ exerciseId: 'ex_bench', targetSets: 3, targetReps: 8, targetWeight: 60, unit: 'kg', targetHoldSec: null, note: '' }] }));
+  assert.match(plan.id, /^plan_/);
+  assert.equal(plan.visibility, 'private');
+  assert.ok(plan.lastModified > 0);
+  assert.equal((await db.listPlans())[0].items[0].targetReps, 8);
+  await db.savePlan({ ...plan, name: 'Push day' });
+  assert.equal((await db.listPlans())[0].name, 'Push day');
+  await db.deletePlan(plan.id);
+  assert.deepEqual(await db.listPlans(), []);
+});
+
+test('backups are schema 2 and carry plans; a schema-1 backup (no plans) still imports', async () => {
+  await db.savePlan(db.makePlan({ name: 'Legs', items: [] }));
+  const backup = await db.exportAll();
+  assert.equal(backup.schemaVersion, 2);
+  assert.equal(backup.plans.length, 1);
+
+  await db.wipeAll();
+  await db.importAll(backup);
+  assert.equal((await db.listPlans())[0].name, 'Legs', 'schema 2 round-trips its plans');
+
+  const old = { ...backup, schemaVersion: 1 };
+  delete old.plans;
+  assert.ok(db.validateBackup(old).ok, 'schema 1 is still accepted');
+  await db.importAll(old);
+  assert.deepEqual(await db.listPlans(), [], 'a missing plans array is treated as empty');
+  assert.equal(db.validateBackup({ ...backup, schemaVersion: 3 }).ok, false, 'a newer schema is refused');
+});
+
+test('a session records the plan it was started from (planId, null otherwise)', async () => {
+  const plain = await db.startSession({});
+  assert.equal(plain.planId, null);
+  const planned = await db.startSession({ planId: 'plan_x' });
+  assert.equal(planned.planId, 'plan_x');
 });

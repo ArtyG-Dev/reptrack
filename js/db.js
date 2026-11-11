@@ -39,15 +39,16 @@
  */
 
 export const DB_NAME = 'reptrack';
-export const DB_VERSION = 2;
-export const SCHEMA_VERSION = 1;
+export const DB_VERSION = 3;
+export const SCHEMA_VERSION = 2;          // 2 adds `plans`; schema 1 backups are still accepted
 
 export const STORES = Object.freeze({
   exercises: 'exercises',
   sessions: 'sessions',
   sets: 'sets',
   runs: 'runs',
-  settings: 'settings'
+  settings: 'settings',
+  plans: 'plans'
 });
 
 /** Default sharing state for anything the user records. Phase 3 flips this on. */
@@ -141,6 +142,10 @@ export function openDB() {
           cursor.update(withSessionDefaults(cursor.value));
           cursor.continue();
         };
+      }
+      if (event.oldVersion < 3) {
+        // v3: session plans. A new store only — nothing existing changes.
+        db.createObjectStore(STORES.plans, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => {
@@ -316,8 +321,12 @@ export function withSessionDefaults(session) {
   };
 }
 
-export function makeSession({ dateISO = todayISO(), startTs = Date.now(), notes = '' } = {}) {
-  return withSessionDefaults({ id: uid('ses'), dateISO, startTs, endTs: null, durationSec: 0, notes, lastModified: Date.now(), visibility: PRIVATE });
+/** `planId` records the plan a session was started from (null otherwise);
+ *  `planMarks` holds the user's own ticks for it — { [itemIndex]: 'done' |
+ *  'open' | 'skipped' } — for this session only. Both additive: older
+ *  sessions simply lack them, which reads as "no plan". */
+export function makeSession({ dateISO = todayISO(), startTs = Date.now(), notes = '', planId = null } = {}) {
+  return withSessionDefaults({ id: uid('ses'), dateISO, startTs, endTs: null, durationSec: 0, notes, planId, planMarks: {}, lastModified: Date.now(), visibility: PRIVATE });
 }
 
 export async function startSession(input) {
@@ -441,15 +450,37 @@ export async function runsForDate(dateISO) {
   return getAllByIndex(STORES.runs, 'by_date', dateISO);
 }
 
+/* ---------- plans ---------- */
+
+/** Plan { id, name, order, items: [{ exerciseId, targetSets, targetReps,
+ *  targetWeight, unit, targetHoldSec, note }], lastModified, visibility } */
+export function makePlan({ name = 'New plan', items = [], order = Date.now() } = {}) {
+  return { id: uid('plan'), name, order, items, lastModified: Date.now(), visibility: PRIVATE };
+}
+
+export async function listPlans() {
+  const plans = await getAll(STORES.plans);
+  return plans.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+export async function savePlan(plan) {
+  return put(STORES.plans, plan);
+}
+
+export async function deletePlan(planId) {
+  return del(STORES.plans, planId);
+}
+
 /* ---------- export / import ---------- */
 
 export async function exportAll() {
-  const [exercises, sessions, sets, runs, settings] = await Promise.all([
+  const [exercises, sessions, sets, runs, settings, plans] = await Promise.all([
     getAll(STORES.exercises),
     getAll(STORES.sessions),
     getAll(STORES.sets),
     getAll(STORES.runs),
-    getAll(STORES.settings)
+    getAll(STORES.settings),
+    getAll(STORES.plans)
   ]);
   return {
     app: 'reptrack',
@@ -459,7 +490,8 @@ export async function exportAll() {
     sessions,
     sets,
     runs,
-    settings
+    settings,
+    plans
   };
 }
 
@@ -492,6 +524,7 @@ export async function importAll(data, { mode = 'replace' } = {}) {
   await putMany(STORES.sets, data.sets);
   if (Array.isArray(data.runs)) await putMany(STORES.runs, data.runs);
   if (Array.isArray(data.settings)) await putMany(STORES.settings, data.settings);
+  if (Array.isArray(data.plans)) await putMany(STORES.plans, data.plans);     // schema 1 has none
 
   return {
     exercises: data.exercises.length,

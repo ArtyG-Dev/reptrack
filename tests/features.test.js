@@ -420,4 +420,143 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
     await waitSets(page, (s) => s[1].isWarmup === false && s[1].isPR === true);
     await context.close();
   });
+
+  /* ---------- Stage 2: plans ---------- */
+
+  const plans = (page) => page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('reptrack');
+    req.onsuccess = () => { const g = req.result.transaction('plans').objectStore('plans').getAll(); g.onsuccess = () => resolve(g.result.sort((a, b) => a.order - b.order)); };
+  }));
+  const waitPlans = (page, predicate) => page.waitForFunction((src) => new Promise((resolve) => {
+    const req = indexedDB.open('reptrack');
+    req.onsuccess = () => { const g = req.result.transaction('plans').objectStore('plans').getAll(); g.onsuccess = () => resolve(new Function('p', `return (${src})(p)`)(g.result.sort((a, b) => a.order - b.order))); };
+  }), predicate.toString(), { timeout: 5000, polling: 50 });
+
+  async function buildPlan(page, name, items) {
+    await page.click('#tab-exercises');
+    const toggle = page.locator('#exercises-plans-trigger');
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+    await page.click('#new-plan');
+    await page.fill('#plan-name', name);
+    for (const [i, item] of items.entries()) {
+      if (i > 0) await page.click('#plan-add-item');
+      await page.selectOption(`#plan-ex-${i}`, { label: item.exercise });
+      for (const [key, value] of Object.entries(item)) if (key !== 'exercise') await page.fill(`#plan-${key}-${i}`, String(value));
+    }
+    await page.click('#confirm-sheet button:has-text("Save plan")');
+    await page.waitForSelector('#confirm-sheet', { state: 'hidden' });
+  }
+
+  test('plans: create, edit, reorder and delete in the Exercises tab', async () => {
+    const { context, page, errors } = await fresh();
+    await buildPlan(page, 'Push', [{ exercise: 'Bench Press', targetSets: 3, targetReps: 8, targetWeight: 60 }]);
+    await buildPlan(page, 'Legs', [{ exercise: 'Back Squat', targetSets: 3, targetReps: 5, targetWeight: 100 }, { exercise: 'Plank', targetSets: 2, targetHoldSec: 45 }]);
+    let saved = await waitPlans(page, (p) => p.length === 2).then(() => plans(page));
+    assert.deepEqual(saved.map((p) => p.name), ['Push', 'Legs']);
+    assert.deepEqual(saved[1].items.map((i) => [i.targetSets, i.targetReps, i.targetWeight, i.targetHoldSec]), [[3, 5, 100, null], [2, null, null, 45]]);
+    assert.match(await page.textContent('#plan-list'), /Squat 3 × 5 @ 100 kg · Plank 2 × 45 s/);
+
+    await page.click('button[aria-label="Move plan Legs up"]');
+    await waitPlans(page, (p) => p[0].name === 'Legs');
+
+    await page.click('button[aria-label="Edit plan Push"]');
+    await page.fill('#plan-name', 'Push day');
+    await page.click('button[aria-label="Remove Bench Press from the plan"]');
+    await page.click('#plan-add-item');
+    await page.selectOption('#plan-ex-0', { label: 'Overhead Press' });
+    await page.click('#confirm-sheet button:has-text("Save plan")');
+    await waitPlans(page, (p) => p[1].name === 'Push day' && p[1].items.length === 1);
+
+    await page.click('button[aria-label="Delete plan Legs"]');
+    await page.click('#confirm-sheet button:has-text("Delete")');
+    saved = await waitPlans(page, (p) => p.length === 1).then(() => plans(page));
+    assert.equal(saved[0].name, 'Push day');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  test('a plan session: prefilled items tick at target, voice counts, extras listed, tick/skip by hand, update offered', async () => {
+    const { context, page, errors } = await fresh();
+    await buildPlan(page, 'Push', [
+      { exercise: 'Bench Press', targetSets: 2, targetReps: 8, targetWeight: 60 },
+      { exercise: 'Overhead Press', targetSets: 2, targetReps: 6, targetWeight: 40 },
+      { exercise: 'Back Squat', targetSets: 1, targetReps: 5, targetWeight: 100 }
+    ]);
+    await page.click('#tab-today');
+    await page.click('#start-from-plan');
+    await page.click('#confirm-sheet button[aria-label="Start Push"]');
+    await page.waitForSelector('#plan-checklist');
+
+    // Tapping an item opens the confirm sheet prefilled — nothing saved yet.
+    await page.click('#plan-checklist button[aria-label^="Log Bench Press"]');
+    assert.equal(await page.inputValue('#row-weight-0'), '60');
+    assert.equal(await page.inputValue('#row-reps-1'), '8');
+    assert.equal((await sets(page)).length, 0, 'nothing commits without confirmation');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await waitSets(page, (s) => s.length === 2);
+    await page.waitForSelector('#plan-checklist button[aria-label="Bench Press done"][aria-pressed="true"]');
+    assert.match(await page.textContent('#plan-checklist'), /2 \/ 2/);
+
+    // Voice counts toward the matching item; something unplanned is Extra.
+    await logPhrase(page, 'overhead press 40 kilos for 6');
+    await page.waitForFunction(() => /1 \/ 2/.test(document.getElementById('plan-checklist')?.textContent || ''));
+    await logPhrase(page, 'deadlift 140 kilos for 3');
+    await page.waitForSelector('#plan-extra');
+    assert.match(await page.textContent('#plan-extra'), /Deadlift/);
+
+    // The user's own word: tick an unfinished item, untick, skip.
+    await page.click('#plan-checklist button[aria-label="Overhead Press done"]');
+    await page.waitForSelector('#plan-checklist button[aria-label="Overhead Press done"][aria-pressed="true"]');
+    await page.click('#plan-checklist button[aria-label="Bench Press done"]');
+    await page.waitForSelector('#plan-checklist button[aria-label="Bench Press done"][aria-pressed="false"]');
+    await page.click('#plan-checklist button[aria-label="Skip Back Squat this session"]');
+    await page.waitForFunction(() => /Skipped/.test(document.getElementById('plan-checklist')?.textContent || ''));
+
+    // Finishing offers the update — a sheet, with No focused by default.
+    await page.click('#view-today button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("End session")');
+    await page.waitForSelector('#confirm-sheet h2:has-text("Update plan to what I did?")');
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'No');
+    await page.click('#confirm-sheet button:has-text("Update plan")');
+    await waitPlans(page, (p) => p[0].items[1].targetSets === 1);
+    const [plan] = await plans(page);
+    assert.deepEqual(plan.items.map((i) => [i.targetSets, i.targetWeight]), [[2, 60], [1, 40], [1, 100]], 'squat, not done, keeps its target');
+    const session = await page.evaluate(() => new Promise((resolve) => {
+      const req = indexedDB.open('reptrack');
+      req.onsuccess = () => { const g = req.result.transaction('sessions').objectStore('sessions').getAll(); g.onsuccess = () => resolve(g.result[0]); };
+    }));
+    assert.equal(session.planId, plan.id);
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  test('"No" to the update leaves the plan alone; "Save as plan" builds one from a finished session', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-session');
+    await logPhrase(page, 'squat 100 kilos for 5');
+    await logPhrase(page, 'squat 110 kilos for 3');
+    await logPhrase(page, 'plank 45 seconds');
+    await page.click('#view-today button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("End session")');
+    await page.click('#tab-diary');
+    await page.click('#view-diary [aria-label="Calendar scope"] button:has-text("Day")');
+    await page.click('#view-diary button:has-text("Save as plan")');
+    await page.fill('#prompt-input', 'Leg day');
+    await page.click('#prompt-sheet button[type="submit"]');
+    await waitPlans(page, (p) => p.length === 1);
+    const [plan] = await plans(page);
+    assert.equal(plan.name, 'Leg day');
+    assert.deepEqual(plan.items.map((i) => [i.targetSets, i.targetReps, i.targetWeight, i.targetHoldSec]), [[2, 3, 110, null], [1, null, null, 45]]);
+
+    await page.click('#tab-today');
+    await page.click('#start-from-plan');
+    await page.click('#confirm-sheet button[aria-label="Start Leg day"]');
+    await logPhrase(page, 'squat 120 kilos for 2');
+    await page.click('#view-today button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("No")');
+    await page.waitForSelector('#confirm-sheet', { state: 'hidden' });
+    assert.deepEqual((await plans(page))[0].items, plan.items);
+    await context.close();
+  });
 });

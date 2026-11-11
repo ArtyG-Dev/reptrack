@@ -7,6 +7,7 @@ import { SEED_EXERCISES } from './exercises-seed.js';
 import { isPersonalRecord, recordScore } from './progression.js';
 import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
 import { activityVisualState, frostedDates } from './consistency.js';
+import { itemsFromSets, updatedItems } from './plans.js';
 
 const state = {
   ready: false,
@@ -15,6 +16,7 @@ const state = {
   allSets: [],
   allSessions: [],
   runs: [],
+  plans: [],
   session: null,
   sessionSets: [],
   currentExerciseId: null,
@@ -104,6 +106,7 @@ async function reloadRecords() {
   state.allSets = await store.allSets();
   state.allSessions = await store.listSessions();
   state.runs = await store.listRuns();
+  state.plans = await store.listPlans();
   state.session = await store.activeSession();
   state.sessionSets = state.session ? await store.setsForSession(state.session.id) : [];
   state.lastSet = state.sessionSets.length ? withExercise(state.sessionSets.at(-1)) : null;
@@ -121,9 +124,9 @@ export async function reloadAll() {
 
 /** Starts a session — today by default, or on an earlier date for a session
  *  logged after the fact. */
-export async function startSession(dateISO = null) {
+export async function startSession(dateISO = null, planId = null) {
   if (state.session) return state.session;
-  state.session = await store.startSession(dateISO ? { dateISO } : {});
+  state.session = await store.startSession({ ...(dateISO ? { dateISO } : {}), planId });
   state.allSessions = [state.session, ...state.allSessions];
   state.sessionSets = [];
   state.lastSet = null;
@@ -193,6 +196,68 @@ export async function setSessionNotes(notes) {
   state.allSessions = state.allSessions.map((s) => (s.id === state.session.id ? state.session : s));
   emit();
   return state.session;
+}
+
+/* ---------- plans ---------- */
+
+export function planById(planId) {
+  return state.plans.find((p) => p.id === planId) || null;
+}
+
+/** Creates or updates a plan (a plan without an id is new). */
+export async function savePlan(plan) {
+  const record = plan.id ? { ...plan } : store.makePlan(plan);
+  await store.savePlan(record);
+  state.plans = (await store.listPlans());
+  emit();
+  return record;
+}
+
+export async function deletePlan(planId) {
+  await store.deletePlan(planId);
+  state.plans = state.plans.filter((p) => p.id !== planId);
+  emit();
+}
+
+/** Moves a plan up (−1) or down (+1) the list by swapping order values. */
+export async function movePlan(planId, direction) {
+  const list = [...state.plans];
+  const i = list.findIndex((p) => p.id === planId);
+  const j = i + direction;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  const a = { ...list[i], order: list[j].order ?? j };
+  const b = { ...list[j], order: list[i].order ?? i };
+  if (a.order === b.order) b.order = a.order + direction * -1;
+  await store.savePlan(a);
+  await store.savePlan(b);
+  state.plans = await store.listPlans();
+  emit();
+}
+
+/** "Save as plan": a plan built from a session's exercises and top sets. */
+export async function planFromSession(sessionId, name) {
+  const sets = state.allSets.filter((x) => x.sessionId === sessionId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  return savePlan({ name, items: itemsFromSets(sets) });
+}
+
+/** "Update plan to what I did". */
+export async function updatePlanFromSession(planId, sessionId) {
+  const plan = planById(planId);
+  if (!plan) return null;
+  const sets = state.allSets.filter((x) => x.sessionId === sessionId);
+  return savePlan({ ...plan, items: updatedItems(plan, sets) });
+}
+
+/** The user's own tick / untick / skip on a plan item, for this session only. */
+export async function setPlanMark(index, mark) {
+  if (!state.session) return;
+  const planMarks = { ...(state.session.planMarks || {}) };
+  if (mark == null) delete planMarks[index];
+  else planMarks[index] = mark;
+  state.session = { ...state.session, planMarks };
+  await store.saveSession(state.session);
+  state.allSessions = state.allSessions.map((x) => (x.id === state.session.id ? state.session : x));
+  emit();
 }
 
 /* ---------- sets ---------- */

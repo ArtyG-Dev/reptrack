@@ -60,6 +60,7 @@ js/
   theme-engine.js       intensity driver, flash limiter, lightning scheduling, rotation cap (pure)
   graphic-view.js       the full-screen graphic view (View button on Today)
   reminders.js          when to show the backup reminder (pure)
+  plans.js              plan checklist progress, prefill, plan-from-session, update-to-what-I-did (pure)
   wake.js               the session screen wake lock
   chart.js              hand-rolled SVG line chart; computeChart() is pure geometry
   ui.js                 element builder, toasts, <dialog> sheets, disclosure, share/download
@@ -83,15 +84,17 @@ out of the app — every colour it draws comes from CSS custom properties.
 
 ---
 
-## Data model (IndexedDB `reptrack`, version 2)
+## Data model (IndexedDB `reptrack`, version 3)
 
 ```
 Exercise  { id, name, aliases[], muscleGroup, category, mode, isCustom, isBodyweight, restSec }
 Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility,
-            sessionType, className, instructor, location, attendance }
+            sessionType, className, instructor, location, attendance, planId, planMarks }
 SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
             holdSeconds, side, isPR, isWarmup, lastModified, visibility }
 Run       { id, dateISO, distance, distanceUnit, durationSec, notes, lastModified, visibility }
+Plan      { id, name, order, items: [{ exerciseId, targetSets, targetReps, targetWeight, unit,
+            targetHoldSec, note }], lastModified, visibility }
 Settings  { key, value }   // includes theme, panelState and the skin controls (see below)
 ```
 
@@ -99,6 +102,17 @@ Indexes: `sessions.by_date`, `sets.by_session`, `sets.by_exercise`, `runs.by_dat
 `exercises.by_name`.
 
 Details that look redundant and are not:
+
+- **Plans** (version 3, backup `SCHEMA_VERSION` 2). A plan is a named, ordered list of
+  exercises with targets; a hold-mode item uses `targetHoldSec` and leaves reps/weight
+  `null`, a reps item the reverse. `Session.planId` (nullable) records which plan a session
+  was started from; `Session.planMarks` (`{ [itemIndex]: 'done' | 'open' | 'skipped' }`) is
+  the user's own tick/untick/skip for that session, which beats the counted sets. All the
+  deciding — what's ticked, what's Extra, what a plan built from a session looks like —
+  is in `js/plans.js` (`planProgress()`), covered by `tests/plans.test.js`; warm-ups never
+  count toward an item. A schema-1 backup (no `plans` array) still imports, as empty plans.
+  Deleting a plan leaves sessions that used it untouched; their checklist simply stops
+  showing.
 
 - **`dateISO` on a set** is denormalised from its session so per-exercise history reads
   without joining every session. Keep it in sync when a session's date changes.

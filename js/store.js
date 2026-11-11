@@ -60,6 +60,11 @@ export const listRuns = db.listRuns;
 export const runsForDate = db.runsForDate;
 
 /* backup */
+export const makePlan = db.makePlan;
+export const listPlans = db.listPlans;
+export const savePlan = db.savePlan;
+export const deletePlan = db.deletePlan;
+
 export const exportAll = db.exportAll;
 export const importAll = db.importAll;
 export const validateBackup = db.validateBackup;

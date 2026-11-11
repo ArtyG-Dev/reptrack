@@ -1424,3 +1424,27 @@ spoken warm-up pre-ticks the box beside the RPE field, an open session can chang
 Settings states the storage protection, and no console errors. Two checks first failed
 because the *script* read the page before an asynchronous re-render; both now wait for the
 element. The app was right both times.
+
+### 94. Stage 2: plans
+
+A plan is a named, ordered list of exercises with targets (`plans` store, DB version 3;
+backup `SCHEMA_VERSION` 2, and a schema-1 backup with no plans still imports as empty).
+The version-3 upgrade only creates the store, so nothing already stored is touched.
+
+- **Counting is pure** (`js/plans.js`, `tests/plans.test.js`). Logged working sets count
+  toward the item with the same exercise; an exercise planned twice fills its items in
+  order; anything unplanned, or done past every target, is Extra. Warm-ups never count.
+- **The user's word beats the count.** Tick, untick and Skip are stored per session in
+  `Session.planMarks` keyed by item index, so the plan itself is never edited by a session.
+  A known edge: reordering a plan's items mid-session moves the marks to whatever item now
+  sits at that index. Reordering mid-session is rare and the counted sets are unaffected,
+  so a stable item id was not worth adding.
+- **Nothing commits without confirmation.** Tapping an item opens the normal set sheet
+  prefilled with the target, one row per set still to do. Voice logging needs no plan
+  awareness at all: it logs a set as before, and the checklist counts it.
+- **"Update plan to what I did?"** is a sheet with No focused, so dismissing it changes
+  nothing. Yes takes each done item's set count and top set; items not done keep theirs.
+  "Save as plan" in the Diary builds a plan from a finished session the same way.
+- **Hold items** store `targetHoldSec` and null reps/weight; reps items the reverse, so a
+  plan can't carry a stale field from an exercise that was changed in the editor.
+

@@ -4,7 +4,7 @@
 
 import * as state from '../state.js';
 import { editSet } from './today.js';
-import { el, clear, toast, confirmSheet, shareOrDownloadText, MONTHS, DOW, monthLabel, longDate, humanDate, parseISO, clockTime } from '../ui.js';
+import { el, clear, toast, confirmSheet, promptSheet, shareOrDownloadText, MONTHS, DOW, monthLabel, longDate, humanDate, parseISO, clockTime } from '../ui.js';
 import { describeSet } from '../parser.js';
 import { formatDuration, totalVolume, formatVolumeLine } from '../progression.js';
 import { weekRange, weekLabel, pace } from '../summary.js';
@@ -242,6 +242,15 @@ function dayView(rerender) {
         )))
       )),
       session.notes ? el('p', { class: 'small', text: session.notes }) : null,
+      session.endTs && sets.length ? el('button', {
+        class: 'btn btn-sm', type: 'button', 'aria-label': `Save the session on ${longDate(session.dateISO)} as a plan`,
+        onclick: async () => {
+          const name = await promptSheet({ title: 'Save as plan', label: 'Plan name', value: `Plan from ${session.dateISO}`, confirmLabel: 'Save plan' });
+          if (!name) return;
+          await state.planFromSession(session.id, name);
+          toast(`Saved ${name}. Find it under Exercises → Plans.`);
+        }
+      }, 'Save as plan') : null,
       el('button', {
         class: 'btn btn-sm btn-danger', type: 'button',
         onclick: async () => {

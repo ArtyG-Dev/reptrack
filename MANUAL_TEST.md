@@ -150,6 +150,18 @@ Also worth a quick look while you're in there:
 - **Warm-ups:** say "warm up bench press 40 for 10". The set is badged Warm-up and never
   becomes a PR, however heavy.
 
+## Check 5: a plan session (about 3 minutes)
+
+- **Exercises → Plans → + New plan:** two exercises, e.g. Bench Press 2 × 8 @ 60 and
+  Overhead Press 2 × 6 @ 40. Save.
+- **Today → Start from plan:** tap Bench Press in the checklist. The sheet opens with two
+  rows of 60 × 8; save them. The item ticks and reads "2 / 2".
+- **Say a planned set** ("overhead press 40 for 6") — it counts, "1 / 2". **Say an
+  unplanned one** ("deadlift 100 for 5") — it appears under Extra.
+- **Edit a set** in the list (tap it), change the reps, Save — the count still follows.
+- **End session:** "Update plan to what I did?" appears with No highlighted. Either answer
+  is fine; No must leave the plan as it was.
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.

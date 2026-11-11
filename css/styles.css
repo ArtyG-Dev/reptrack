@@ -597,6 +597,8 @@ textarea { min-height: 84px; resize: vertical; }
   border-radius: var(--radius-sm);
 }
 .set-edit:hover { text-decoration: underline; }
+/* .btn sets display, which would otherwise beat the hidden attribute. */
+.btn[hidden] { display: none; }
 .toast-action { margin-left: 8px; }
 
 /* ---------- frosted glass skins ---------- */

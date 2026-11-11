@@ -41,16 +41,22 @@ export function roundToIncrement(value, unit = 'kg') {
  * everything else scores by estimated 1RM.
  */
 export function recordScore(entry) {
-  if (!entry) return 0;
+  if (!entry || entry.isWarmup) return 0;          // a warm-up is never a record or a top set
   if (entry.holdSeconds != null) return Number(entry.holdSeconds) || 0;
   return estimate1RM(entry.weight, entry.reps, entry.unit);
+}
+
+/** Warm-up sets are logged and shown, but count toward nothing: no PRs, no
+ *  top set, no volume, no nudge (and, from Stage 3, no muscle totals). */
+export function workingSets(sets = []) {
+  return sets.filter((s) => !s.isWarmup);
 }
 
 /** The single hardest set in a list, by recordScore. */
 export function bestSet(sets = []) {
   let best = null;
   let bestScore = -1;
-  for (const s of sets) {
+  for (const s of workingSets(sets)) {
     const score = recordScore(s);
     if (score > bestScore) { bestScore = score; best = s; }
   }
@@ -64,6 +70,7 @@ export function bestSet(sets = []) {
  * @returns {Array<{dateISO, topWeightKg, topWeight, unit, reps, e1rm, holdSeconds, sets, isPR}>}
  */
 export function buildSeries(sets = [], displayUnit = 'kg') {
+  sets = workingSets(sets);
   const byDate = new Map();
   for (const s of sets) {
     if (!s?.dateISO) continue;
@@ -125,6 +132,7 @@ export function markPRs(sets = []) {
  * since "add more weight" isn't the right nudge for a timed pose.
  */
 export function suggestProgression(sets = [], { unit = 'kg', stepKg = 2.5, stepLb = 5 } = {}) {
+  sets = workingSets(sets);
   if (!sets.length) return null;
 
   const series = buildSeries(sets, unit);
@@ -154,6 +162,7 @@ export function suggestProgression(sets = [], { unit = 'kg', stepKg = 2.5, stepL
 
 /** Total volume (weight × reps) in the display unit. Hold-mode sets contribute 0. */
 export function totalVolume(sets = [], displayUnit = 'kg') {
+  sets = workingSets(sets);
   const kg = sets.reduce((sum, s) => sum + toKg(s.weight, s.unit) * (Number(s.reps) || 0), 0);
   return fromKg(kg, displayUnit);
 }

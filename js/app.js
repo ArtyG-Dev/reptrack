@@ -1,6 +1,7 @@
 /* App shell: boots state, wires the tab router, registers the service worker. */
 
 import * as state from './state.js';
+import * as store from './store.js';
 import * as backdrop from './backdrop.js';
 import * as wake from './wake.js';
 import { toast } from './ui.js';
@@ -141,6 +142,10 @@ async function boot() {
   }
 
   wireTheme();
+  // Everything lives on this device: ask the browser not to clear it under
+  // storage pressure. Asked once there is something worth keeping; Chrome on
+  // Android decides without a prompt (an installed app is granted).
+  if (state.getState().allSessions.length) store.requestPersistence();
   todayView.startTicker();
 
   // Keep the screen on while a session is running (if the setting allows).

@@ -79,6 +79,22 @@ try {
   await page.click('#tab-settings');
   check('stage 1: settings show the new controls', await page.$('#set-vibrate-rest') && await page.$('#set-keep-screen-on') && /back(ed )?up/i.test(await page.textContent('#last-backup')));
 
+  // Stage 1b: earlier sessions, RPE + warm-up fields, the storage line.
+  await page.click('#tab-today');
+  const endBtn = page.locator('#view-today button:has-text("End session")');
+  if (await endBtn.count()) { await endBtn.click(); await page.click('#confirm-sheet button:has-text("End session")'); }
+  check('stage 1b: "Log an earlier session" is offered', await page.$('#start-earlier-session'));
+  await page.click('#start-session');
+  await page.click('#mic-button');
+  await page.fill('#prompt-input', 'warm up bench press 40 kilos for 10');
+  await page.click('#prompt-sheet button[type="submit"]');
+  await page.waitForSelector('#row-rpe-0');
+  check('stage 1b: spoken warm-up pre-ticks the box, RPE field present', await page.isChecked('#row-warmup-0'));
+  await page.click('#confirm-sheet button:has-text("Cancel")');
+  check('stage 1b: an open session can change date', await page.$('#change-session-date'));
+  await page.click('#tab-settings');
+  check('stage 1b: Settings states the storage protection', /protected|does not say/i.test(await page.textContent('#persist-line')));
+
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await context.close();
 } finally {

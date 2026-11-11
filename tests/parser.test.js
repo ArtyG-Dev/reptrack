@@ -257,3 +257,18 @@ test('"make that 8" with nothing logged, or no number, says why', () => {
   const r = parseTranscript('make that', ctx({ lastSet: { id: 's', weight: 60, unit: 'kg', reps: 5, exercise: byName('Bench Press') } }));
   assert.equal(r.ok, false);
 });
+
+test('"warm-up" marks the sets as warm-ups, wherever it is said', () => {
+  for (const phrase of ['warm up bench press 40 kilos for 10', 'bench press 40 kilos for 10 warm-up', 'warmup set bench press 40 for 10']) {
+    const r = parseTranscript(phrase, ctx());
+    assert.equal(r.ok, true, phrase);
+    assert.equal(r.exercise.name, 'Bench Press', phrase);
+    assert.deepEqual(r.sets.map((x) => [x.weight, x.reps, x.isWarmup]), [[40, 10, true]], phrase);
+  }
+  assert.equal(parseTranscript('bench press 40 kilos for 10', ctx()).sets[0].isWarmup, undefined, 'otherwise unmarked');
+});
+
+test('RPE shows in a set description only when there is one', () => {
+  assert.equal(describeSet({ weight: 100, unit: 'kg', reps: 5, rpe: 8 }), '100 kg × 5 @ RPE 8');
+  assert.equal(describeSet({ weight: 100, unit: 'kg', reps: 5, rpe: null }), '100 kg × 5');
+});

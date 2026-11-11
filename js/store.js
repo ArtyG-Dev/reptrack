@@ -65,3 +65,5 @@ export const importAll = db.importAll;
 export const validateBackup = db.validateBackup;
 export const wipeAll = db.wipeAll;
 export const estimateUsage = db.estimateUsage;
+export const requestPersistence = db.requestPersistence;
+export const isPersisted = db.isPersisted;

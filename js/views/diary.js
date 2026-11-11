@@ -3,6 +3,7 @@
  */
 
 import * as state from '../state.js';
+import { editSet } from './today.js';
 import { el, clear, toast, confirmSheet, shareOrDownloadText, MONTHS, DOW, monthLabel, longDate, humanDate, parseISO, clockTime } from '../ui.js';
 import { describeSet } from '../parser.js';
 import { formatDuration, totalVolume, formatVolumeLine } from '../progression.js';
@@ -231,7 +232,12 @@ function dayView(rerender) {
         el('h4', { style: 'margin:8px 0 4px', text: state.exerciseById(group.exerciseId)?.name || 'Unknown exercise' }),
         el('ul', { class: 'list' }, ...group.sets.map((entry, i) => el('li', {},
           el('span', { class: 'set-index', text: String(i + 1) }),
-          el('span', { class: 'grow mono', text: describeSet(entry) }),
+          el('button', {
+            class: 'set-edit grow mono', type: 'button',
+            'aria-label': `Edit set ${i + 1} of ${state.exerciseById(entry.exerciseId)?.name || 'exercise'}: ${describeSet(entry)}`,
+            onclick: () => editSet(entry)
+          }, describeSet(entry)),
+          entry.isWarmup ? el('span', { class: 'badge', text: 'Warm-up' }) : null,
           entry.isPR ? el('span', { class: 'badge badge-pr', text: 'PR' }) : null
         )))
       )),

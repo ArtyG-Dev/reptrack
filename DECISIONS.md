@@ -1383,3 +1383,34 @@ GitHub's own API as the likely cause. Re-running the failed job then hit the opp
 problem: the first attempt's artifact had appeared late, leaving two. A fresh run of the
 workflow (`workflow_dispatch` on `main`) deployed cleanly. No code changed; nothing in the
 repo caused it.
+
+### 92. Stage 1b (added at the user's request): data safety, past sessions, RPE, warm-ups
+
+Five gaps found while reviewing the app, none of them in Stages 2–5. The user approved
+doing them before Stage 2.
+
+- **Persistent storage.** Everything lives on the phone, and without
+  `navigator.storage.persist()` the browser may clear an origin's data when the device runs
+  low on space. It is asked once there is something worth keeping: on boot if sessions
+  exist, and after finishing one. A fresh, empty install is never asked. Chrome on Android
+  decides without a prompt and grants installed apps. Settings states the result plainly
+  and offers "Ask the browser to keep my data" while it is not granted. Backups remain the
+  real safety net, and the copy says so.
+- **Earlier sessions.** "Log an earlier session" starts one on a chosen past date, and
+  "Change date" moves an open one. Future dates are refused. The sets' denormalised
+  `dateISO` moves with the session, and PRs are recomputed for every exercise in it,
+  because moving a heavy session earlier can strip a later set's PR. Both directions are
+  tested in the browser.
+- **Editing from the Diary.** The Day view's sets open the same editor as Today's, via the
+  exported `editSet()`, so finished sessions can be corrected.
+- **RPE** gets an optional 1–10 field in the sheet (it was parsed and stored but never
+  visible) and shows as "@ RPE 8" in set descriptions when present.
+- **Warm-up sets** (`SetEntry.isWarmup`) are logged and badged but count toward nothing. A
+  single `workingSets()` filter in `progression.js` and a 0 score from `recordScore()` keep
+  them out of PRs, top sets, chart points, volume and the nudge. This was done before
+  Stage 3 on purpose, so the muscle maths starts out excluding them rather than being
+  reworked later. The zero-audio test's documented-schema list gains `isWarmup`. That
+  extends the documented schema; the test's sweep and its "no unexpected fields" check are
+  unchanged.
+- **Found on the way:** `.btn` sets `display`, which beats the `hidden` attribute, so a
+  hidden button stayed visible. `.btn[hidden] { display: none }` fixes it for every button.

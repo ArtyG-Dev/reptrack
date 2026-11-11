@@ -168,3 +168,18 @@ test('the weight-progression nudge stays silent for a hold-mode series', () => {
 test('a hold contributes nothing to weight×reps volume', () => {
   assert.equal(totalVolume([hold('2026-01-01', 60), set('2026-01-01', 50, 10)]), 500);
 });
+
+test('warm-up sets count toward nothing: no PR, no top set, no volume, no nudge', async () => {
+  const { recordScore, bestSet, buildSeries, totalVolume, suggestProgression, isPersonalRecord } = await import('../js/progression.js');
+  const warm = { dateISO: '2026-01-02', order: 0, weight: 200, unit: 'kg', reps: 10, isWarmup: true };
+  const work = { dateISO: '2026-01-02', order: 1, weight: 100, unit: 'kg', reps: 5 };
+  assert.equal(recordScore(warm), 0);
+  assert.equal(isPersonalRecord(warm, []), false, 'a heavy warm-up is not a PR');
+  assert.equal(bestSet([warm, work]), work);
+  assert.equal(totalVolume([warm, work]), 500);
+  assert.equal(buildSeries([warm, work])[0].topWeight, 100);
+  assert.deepEqual(buildSeries([warm]), [], 'a warm-up-only day is not a point on the chart');
+  const day = (d) => [{ ...warm, dateISO: d }, { ...work, dateISO: d }];
+  assert.ok(suggestProgression([...day('2026-01-01'), ...day('2026-01-08')]), 'working sets still nudge');
+  assert.equal(suggestProgression([{ ...warm, dateISO: '2026-01-01' }, { ...warm, dateISO: '2026-01-08' }]), null);
+});

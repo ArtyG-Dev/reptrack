@@ -13,6 +13,21 @@ function bytesToMB(bytes) {
   return Math.round((bytes / (1024 * 1024)) * 100) / 100;
 }
 
+/** Whether the browser has promised not to clear RepTrack's data under
+ *  storage pressure. Everything lives on this device, so this matters. */
+async function showPersistence() {
+  const kept = await store.isPersisted();
+  const line = document.getElementById('persist-line');
+  const ask = document.getElementById('persist-request');
+  if (!line) return;
+  line.textContent = kept === true
+    ? 'Protected: this browser will keep your data even when the device is low on space.'
+    : kept === false
+      ? 'Not yet protected: if the device runs very low on space, the browser may clear site data. Exporting backups keeps you safe either way.'
+      : 'This browser does not say whether it will keep your data. Exporting backups keeps you safe.';
+  if (ask) ask.hidden = kept !== false;
+}
+
 function lastBackupText(at) {
   if (!at) return 'Never backed up';
   return `Last backup: ${new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
@@ -221,9 +236,15 @@ export function render(container) {
     el('p', { class: 'small muted', id: 'storage-line', text: storageInfo
       ? `Using ${bytesToMB(storageInfo.usage)} MB of an available ${bytesToMB(storageInfo.quota)} MB.`
       : 'Checking…' }),
-    el('p', { class: 'small muted', text: `${s.allSets.length} sets and ${s.exercises.length} exercises stored. No audio is ever written to storage.` })
+    el('p', { class: 'small muted', text: `${s.allSets.length} sets and ${s.exercises.length} exercises stored. No audio is ever written to storage.` }),
+    el('p', { class: 'small', id: 'persist-line', text: 'Checking whether this browser will keep your data…' }),
+    el('button', {
+      class: 'btn btn-block', id: 'persist-request', type: 'button', hidden: true,
+      onclick: async () => { await store.requestPersistence(); showPersistence(); }
+    }, 'Ask the browser to keep my data')
   );
   containerRef.append(storageCard);
+  showPersistence();
 
   store.estimateUsage().then((info) => {
     storageInfo = info;

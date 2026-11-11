@@ -9,6 +9,7 @@
  *   "deadlift 140 for 5"                 → unit falls back to the user setting
  *   "add another set"                    → repeat the last logged set
  *   "make that 8" / "change that to 8"   → amend the reps of the last logged set
+ *   "warm-up bench 40 for 10"            → any of the above, marked as warm-up sets
  *   "same as last time"                  → pull the previous session's entry
  *   "60 kilos 10, 65 for 8, 70 for 6"    → three sets against the current exercise
  *
@@ -341,6 +342,13 @@ export function parseTranscript(transcript, ctx = {}) {
 
   if (!normalized) return { ...base, error: 'Nothing was heard.' };
 
+  /* --- "warm-up" anywhere in the phrase: parse the rest, mark the sets --- */
+  const WARMUP = /\bwarm\s*-?\s*ups?\b(?:\s+sets?)?/i;
+  if (WARMUP.test(normalized) || WARMUP.test(raw)) {
+    const rest = parseTranscript(raw.replace(WARMUP, ' ').replace(/\s+/g, ' ').trim(), ctx);
+    return { ...rest, transcript: raw, sets: rest.sets.map((x) => ({ ...x, isWarmup: true })) };
+  }
+
   const tokens = normalized.split(' ');
 
   /* --- intent: amend the last set ("make that 8", "change that to 8") ---
@@ -495,7 +503,8 @@ export function describeSet(entry) {
     return entry.side ? `${text} (${entry.side})` : text;
   }
   const w = Number(entry.weight) === 0 ? 'bodyweight' : `${formatNumber(entry.weight)} ${entry.unit}`;
-  return `${w} × ${entry.reps}`;
+  const rpe = entry.rpe != null && entry.rpe !== '' ? ` @ RPE ${formatNumber(entry.rpe)}` : '';
+  return `${w} × ${entry.reps}${rpe}`;
 }
 
 export function formatNumber(n) {

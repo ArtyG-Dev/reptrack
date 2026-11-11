@@ -374,11 +374,11 @@ export async function deleteSession(sessionId) {
  */
 export function makeSet({
   sessionId, exerciseId, dateISO, order = 0, weight = 0, unit = 'kg', reps = 0, rpe = null,
-  holdSeconds = null, side = null, isPR = false
+  holdSeconds = null, side = null, isPR = false, isWarmup = false
 }) {
   return {
     id: uid('set'), sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
-    holdSeconds, side, isPR, lastModified: Date.now(), visibility: PRIVATE
+    holdSeconds, side, isPR, isWarmup: Boolean(isWarmup), lastModified: Date.now(), visibility: PRIVATE
   };
 }
 
@@ -503,6 +503,25 @@ export async function importAll(data, { mode = 'replace' } = {}) {
 
 export async function wipeAll() {
   for (const store of Object.values(STORES)) await clearStore(store);
+}
+
+/** Asks the browser to keep this origin's data even under storage pressure.
+ *  Chrome on Android decides without a prompt (an installed PWA is granted);
+ *  where the API is missing this reports `null` rather than pretending. */
+export async function requestPersistence() {
+  if (!navigator?.storage?.persist) return null;
+  try {
+    if (await navigator.storage.persisted?.()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
+/** true / false, or null where the browser cannot say. */
+export async function isPersisted() {
+  if (!navigator?.storage?.persisted) return null;
+  try { return await navigator.storage.persisted(); } catch { return null; }
 }
 
 /** Browser storage estimate in bytes, or null where the API is unavailable. */

@@ -139,6 +139,17 @@ Also worth a quick look while you're in there:
   time. With "Keep screen on during a session" on (the default), it should stay lit. End
   the session and it should time out as usual again.
 
+## Check 4: data safety and the past (about 2 minutes)
+
+- **Settings → Storage** should say "Protected" once you have logged a session (installed
+  apps are normally granted). If it says "Not yet protected", tap "Ask the browser to keep
+  my data", and export a backup either way.
+- **Log an earlier session:** on Today, "Log an earlier session", pick yesterday, log a set,
+  end it. The Diary should show it on yesterday, not today.
+- **Fix a past set:** Diary → Day → tap a set, change it, Save.
+- **Warm-ups:** say "warm up bench press 40 for 10". The set is badged Warm-up and never
+  becomes a PR, however heavy.
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.

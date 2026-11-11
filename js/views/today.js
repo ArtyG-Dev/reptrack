@@ -9,6 +9,7 @@ import { parseTranscript, describeSet, formatNumber } from '../parser.js';
 import { listenOnce, isSupported as voiceSupported, VoiceInputError } from '../voice.js';
 import { formatDuration, suggestProgression, totalVolume, formatVolumeLine } from '../progression.js';
 import { pace } from '../summary.js';
+import * as store from '../store.js';
 import { todayISO } from '../store.js';
 import * as graphicView from '../graphic-view.js';
 
@@ -68,7 +69,7 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
     let selectedId = exerciseId;
     let mode = modeOf(selectedId);
 
-    const makeRepsRow = (r = {}) => ({ weight: r.weight ?? '', unit: r.unit || s.settings.unit, reps: r.reps ?? '', rpe: r.rpe ?? null });
+    const makeRepsRow = (r = {}) => ({ weight: r.weight ?? '', unit: r.unit || s.settings.unit, reps: r.reps ?? '', rpe: r.rpe ?? null, isWarmup: Boolean(r.isWarmup) });
     const makeHoldRow = (r = {}) => ({ holdSeconds: r.holdSeconds ?? '', side: r.side ?? '' });
     const makeRow = (r = {}) => (mode === 'hold' ? makeHoldRow(r) : makeRepsRow(r));
 
@@ -133,6 +134,15 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
             id: `row-reps-${index}`, value: row.reps === '' ? '' : String(row.reps),
             oninput: (e) => { row.reps = e.target.value === '' ? '' : Number(e.target.value); }
           });
+          const rpeInput = el('input', {
+            type: 'number', step: '0.5', min: '1', max: '10', inputmode: 'decimal', placeholder: '—',
+            id: `row-rpe-${index}`, value: row.rpe == null ? '' : formatNumber(row.rpe),
+            oninput: (e) => { row.rpe = e.target.value === '' ? null : Number(e.target.value); }
+          });
+          const warmup = el('input', {
+            type: 'checkbox', id: `row-warmup-${index}`, style: 'width:auto;min-height:auto', checked: row.isWarmup,
+            onchange: (e) => { row.isWarmup = e.target.checked; }
+          });
           const unitSelect = el('select', { id: `row-unit-${index}`, 'aria-label': `Unit for set ${index + 1}`, onchange: (e) => { row.unit = e.target.value; } },
             el('option', { value: 'kg', selected: row.unit !== 'lb' }, 'kg'),
             el('option', { value: 'lb', selected: row.unit === 'lb' }, 'lb')
@@ -144,6 +154,9 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
             el('div', {}, el('label', { for: `row-unit-${index}`, text: 'Unit' }), unitSelect),
             el('div', {}, el('label', { for: `row-reps-${index}`, text: 'Reps' }), repsInput,
               nudger(repsInput, row, 'reps', () => 1, { min: 1, label: `Set ${index + 1} reps` })),
+            el('div', {}, el('label', { for: `row-rpe-${index}`, text: 'RPE (optional)' }), rpeInput),
+            el('div', { class: 'row', style: 'align-items:center' }, warmup,
+              el('label', { for: `row-warmup-${index}`, style: 'margin:0', text: 'Warm-up set' })),
             el('div', { class: 'row', style: 'align-items:flex-end' },
               el('button', {
                 class: 'btn btn-sm btn-ghost', type: 'button',
@@ -174,7 +187,11 @@ function editSetsSheet({ title, exerciseId, sets, transcript = '', warnings = []
         if (!cleaned.length) { toast('Add at least one hold with a duration.'); return; }
       } else {
         cleaned = rows
-          .map((r) => ({ weight: Number(r.weight) || 0, unit: r.unit || s.settings.unit, reps: Math.round(Number(r.reps) || 0), rpe: r.rpe ?? null }))
+          .map((r) => ({
+            weight: Number(r.weight) || 0, unit: r.unit || s.settings.unit, reps: Math.round(Number(r.reps) || 0),
+            rpe: r.rpe == null || r.rpe === '' || !Number.isFinite(Number(r.rpe)) ? null : Math.min(10, Math.max(1, Number(r.rpe))),
+            isWarmup: Boolean(r.isWarmup)
+          }))
           .filter((r) => r.reps > 0);
         if (!cleaned.length) { toast('Add at least one set with reps.'); return; }
       }
@@ -218,7 +235,7 @@ function restSecondsFor(exerciseId) {
 /** Reopens a logged set in the same sheet, prefilled; saving updates it (and
  *  recomputes PRs for its exercise). `proposed` lets "make that 8" prefill the
  *  change — it still has to be confirmed, like everything else. */
-async function editSet(entry, proposed = null, transcript = '') {
+export async function editSet(entry, proposed = null, transcript = '') {
   const result = await editSetsSheet({
     title: 'Edit set',
     exerciseId: entry.exerciseId,
@@ -397,17 +414,52 @@ function idleCard(s) {
     el('h2', { text: 'Ready when you are' }),
     el('p', { class: 'muted', text: 'Start a session, then log sets by voice or by hand. Everything stays on this device.' }),
     el('button', { class: 'btn btn-primary btn-lg btn-block', id: 'start-session', onclick: () => state.startSession() }, 'Start session'),
+    el('button', {
+      class: 'btn btn-block', id: 'start-earlier-session', type: 'button',
+      onclick: async () => { const d = await pickDate('Log an earlier session', 'Which day was it?'); if (d) await state.startSession(d); }
+    }, 'Log an earlier session'),
     el('button', { class: 'btn btn-block', id: 'log-run-idle', type: 'button', onclick: addRun }, '🏃 Log a run'),
     recent ? el('p', { class: 'small muted', text: `Last training day: ${recent.dateISO}` }) : null
   );
 }
 
+/** A date, today or earlier — for a session logged after the fact. */
+function pickDate(title, label, value = todayISO()) {
+  const titleId = 'confirm-sheet-title';
+  return openSheet('confirm-sheet', (ctx) => {
+    const input = el('input', { type: 'date', id: 'session-date', value, max: todayISO(), required: true, 'data-autofocus': '' });
+    return el('form', {
+      method: 'dialog',
+      onsubmit: (e) => {
+        e.preventDefault();
+        if (!input.value || input.value > todayISO()) { toast('Pick today or an earlier day.'); return; }
+        ctx.close(input.value);
+      }
+    },
+      el('h2', { id: titleId, text: title }),
+      el('div', { class: 'field' }, el('label', { for: 'session-date', text: label }), input),
+      el('div', { class: 'sheet-actions' },
+        el('button', { class: 'btn', type: 'button', onclick: () => ctx.close(null) }, 'Cancel'),
+        el('button', { class: 'btn btn-primary', type: 'submit' }, 'Use this date')
+      )
+    );
+  }, { labelledBy: titleId });
+}
+
 function activeCard(s) {
   const elapsed = formatDuration((Date.now() - s.session.startTs) / 1000);
+  const earlier = s.session.dateISO !== todayISO();
   return el('div', { class: 'card' },
     el('div', { class: 'row-between' },
       el('div', {},
-        el('p', { class: 'small muted', text: `Started ${clockTime(s.session.startTs)}` }),
+        el('p', { class: 'small muted', id: 'session-date-line', text: earlier ? `Session on ${s.session.dateISO}` : `Started ${clockTime(s.session.startTs)}` }),
+        el('button', {
+          class: 'btn btn-sm btn-ghost', id: 'change-session-date', type: 'button',
+          onclick: async () => {
+            const d = await pickDate('Change the session date', 'Which day was this session?', s.session.dateISO);
+            if (d) { await state.setSessionDate(d); toast(`Session moved to ${d}.`); }
+          }
+        }, 'Change date'),
         el('p', { class: 'timer mono', id: 'session-timer', text: elapsed })
       ),
       el('div', { class: 'stack' },
@@ -457,6 +509,7 @@ function exerciseGroup(group, s) {
         'aria-label': `Edit set ${i + 1} of ${exercise?.name || 'exercise'}: ${describeSet(entry)}`,
         onclick: () => editSet(entry)
       }, describeSet(entry)),
+      entry.isWarmup ? el('span', { class: 'badge', text: 'Warm-up' }) : null,
       entry.isPR ? el('span', { class: 'badge badge-pr', text: 'PR' }) : null,
       el('button', {
         class: 'btn btn-sm btn-ghost',
@@ -536,7 +589,7 @@ function finishCard() {
           message: `${s.sessionSets.length} set${s.sessionSets.length === 1 ? '' : 's'} logged. The session is saved to your diary.`,
           confirmLabel: 'End session'
         });
-        if (yes) { await state.endSession(); restEndsAt = null; toast('Session saved.'); maybeNudgeBackup(); }
+        if (yes) { await state.endSession(); restEndsAt = null; toast('Session saved.'); store.requestPersistence(); maybeNudgeBackup(); }
       }
     }, 'End session'),
     el('button', {

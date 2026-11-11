@@ -90,7 +90,7 @@ Exercise  { id, name, aliases[], muscleGroup, category, mode, isCustom, isBodywe
 Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility,
             sessionType, className, instructor, location, attendance }
 SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
-            holdSeconds, side, isPR, lastModified, visibility }
+            holdSeconds, side, isPR, isWarmup, lastModified, visibility }
 Run       { id, dateISO, distance, distanceUnit, durationSec, notes, lastModified, visibility }
 Settings  { key, value }   // includes theme, panelState and the skin controls (see below)
 ```
@@ -135,6 +135,16 @@ Details that look redundant and are not:
   its full-screen view (`TINT` / `tintDrag()` in `theme-engine.js`; hue in radians, wraps;
   warmth −1…1, clamped), saved when the view closes and applied by `app.js` on every state
   change except while the view is open. Reset in Settings and in the view itself.
+- **`SetEntry.isWarmup`** (default `false`) — a warm-up set is logged and shown (badged), but
+  counts toward nothing: `progression.workingSets()` drops it before PRs, top sets, series,
+  volume and the nudge, and `recordScore()` scores it 0. Muscle totals must use
+  `workingSets()` too. Said aloud as "warm-up …"; ticked in the set sheet.
+- **A session's date** can be earlier than today ("Log an earlier session", or "Change date"
+  on an open one). `state.setSessionDate()` moves its sets' `dateISO` with it and recomputes
+  PRs for every exercise in it, since order in time is what makes a PR.
+- **Persistent storage:** `store.requestPersistence()` asks the browser not to clear the data
+  under storage pressure, on boot once there are sessions and after finishing one; Settings
+  shows whether it was granted, with a button to ask again.
 - **`Exercise.restSec`** (null = use `settings.defaultRestSec`) — that exercise's own rest
   time, set in the Exercises editor; the timer started after a commit uses it.
 - **`settings.vibrateOnRest`**, **`settings.keepScreenOn`** (both default `true`) — the rest

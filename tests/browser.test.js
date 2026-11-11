@@ -584,7 +584,7 @@ describe('browser', { skip: hasBrowser ? false : 'no Chromium build available' }
     assert.equal(setRow.length, 1, 'the voice log must actually have committed a set');
     assert.equal(setRow[0].weight, 60);
     assert.deepEqual(
-      Object.keys(setRow[0]).filter((k) => !['id', 'sessionId', 'exerciseId', 'dateISO', 'order', 'weight', 'unit', 'reps', 'rpe', 'holdSeconds', 'side', 'isPR', 'lastModified', 'visibility'].includes(k)),
+      Object.keys(setRow[0]).filter((k) => !['id', 'sessionId', 'exerciseId', 'dateISO', 'order', 'weight', 'unit', 'reps', 'rpe', 'holdSeconds', 'side', 'isPR', 'isWarmup', 'lastModified', 'visibility'].includes(k)),
       [],
       'the stored set carries no field beyond the documented schema'
     );

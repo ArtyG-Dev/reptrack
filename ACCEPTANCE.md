@@ -9,7 +9,7 @@ _Measured 2026-11-11 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 294 passed, 0 failed | ✅ |
+| Automated tests | 303 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -20,13 +20,13 @@ _Measured 2026-11-11 — regenerate with `npm run acceptance`._
 | Lighthouse — Performance | 84 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (webgl2; see note below) | app JS +0.7% vs Light · main thread 62.3% incl. waiting on SwiftShader · GPU proc 214.4% (CPU-emulated) · 30 fps · 2D fallback 2.5% | ✅ |
-| Skin CPU — Fractal (webgl2; see note below) | app JS +0.9% vs Light · main thread 73.6% incl. waiting on SwiftShader · GPU proc 252.3% (CPU-emulated) · 29.8 fps · 2D fallback 3.1% | ✅ |
-| Skin CPU — Forge (webgl2; see note below) | app JS +0.9% vs Light · main thread 62.3% incl. waiting on SwiftShader · GPU proc 207.2% (CPU-emulated) · 29.9 fps · 2D fallback 3.1% | ✅ |
-| Skin CPU — Kemet (webgl2; see note below) | app JS +1% vs Light · main thread 62.7% incl. waiting on SwiftShader · GPU proc 211.7% (CPU-emulated) · 30 fps · 2D fallback 3.3% | ✅ |
-| App shell size | 0.355 MB | ✅ |
-| A year of data (156 sessions, 3120 sets, 52 runs) | 3.164 MB stored | ✅ |
-| Total installed footprint | 3.519 MB of a 50 MB budget | ✅ |
+| Skin CPU — Terminal (webgl2; see note below) | app JS +0.8% vs Light · main thread 70.9% incl. waiting on SwiftShader · GPU proc 243.7% (CPU-emulated) · 30.1 fps · 2D fallback 2.6% | ✅ |
+| Skin CPU — Fractal (webgl2; see note below) | app JS +0.8% vs Light · main thread 77.5% incl. waiting on SwiftShader · GPU proc 263.2% (CPU-emulated) · 29.9 fps · 2D fallback 3.2% | ✅ |
+| Skin CPU — Forge (webgl2; see note below) | app JS +1% vs Light · main thread 65% incl. waiting on SwiftShader · GPU proc 222.6% (CPU-emulated) · 30 fps · 2D fallback 3.2% | ✅ |
+| Skin CPU — Kemet (webgl2; see note below) | app JS +1% vs Light · main thread 62.3% incl. waiting on SwiftShader · GPU proc 211% (CPU-emulated) · 30.1 fps · 2D fallback 3.4% | ✅ |
+| App shell size | 0.363 MB | ✅ |
+| A year of data (156 sessions, 3120 sets, 52 runs) | 3.316 MB stored | ✅ |
+| Total installed footprint | 3.679 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 

@@ -119,9 +119,11 @@ export async function reloadAll() {
 
 /* ---------- session lifecycle ---------- */
 
-export async function startSession() {
+/** Starts a session — today by default, or on an earlier date for a session
+ *  logged after the fact. */
+export async function startSession(dateISO = null) {
   if (state.session) return state.session;
-  state.session = await store.startSession({});
+  state.session = await store.startSession(dateISO ? { dateISO } : {});
   state.allSessions = [state.session, ...state.allSessions];
   state.sessionSets = [];
   state.lastSet = null;
@@ -165,6 +167,25 @@ export async function deleteSessionById(sessionId) {
   emit();
 }
 
+/** Moves the active session to another date. Its sets carry the date too
+ *  (denormalised for history reads), so they move with it, and PRs are
+ *  recomputed for every exercise in it — order in time is what makes a PR. */
+export async function setSessionDate(dateISO) {
+  if (!state.session || !dateISO || dateISO === state.session.dateISO) return state.session;
+  state.session = { ...state.session, dateISO };
+  await store.saveSession(state.session);
+  state.allSessions = state.allSessions.map((x) => (x.id === state.session.id ? state.session : x));
+  const moved = state.sessionSets.map((x) => ({ ...x, dateISO }));
+  for (const x of moved) await store.updateSet(x);
+  const byId = new Map(moved.map((x) => [x.id, x]));
+  state.sessionSets = moved;
+  state.allSets = state.allSets.map((x) => byId.get(x.id) || x);
+  for (const exerciseId of new Set(moved.map((x) => x.exerciseId))) await recomputePRs(exerciseId);
+  if (state.lastSet) state.lastSet = withExercise(state.allSets.find((x) => x.id === state.lastSet.id) || null);
+  emit();
+  return state.session;
+}
+
 export async function setSessionNotes(notes) {
   if (!state.session) return null;
   state.session = { ...state.session, notes };
@@ -206,6 +227,7 @@ export async function logSets(exerciseId, entries) {
       rpe: entry.rpe ?? null,
       holdSeconds: entry.holdSeconds ?? null,
       side: entry.side ?? null,
+      isWarmup: Boolean(entry.isWarmup),
       isPR
     });
     created.push(stored);

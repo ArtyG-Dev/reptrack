@@ -284,4 +284,140 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
     assert.equal(await page.locator('#toast .toast-action').count(), 0);
     await context.close();
   });
+  /* ---------- Stage 1b ---------- */
+
+  const isoDaysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toLocaleDateString('en-CA'); };
+  const sessions = (page) => page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('reptrack');
+    req.onsuccess = () => { const g = req.result.transaction('sessions').objectStore('sessions').getAll(); g.onsuccess = () => resolve(g.result); };
+  }));
+
+  test('the browser is asked to keep the data once there is something worth keeping, and Settings says where it stands', async () => {
+    const { context, page } = await fresh({
+      init: () => {
+        window.__persist = { granted: false, asks: 0 };
+        Object.defineProperty(navigator, 'storage', {
+          configurable: true,
+          value: {
+            estimate: async () => ({ usage: 1e6, quota: 1e9 }),
+            persisted: async () => window.__persist.granted,
+            persist: async () => { window.__persist.asks += 1; return window.__persist.granted; }
+          }
+        });
+      }
+    });
+    assert.equal(await page.evaluate(() => window.__persist.asks), 0, 'not asked on a fresh install with nothing in it');
+    await page.click('#start-session');
+    await logPhrase(page, 'bench press 60 kilos for 10');
+    await page.click('#view-today button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("End session")');
+    await page.waitForFunction(() => window.__persist.asks === 1);
+
+    await page.click('#tab-settings');
+    await page.waitForFunction(() => /Not yet protected/.test(document.getElementById('persist-line').textContent));
+    assert.equal(await page.isVisible('#persist-request'), true);
+    await page.evaluate(() => { window.__persist.granted = true; });
+    await page.click('#persist-request');
+    await page.waitForFunction(() => /^Protected/.test(document.getElementById('persist-line').textContent));
+    assert.equal(await page.isVisible('#persist-request'), false);
+    await context.close();
+  });
+
+  test('a session can be logged for an earlier day, and an open session can be moved to another day', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-earlier-session');
+    await page.fill('#session-date', isoDaysAgo(3));
+    await page.click('#confirm-sheet button:has-text("Use this date")');
+    await page.waitForSelector('#mic-button');
+    assert.match(await page.textContent('#session-date-line'), new RegExp(isoDaysAgo(3)));
+    await logPhrase(page, 'deadlift 140 kilos for 5');
+    await waitSets(page, (s) => s.length === 1);
+    assert.equal((await sets(page))[0].dateISO, isoDaysAgo(3), 'the set carries the session’s date');
+
+    await page.click('#change-session-date');
+    await page.fill('#session-date', isoDaysAgo(5));
+    await page.click('#confirm-sheet button:has-text("Use this date")');
+    await page.waitForFunction((d) => document.getElementById('session-date-line')?.textContent.includes(d), isoDaysAgo(5));
+    assert.equal((await sessions(page))[0].dateISO, isoDaysAgo(5));
+    await waitSets(page, (s) => s.every((x) => x.dateISO !== new Date().toLocaleDateString('en-CA')));
+    assert.equal((await sets(page))[0].dateISO, isoDaysAgo(5), 'its sets move with it');
+
+    // A future date is refused.
+    await page.click('#change-session-date');
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    assert.equal(await page.getAttribute('#session-date', 'max'), new Date().toLocaleDateString('en-CA'));
+    await page.keyboard.press('Escape');
+    await context.close();
+  });
+
+  test('re-dating a session recomputes PRs: moving a heavy session earlier strips a later PR', async () => {
+    const { context, page } = await fresh();
+    // Yesterday: 100 kg (a PR). Today: 110 kg (a PR, because it came after).
+    await page.click('#start-earlier-session');
+    await page.fill('#session-date', isoDaysAgo(1));
+    await page.click('#confirm-sheet button:has-text("Use this date")');
+    await logPhrase(page, 'squat 100 kilos for 5');
+    await page.click('#view-today button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("End session")');
+    await page.click('#start-session');
+    await logPhrase(page, 'squat 90 kilos for 5');
+    await waitSets(page, (s) => s.length === 2);
+    assert.deepEqual((await sets(page)).map((x) => [x.weight, x.isPR]).sort(), [[100, true], [90, false]].sort());
+    // Move today's 90 to two days ago: now it came first, so it is the first PR.
+    await page.click('#change-session-date');
+    await page.fill('#session-date', isoDaysAgo(2));
+    await page.click('#confirm-sheet button:has-text("Use this date")');
+    await waitSets(page, (s) => s.find((x) => x.weight === 90)?.isPR === true);
+    assert.deepEqual((await sets(page)).map((x) => [x.weight, x.isPR]).sort(), [[100, true], [90, true]].sort());
+    await context.close();
+  });
+
+  test('a finished session’s sets can be edited from the Diary', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-session');
+    await logPhrase(page, 'bench press 60 kilos for 10');
+    await page.click('#view-today button:has-text("End session")');
+    await page.click('#confirm-sheet button:has-text("End session")');
+    await page.click('#tab-diary');
+    await page.click('#view-diary [aria-label="Calendar scope"] button:has-text("Day")');
+    await page.click('#view-diary button[aria-label^="Edit set 1 of Bench Press"]');
+    await page.fill('#row-reps-0', '12');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await waitSets(page, (s) => s[0].reps === 12);
+    assert.match(await page.textContent('#view-diary'), /60 kg × 12/);
+    await context.close();
+  });
+
+  test('RPE: understood from speech, editable in the sheet, and shown with the set', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-session');
+    await typeToSheet(page, 'squat 100 kilos for 5 rpe 8');
+    assert.equal(await page.inputValue('#row-rpe-0'), '8');
+    await page.fill('#row-rpe-0', '8.5');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await waitSets(page, (s) => s.length === 1 && s[0].rpe === 8.5);
+    assert.match(await page.textContent('#view-today'), /100 kg × 5 @ RPE 8\.5/);
+    await context.close();
+  });
+
+  test('warm-up sets: ticked or spoken, badged, and never a PR however heavy', async () => {
+    const { context, page } = await fresh();
+    await page.click('#start-session');
+    await logPhrase(page, 'bench press 60 kilos for 10');
+    await typeToSheet(page, 'warm up bench press 100 kilos for 5');
+    assert.equal(await page.isChecked('#row-warmup-0'), true, 'spoken "warm up" pre-ticks it');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await waitSets(page, (s) => s.length === 2);
+    const [, warm] = await sets(page);
+    assert.equal(warm.isWarmup, true);
+    assert.equal(warm.isPR, false, 'a heavier warm-up is not a PR');
+    assert.equal(await page.locator('#view-today .badge:has-text("Warm-up")').count(), 1);
+
+    // Unticking it in the editor makes it a working set — and now it is a PR.
+    await page.click('button[aria-label^="Edit set 2 of Bench Press"]');
+    await page.uncheck('#row-warmup-0');
+    await page.click('#confirm-sheet button[type="submit"]');
+    await waitSets(page, (s) => s[1].isWarmup === false && s[1].isPR === true);
+    await context.close();
+  });
 });

@@ -81,7 +81,7 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
   const waitSets = (page, predicate) => page.waitForFunction((src) => new Promise((resolve) => {
     const req = indexedDB.open('reptrack');
     req.onsuccess = () => { const g = req.result.transaction('sets').objectStore('sets').getAll(); g.onsuccess = () => resolve(new Function('s', `return (${src})(s)`)(g.result.sort((a, b) => a.order - b.order))); };
-  }), predicate.toString(), { timeout: 5000, polling: 50 });
+  }), predicate.toString(), { timeout: 30000, polling: 50 });
   const putSetting = (page, key, value) => page.evaluate(([k, v]) => new Promise((resolve) => {
     const req = indexedDB.open('reptrack');
     req.onsuccess = () => { const tx = req.result.transaction('settings', 'readwrite'); tx.objectStore('settings').put({ key: k, value: v }); tx.oncomplete = resolve; };
@@ -430,7 +430,7 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
   const waitPlans = (page, predicate) => page.waitForFunction((src) => new Promise((resolve) => {
     const req = indexedDB.open('reptrack');
     req.onsuccess = () => { const g = req.result.transaction('plans').objectStore('plans').getAll(); g.onsuccess = () => resolve(new Function('p', `return (${src})(p)`)(g.result.sort((a, b) => a.order - b.order))); };
-  }), predicate.toString(), { timeout: 5000, polling: 50 });
+  }), predicate.toString(), { timeout: 30000, polling: 50 });
 
   async function buildPlan(page, name, items) {
     await page.click('#tab-exercises');

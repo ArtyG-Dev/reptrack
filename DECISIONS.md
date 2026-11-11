@@ -1534,3 +1534,15 @@ a11y 100 in all six themes; skins within budget.
   same dialog, so it never showed. `onClose` now ignores a close event while the dialog is
   open again. The "Log this" browser test covers it.
 
+
+### 100. Repair: an intermittent features-test failure under acceptance load
+
+Stage 4's acceptance run failed one test, "re-dating a session recomputes PRs", which then
+passed 5/5 alone, twice with two copies of the file running at once, and in two full
+`npm test` runs (352/352). The acceptance runner printed only the test's name, so the
+cause is inferred, not observed: the assertion that fails waits on `waitSets()`, the one
+IndexedDB polling helper with a 5-second ceiling, while every Playwright wait around it
+has 30 seconds, and in acceptance all the browser test files run at once on SwiftShader.
+Fix: `waitSets()`/`waitPlans()` get the same 30-second ceiling. What they wait *for* is
+unchanged, and so is every assertion. `run-acceptance.mjs` now prints each failing test's
+error and stack too, so a future intermittent failure can be read from the log.

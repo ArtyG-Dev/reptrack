@@ -30,7 +30,15 @@ const pass = Number(tests.output.match(/^# pass (\d+)$/m)?.[1] ?? 0);
 const fail = Number(tests.output.match(/^# fail (\d+)$/m)?.[1] ?? 0);
 const skipped = Number(tests.output.match(/^# skipped (\d+)$/m)?.[1] ?? 0);
 console.log(`  ${pass} passed, ${fail} failed, ${skipped} skipped`);
-if (fail) console.log(tests.output.split('\n').filter((l) => l.trim().startsWith('not ok')).join('\n'));
+if (fail) {
+  // The failing tests' names, then each one's error and stack, so an
+  // intermittent failure can be diagnosed from this log instead of guessed at.
+  const lines = tests.output.split('\n');
+  console.log(lines.filter((l) => l.trim().startsWith('not ok')).join('\n'));
+  lines.forEach((l, i) => {
+    if (/^\s+not ok/.test(l) && !/subtests? failed/.test(lines.slice(i, i + 12).join(' '))) console.log(lines.slice(i, i + 30).join('\n'));
+  });
+}
 
 /* 2. Footprint */
 const footprintRun = run('Footprint', ['scripts/measure-footprint.mjs']);

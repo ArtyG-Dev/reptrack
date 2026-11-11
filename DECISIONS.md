@@ -1491,3 +1491,11 @@ keeps `restSec` (null when blank). A db test covers both cases.
 - **Chips**, not a multi-select: 18 toggle buttons with `aria-pressed`, 44 px tall, updated
   in place so keyboard focus stays on the chip just pressed.
 
+
+### 98. Stage 3 live verification
+
+`scripts/verify-live.mjs reptrack-shell-v11`: 22/22 on the deployed site, including the
+restSec repair (#96), which shipped in this push. The pre-work schema-1 backup imports and
+its exercises come out with muscles (Pull Up → lats), the weekly-sets bars draw, and the
+volume and total-reps metrics are offered. No console errors. Tests 320 → 337; Lighthouse
+a11y 100 in all six themes; skins within budget.

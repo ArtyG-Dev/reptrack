@@ -1619,3 +1619,17 @@ runs in batches of at most four. What it asserts is unchanged.
   scene (bounded by the luminance pass, DECISIONS #74). The 2D fallback layers the same
   tokens with plain source-over, never a blend.
 
+
+### 106. Stage 5 live verification, and where the whole brief landed
+
+`scripts/verify-live.mjs reptrack-shell-v13`: 28/28 on the deployed site. Every earlier
+stage's checks still pass on the live build, the pre-work schema-1 backup still imports
+complete, Monolith, Constellation and Orrery are offered and draw, and the Orrery's eight
+planets are tappable in the full-screen view. No console errors.
+
+Across the brief: tests 272 → 387 (all passing, twice in a row before each push).
+Lighthouse accessibility 100 and PWA 100 in all nine themes. Performance on Light went
+85 → 80, which is within run-to-run noise on this machine and not gated; glass themes stay
+45–55 because SwiftShader renders WebGL on the CPU. Skin cost over the no-canvas baseline:
++0.8 to +1.9% app JS, all within the +5% budget; the 2D fallbacks run at 2.5–3.8%.
+Footprint 3.508 → 3.795 MB of 50 MB; the shell 0.42 → 0.46 MB.

@@ -5,7 +5,7 @@ Regenerate the measured block with `npm run acceptance`.
 
 <!-- measured:start -->
 
-_Measured 2026-11-11 — regenerate with `npm run acceptance`._
+_Measured 2026-11-12 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
@@ -23,13 +23,13 @@ _Measured 2026-11-11 — regenerate with `npm run acceptance`._
 | Lighthouse — Performance | 80 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (webgl2; see note below) | app JS +0.9% vs Light · main thread 74.2% incl. waiting on SwiftShader · GPU proc 259.6% (CPU-emulated) · 30 fps · 2D fallback 2.5% | ✅ |
-| Skin CPU — Fractal (webgl2; see note below) | app JS +0.9% vs Light · main thread 73.6% incl. waiting on SwiftShader · GPU proc 255.2% (CPU-emulated) · 30 fps · 2D fallback 3% | ✅ |
-| Skin CPU — Forge (webgl2; see note below) | app JS +0.9% vs Light · main thread 58% incl. waiting on SwiftShader · GPU proc 198.1% (CPU-emulated) · 30 fps · 2D fallback 2.6% | ✅ |
-| Skin CPU — Kemet (webgl2; see note below) | app JS +0.9% vs Light · main thread 58.7% incl. waiting on SwiftShader · GPU proc 199.7% (CPU-emulated) · 30 fps · 2D fallback 3.4% | ✅ |
-| Skin CPU — Monolith (webgl2; see note below) | app JS +0.8% vs Light · main thread 62.4% incl. waiting on SwiftShader · GPU proc 212.7% (CPU-emulated) · 30.1 fps · 2D fallback 3.8% | ✅ |
-| Skin CPU — Constellation (webgl2; see note below) | app JS +1.2% vs Light · main thread 54.1% incl. waiting on SwiftShader · GPU proc 177.6% (CPU-emulated) · 30.2 fps · 2D fallback 2.6% | ✅ |
-| Skin CPU — Orrery (webgl2; see note below) | app JS +1.9% vs Light · main thread 56.8% incl. waiting on SwiftShader · GPU proc 184.4% (CPU-emulated) · 30.1 fps · 2D fallback 2.5% | ✅ |
+| Skin CPU — Terminal (webgl2; see note below) | app JS +0.9% vs Light · main thread 79.8% incl. waiting on SwiftShader · GPU proc 269.1% (CPU-emulated) · 30 fps · 2D fallback 3% | ✅ |
+| Skin CPU — Fractal (webgl2; see note below) | app JS +0.9% vs Light · main thread 81.3% incl. waiting on SwiftShader · GPU proc 272.6% (CPU-emulated) · 29.9 fps · 2D fallback 3.6% | ✅ |
+| Skin CPU — Forge (webgl2; see note below) | app JS +1% vs Light · main thread 68.2% incl. waiting on SwiftShader · GPU proc 232.3% (CPU-emulated) · 30 fps · 2D fallback 3.7% | ✅ |
+| Skin CPU — Kemet (webgl2; see note below) | app JS +1.1% vs Light · main thread 70.8% incl. waiting on SwiftShader · GPU proc 236.2% (CPU-emulated) · 30 fps · 2D fallback 3.5% | ✅ |
+| Skin CPU — Monolith (webgl2; see note below) | app JS +1% vs Light · main thread 61.3% incl. waiting on SwiftShader · GPU proc 207.9% (CPU-emulated) · 30 fps · 2D fallback 4% | ✅ |
+| Skin CPU — Constellation (webgl2; see note below) | app JS +1.3% vs Light · main thread 57.7% incl. waiting on SwiftShader · GPU proc 187.6% (CPU-emulated) · 30 fps · 2D fallback 3% | ✅ |
+| Skin CPU — Orrery (webgl2; see note below) | app JS +2% vs Light · main thread 64% incl. waiting on SwiftShader · GPU proc 205% (CPU-emulated) · 29.9 fps · 2D fallback 3.2% | ✅ |
 | App shell size | 0.46 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.336 MB stored | ✅ |
 | Total installed footprint | 3.795 MB of a 50 MB budget | ✅ |
@@ -361,3 +361,13 @@ every one of them at ≥ 90 for accessibility. The measured block above reports 
 (light) run's other categories; each theme's accessibility score has its own row.
 `?static=1` alongside it forces the reduced-effects path, which is how the static render is
 exercised without faking a media query.
+
+## Baseline before the 3D muscle map (`v-pre-musclemap`)
+
+Recorded on `main` at `d4278f1` before `docs/FOLLOWUP_PROMPT_MUSCLE_MAP_3D.md` started,
+from a full `npm run acceptance` run: 387 tests passed, 0 failed; Lighthouse PWA 100 and
+accessibility 100 in all nine themes; every skin within the CPU budget (app JS +0.8 to
++1.9% over the no-canvas baseline); footprint 3.795 MB of 50 MB. This state is tagged
+`v-pre-musclemap`, kept on the branch `stable-pre-musclemap`, and published read-only at
+`/reptrack/legacy/` (see `DEPLOY.md`).
+

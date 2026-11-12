@@ -24,7 +24,7 @@ export const FIGURES = {
 export const VIEW_OF = {
   chest: 'front', 'front-delts': 'front', 'side-delts': 'front', biceps: 'front', forearms: 'front',
   abs: 'front', obliques: 'front', quads: 'front', adductors: 'front', 'hip-flexors': 'front',
-  'rear-delts': 'back', triceps: 'back', lats: 'back', 'upper-back': 'back', 'lower-back': 'back',
+  'rear-delts': 'back', triceps: 'back', 'upper-back-lats': 'back', traps: 'back', 'lower-back': 'back',
   glutes: 'back', hamstrings: 'back', calves: 'back'
 };
 
@@ -58,8 +58,8 @@ function shapes(f, view) {
     'side-delts': pair(S + 1, 84, 5, 10),
     triceps: pair(S + 1, 121, 6.5, 19),
     forearms: pair(S + 4, 182, 6, 24),
-    'upper-back': [ellipse(C, 90, S * 0.46, 16)],
-    lats: pair(S * 0.5, 128, 10, 26),
+    traps: [ellipse(C, 80, S * 0.42, 9)],
+    'upper-back-lats': [ellipse(C, 98, S * 0.3, 9), ...pair(S * 0.5, 126, 10, 26)],
     'lower-back': [ellipse(C, 166, Math.min(15, W * 0.5), 13)],
     glutes: pair(H * 0.42, 212, 14, 14),
     hamstrings: pair(H * 0.5, 266, 11, 34),
@@ -120,17 +120,26 @@ const setsLabel = (n) => {
  * One view as an <svg>. `counts` is this week's weighted sets per muscle,
  * `definition` the 0–5 level per muscle, `glow` 0..1 (already frost-damped).
  */
-export function renderBody({ figure, view, counts = {}, definition = {}, glow = 0, onPick = () => {} }) {
+/**
+ * `levelOf(muscle)` (0–3) and `labelOf(muscle)` let the caller decide what the
+ * colours and names mean: the muscle map passes its period and counting mode,
+ * the exercise editor passes primary / supporting / none. The default is this
+ * week's weighted sets, as Stage 4 drew it.
+ */
+export function renderBody({
+  figure, view, counts = {}, definition = {}, glow = 0, onPick = () => {},
+  levelOf = (m) => heatLevel(counts[m] || 0),
+  labelOf = (m) => `${MUSCLE_LABELS[m]}: ${setsLabel(counts[m] || 0)}`
+}) {
   const g = bodyGeometry(figure, view);
   const root = svg('svg', { class: 'body-map', viewBox: g.viewBox, role: 'group', 'aria-label': `${view === 'front' ? 'Front' : 'Back'} of the body` });
   root.append(svg('path', { class: 'body-outline', d: g.outline, 'stroke-opacity': r2(0.35 + 0.65 * glow), 'aria-hidden': 'true' }));
   root.append(svg('path', { class: 'body-head', d: g.head, 'aria-hidden': 'true' }));
   for (const m of g.muscles) {
-    const n = counts[m.muscle] || 0;
     const level = definition[m.muscle] || 0;
-    const label = `${MUSCLE_LABELS[m.muscle]}: ${setsLabel(n)}`;
+    const label = labelOf(m.muscle);
     const path = svg('path', {
-      class: `muscle heat-${heatLevel(n)}`, d: m.d, 'stroke-width': strokeFor(level),
+      class: `muscle heat-${levelOf(m.muscle)}`, d: m.d, 'stroke-width': strokeFor(level),
       'data-muscle': m.muscle, 'data-definition': level
     });
     if (m.interactive) {

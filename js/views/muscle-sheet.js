@@ -6,7 +6,9 @@
 
 import * as state from '../state.js';
 import { el, openSheet, toast, humanDate } from '../ui.js';
-import { MUSCLE_LABELS, suggestionsFor, recentlyTrained, weeklyMuscleSets } from '../muscles.js';
+import { MUSCLE_LABELS, suggestionsFor, recentlyTrained, PERIODS, periodRange, muscleTotals, muscleTrend } from '../muscles.js';
+import { renderChart } from '../chart.js';
+import { formatWeight } from '../progression.js';
 import { todayISO } from '../store.js';
 import { logExercise } from './today.js';
 import { exerciseSheet } from './exercises.js';
@@ -35,15 +37,32 @@ export async function openMuscleSheet(muscles, title = MUSCLE_LABELS[muscles[0]]
   const s = state.getState();
   const today = todayISO();
   const byId = new Map(s.exercises.map((ex) => [ex.id, ex]));
-  const week = weeklyMuscleSets(s.allSets, byId, today).current;
-  const thisWeek = muscles.reduce((sum, m) => sum + (week[m] || 0), 0);
+  // The panel's total and trend use the muscle map's own period and counting mode.
+  const days = PERIODS.includes(Number(s.settings.musclePeriodDays)) ? Number(s.settings.musclePeriodDays) : 7;
+  const mode = s.settings.muscleCountMode === 'weight' ? 'weight' : 'sets';
+  const unit = s.settings.unit || 'kg';
+  const result = muscleTotals({ sets: s.allSets, exercisesById: byId, ...periodRange(today, days), mode, unit });
+  const total = muscles.reduce((sum, m) => sum + (result.totals[m] || 0), 0);
+  const excludedOnly = total === 0 && muscles.some((m) => result.excludedOnly.has(m));
+  const trends = muscles.map((m) => muscleTrend({ sets: s.allSets, exercisesById: byId, muscle: m, todayISO: today, days, mode, unit }));
+  const trend = trends[0].map((p, i) => ({ label: p.label, value: trends.reduce((sum, t) => sum + t[i].value, 0) }));
+  const show = (v) => (mode === 'weight' ? `${formatWeight(Math.round(v))} ${unit}` : formatSets(v));
+  const period = `the last ${days} days`;
+  const chartHost = el('div', { id: 'muscle-trend' });
   const recent = muscles.some((m) => recentlyTrained(m, s.allSets, byId, today));
   const suggestions = merged(muscles, s, today);
   const titleId = 'confirm-sheet-title';
 
+  renderChart(chartHost, trend, {
+    title: `${title}, ${mode === 'weight' ? 'weight' : 'sets'} ${days === 7 ? 'per day' : 'per week'} over ${period}`,
+    unitLabel: mode === 'weight' ? ` ${unit}` : ' sets',
+    pointNoun: days === 7 ? 'days' : 'weeks',
+    formatValue: (v) => (mode === 'weight' ? formatWeight(Math.round(v)) : String(Math.round(v * 10) / 10))
+  });
   const action = await openSheet('confirm-sheet', (ctx) => el('div', { class: 'stack', id: 'muscle-sheet' },
     el('h2', { id: titleId, text: title }),
-    el('p', { class: 'small muted', style: 'margin:0', text: `${formatSets(thisWeek)} this week` }),
+    el('p', { class: 'small', id: 'muscle-total', style: 'margin:0', text: excludedOnly ? `Only bodyweight or timed work in ${period}: not counted in the weight view.` : `${show(total)} in ${period}` }),
+    chartHost,
     recent ? el('p', { class: 'small', id: 'recovery-note', style: 'margin:0' }, el('span', { class: 'badge badge-warn', text: 'Note' }), ' Trained recently — rest may serve it better.') : null,
     suggestions.length
       ? el('ul', { class: 'list' }, ...suggestions.map((sug) => el('li', {},

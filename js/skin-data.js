@@ -128,7 +128,7 @@ export function twinkle(t, phase, k) {
 
 export const REGIONS = Object.freeze([
   { id: 'chest', name: 'Chest', muscles: ['chest'] },
-  { id: 'back', name: 'Back', muscles: ['lats', 'upper-back', 'lower-back'] },
+  { id: 'back', name: 'Back', muscles: ['upper-back-lats', 'traps', 'lower-back'] },
   { id: 'shoulders', name: 'Shoulders', muscles: ['front-delts', 'side-delts', 'rear-delts'] },
   { id: 'arms', name: 'Arms', muscles: ['biceps', 'triceps', 'forearms'] },
   { id: 'core', name: 'Core', muscles: ['abs', 'obliques', 'hip-flexors'] },

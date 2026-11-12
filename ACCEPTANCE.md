@@ -9,7 +9,7 @@ _Measured 2026-11-12 — regenerate with `npm run acceptance`._
 
 | Measurement | Value | Result |
 |---|---|---|
-| Automated tests | 387 passed, 0 failed | ✅ |
+| Automated tests | 414 passed, 0 failed | ✅ |
 | Lighthouse — PWA | 100 | ✅ |
 | Lighthouse — Accessibility (Light) | 100 | ✅ |
 | Lighthouse — Accessibility (Neon) | 100 | ✅ |
@@ -20,19 +20,19 @@ _Measured 2026-11-12 — regenerate with `npm run acceptance`._
 | Lighthouse — Accessibility (Monolith) | 100 | ✅ |
 | Lighthouse — Accessibility (Constellation) | 100 | ✅ |
 | Lighthouse — Accessibility (Orrery) | 100 | ✅ |
-| Lighthouse — Performance | 80 | ✅ |
+| Lighthouse — Performance | 79 | ✅ |
 | Lighthouse — Best practices | 100 | ✅ |
 | Lighthouse — SEO | 92 | ✅ |
-| Skin CPU — Terminal (webgl2; see note below) | app JS +0.9% vs Light · main thread 79.8% incl. waiting on SwiftShader · GPU proc 269.1% (CPU-emulated) · 30 fps · 2D fallback 3% | ✅ |
-| Skin CPU — Fractal (webgl2; see note below) | app JS +0.9% vs Light · main thread 81.3% incl. waiting on SwiftShader · GPU proc 272.6% (CPU-emulated) · 29.9 fps · 2D fallback 3.6% | ✅ |
-| Skin CPU — Forge (webgl2; see note below) | app JS +1% vs Light · main thread 68.2% incl. waiting on SwiftShader · GPU proc 232.3% (CPU-emulated) · 30 fps · 2D fallback 3.7% | ✅ |
-| Skin CPU — Kemet (webgl2; see note below) | app JS +1.1% vs Light · main thread 70.8% incl. waiting on SwiftShader · GPU proc 236.2% (CPU-emulated) · 30 fps · 2D fallback 3.5% | ✅ |
-| Skin CPU — Monolith (webgl2; see note below) | app JS +1% vs Light · main thread 61.3% incl. waiting on SwiftShader · GPU proc 207.9% (CPU-emulated) · 30 fps · 2D fallback 4% | ✅ |
-| Skin CPU — Constellation (webgl2; see note below) | app JS +1.3% vs Light · main thread 57.7% incl. waiting on SwiftShader · GPU proc 187.6% (CPU-emulated) · 30 fps · 2D fallback 3% | ✅ |
-| Skin CPU — Orrery (webgl2; see note below) | app JS +2% vs Light · main thread 64% incl. waiting on SwiftShader · GPU proc 205% (CPU-emulated) · 29.9 fps · 2D fallback 3.2% | ✅ |
-| App shell size | 0.46 MB | ✅ |
+| Skin CPU — Terminal (webgl2; see note below) | app JS +0.9% vs Light · main thread 71.8% incl. waiting on SwiftShader · GPU proc 243.3% (CPU-emulated) · 30 fps · 2D fallback 2.9% | ✅ |
+| Skin CPU — Fractal (webgl2; see note below) | app JS +0.9% vs Light · main thread 88.2% incl. waiting on SwiftShader · GPU proc 293.1% (CPU-emulated) · 29.8 fps · 2D fallback 3.5% | ✅ |
+| Skin CPU — Forge (webgl2; see note below) | app JS +1% vs Light · main thread 67.8% incl. waiting on SwiftShader · GPU proc 231.8% (CPU-emulated) · 30 fps · 2D fallback 3.2% | ✅ |
+| Skin CPU — Kemet (webgl2; see note below) | app JS +1% vs Light · main thread 65.9% incl. waiting on SwiftShader · GPU proc 222.3% (CPU-emulated) · 29.9 fps · 2D fallback 3.5% | ✅ |
+| Skin CPU — Monolith (webgl2; see note below) | app JS +0.9% vs Light · main thread 60.9% incl. waiting on SwiftShader · GPU proc 209.6% (CPU-emulated) · 30 fps · 2D fallback 3.8% | ✅ |
+| Skin CPU — Constellation (webgl2; see note below) | app JS +1.2% vs Light · main thread 54.9% incl. waiting on SwiftShader · GPU proc 181.1% (CPU-emulated) · 30 fps · 2D fallback 2.6% | ✅ |
+| Skin CPU — Orrery (webgl2; see note below) | app JS +1.9% vs Light · main thread 58.7% incl. waiting on SwiftShader · GPU proc 188.7% (CPU-emulated) · 30 fps · 2D fallback 3.1% | ✅ |
+| App shell size | 0.971 MB | ✅ |
 | A year of data (156 sessions, 3120 sets, 52 runs) | 3.336 MB stored | ✅ |
-| Total installed footprint | 3.795 MB of a 50 MB budget | ✅ |
+| Total installed footprint | 4.307 MB of a 50 MB budget | ✅ |
 
 <!-- measured:end -->
 
@@ -361,6 +361,28 @@ every one of them at ≥ 90 for accessibility. The measured block above reports 
 (light) run's other categories; each theme's accessibility score has its own row.
 `?static=1` alongside it forces the reduced-effects path, which is how the static render is
 exercised without faking a media query.
+
+## 3D muscle map, counting modes, custom-exercise muscles
+
+Per `docs/FOLLOWUP_PROMPT_MUSCLE_MAP_3D.md`; decisions in `DECISIONS.md` #107–#109, the
+legacy copy in `DEPLOY.md`.
+
+| # | Criterion | How it is verified | Status |
+|---|---|---|---|
+| 154 | Tag `v-pre-musclemap`, branch `stable-pre-musclemap`, work on `feature/muscle-map-3d`, merged by PR after green | Branch pushed on `368cad9`; the tag exists locally on that commit but this session cannot push tags (403), see #107 | ⚠️ tag needs pushing by hand |
+| 155 | Legacy copy at `/reptrack/legacy/`: own IndexedDB name, storage prefix, worker scope and cache, manifest id; the main worker doesn't control or cache it; one-time copy; banner; `noindex` | `pwa-static.test.js` (isolation), `legacy.test.js` (Chromium: copy, banner, both directions, which worker controls and caches what). No passcode gate, at the user's choice | ✅ |
+| 156 | Logging in main doesn't change legacy, and vice versa | `legacy.test.js` | ✅ |
+| 157 | 3D mannequin from primitives, one per muscle group, no model files or libraries; 360° turn, tilt clamped; tap-to-select; neutral/male/female | `mannequin.test.js` (geometry, ray-picking from every side), `musclemap.test.js` | ✅ |
+| 158 | Flat figures under reduced motion and without WebGL2, same data and colours; ranked list always shown | `musclemap.test.js` | ✅ |
+| 159 | Counting toggle persists; Sets 1/0.5; Weight weight×reps and half, bodyweight and hold excluded with a note, never shown as 0; trend chart in both modes | `muscles.test.js`, `musclemap.test.js` | ✅ |
+| 160 | Mapping on Exercise; editing re-counts history; `muscleGroup` migrated; seed corrections listed | `muscles.test.js`, `state.test.js`, `musclemap.test.js`; corrections in DECISIONS #107 | ✅ |
+| 161 | Custom exercise: muscles optional, suggestion shown and never applied on its own | `muscles.test.js` (keyword table), `musclemap.test.js` | ✅ |
+| 162 | Unassigned row; editable any time; reminder after 3, once more after 10 more, then never | `muscles.test.js`, `musclemap.test.js` | ✅ |
+| 163 | Voice: an unknown name offers "create" with optional muscles | `musclemap.test.js` | ✅ |
+| 164 | Screenshots: 4 angles, both modes, Unassigned row, legacy banner | `docs/screenshots/musclemap-*.jpg`, `VISUALS.md` → "The 3D muscle map" | ✅ |
+| 165 | CPU within budget; footprint < 50 MB | `scripts/measure-musclemap.mjs`: Progress +0%, full screen +0.5% app JS, 28.4 fps (DECISIONS #109); footprint in the measured block | ✅ headless / ⚠️ device |
+| 166 | Full suite green on merged `main`; cache bumped; both sites re-verified live | See the live verification entry in DECISIONS | (filled in after the merge) |
+| 167 | `MANUAL_TEST.md` on-phone checks | Check 9 | ⚠️ needs a phone |
 
 ## Baseline before the 3D muscle map (`v-pre-musclemap`)
 

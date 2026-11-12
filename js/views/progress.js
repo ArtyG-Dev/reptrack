@@ -7,15 +7,20 @@ import * as state from '../state.js';
 import { el, clear, humanDate } from '../ui.js';
 import { renderChart, renderBars } from '../chart.js';
 import { MUSCLES } from '../exercises-seed.js';
-import { MUSCLE_LABELS, weeklyMuscleSets, muscleWeeklySeries, definitionLevel, HEAT_THRESHOLDS } from '../muscles.js';
-import { renderBody } from '../bodymap.js';
+import { MUSCLE_LABELS, weeklyMuscleSets, muscleWeeklySeries } from '../muscles.js';
 import { openMuscleSheet } from './muscle-sheet.js';
+import { muscleMapCard, setSelected } from './muscle-map.js';
 import { todayISO } from '../store.js';
 import { buildSeries, suggestProgression, bestSet, estimate1RM, fromKg, toKg, formatWeight, formatDuration } from '../progression.js';
 import { describeSet } from '../parser.js';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const view = { exerciseId: null, metric: null, muscle: null, bodySide: 'front' };
+const view = { exerciseId: null, metric: null, muscle: null };
+
+/** A muscle's panel, with the group ringed in the 3D view while it is open. */
+async function openPanel(muscle) {
+  setSelected(muscle);
+  try { await openMuscleSheet([muscle]); } finally { setSelected(null); }
+}
 
 let containerRef = null;
 
@@ -41,53 +46,6 @@ function metricsFor(exercise) {
 }
 
 const formatSets = (v) => String(Math.round(v * 10) / 10);
-
-/** "This week's muscles": the body map, front and back (one at a time on a
- *  narrow screen, with a flip button). Fill = this week's heat; outline weight
- *  and inner lines = lifetime definition; the figure's glow follows `glow`
- *  damped by frost, exactly as the Forge does. */
-function bodyCard(s) {
-  const byId = new Map(s.exercises.map((ex) => [ex.id, ex]));
-  const { current } = weeklyMuscleSets(s.allSets, byId, todayISO());
-  const definition = Object.fromEntries(MUSCLES.map((m) => [m, definitionLevel(m, s.allSets, byId)]));
-  const { glow, frostHint } = state.activityVisual();
-  const shownGlow = glow * (1 - 0.35 * frostHint);
-  const figure = s.settings.bodyFigure || 'neutral';
-  const pick = (muscle) => openMuscleSheet([muscle]);
-
-  const views = el('div', { class: 'body-views', 'data-show': view.bodySide },
-    ...['front', 'back'].map((side) => el('div', { class: 'body-view', 'data-side': side },
-      el('p', { class: 'small muted', style: 'margin:0;text-align:center', text: side === 'front' ? 'Front' : 'Back' }),
-      renderBody({ figure, view: side, counts: current, definition, glow: shownGlow, onPick: pick })
-    )));
-  const [lo, hi] = HEAT_THRESHOLDS;
-  const swatch = (n, text) => {
-    const square = document.createElementNS(SVG_NS, 'svg');
-    square.setAttribute('class', 'legend-swatch');
-    square.setAttribute('viewBox', '0 0 12 12');
-    square.setAttribute('aria-hidden', 'true');
-    const rect = document.createElementNS(SVG_NS, 'rect');
-    for (const [k, v] of Object.entries({ class: `muscle heat-${n}`, width: 12, height: 12, rx: 3 })) rect.setAttribute(k, String(v));
-    square.append(rect);
-    return el('span', { class: 'legend-item' }, square, text);
-  };
-  const legend = el('div', { class: 'body-legend', role: 'group', 'aria-label': 'Heat legend' },
-    swatch(0, 'None'), swatch(1, `Under ${lo} sets`), swatch(2, `${lo}–${hi - 1} sets`), swatch(3, `${hi}+ sets`));
-
-  return el('div', { class: 'card stack', id: 'body-card' },
-    el('div', { class: 'row-between' },
-      el('h3', { style: 'margin:0', text: 'This week’s muscles' }),
-      el('button', {
-        class: 'btn btn-sm body-flip', type: 'button', id: 'body-flip',
-        'aria-label': `Show the ${view.bodySide === 'front' ? 'back' : 'front'} of the body`,
-        onclick: () => { view.bodySide = view.bodySide === 'front' ? 'back' : 'front'; render(containerRef); }
-      }, 'Flip')
-    ),
-    views,
-    legend,
-    el('p', { class: 'small muted', style: 'margin:0', text: 'Tap a muscle for your exercises that work it. Colour is this week’s working sets; the outline firms up with everything you’ve done, and never fades.' })
-  );
-}
 
 /** "Weekly sets by muscle": this week's bars over last week's, then one muscle's 12 weeks. */
 function muscleCard(s, rerender) {
@@ -248,7 +206,7 @@ export function render(container) {
   }
 
   containerRef.append(isHold ? summaryCardHold(sets) : summaryCardReps(sets, unit));
-  containerRef.append(bodyCard(s));
+  containerRef.append(muscleMapCard(s, { openPanel, rerender: () => render(containerRef) }));
   containerRef.append(muscleCard(s, rerender));
 
   const recent = [...series].reverse().slice(0, 12);

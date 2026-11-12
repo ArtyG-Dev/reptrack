@@ -3,6 +3,7 @@
 import * as state from './state.js';
 import * as store from './store.js';
 import * as backdrop from './backdrop.js';
+import { muscleMapDiagnostics } from './views/muscle-map.js';
 import * as wake from './wake.js';
 import { toast } from './ui.js';
 import * as todayView from './views/today.js';
@@ -26,6 +27,7 @@ let active = 'today';
 // at module scope rather than inside boot() so it exists even if the database
 // fails to open — otherwise a diagnostic tool races the thing it inspects.
 window.__backdrop = backdrop;
+window.__muscleMap = muscleMapDiagnostics;
 
 async function renderActive() {
   const entry = VIEWS[active];

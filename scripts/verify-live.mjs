@@ -12,6 +12,7 @@ import { chromium } from 'playwright';
 import { launch } from '../tests/helpers/browser.mjs';
 
 const expectCache = process.argv[2];
+const expect = expectCache;
 const urlArg = process.argv.indexOf('--url');
 const SITE = (urlArg > -1 ? process.argv[urlArg + 1] : 'https://artyg-dev.github.io/reptrack/').replace(/\/?$/, '/');
 const BACKUP = JSON.parse(readFileSync(new URL('../tests/fixtures/backup-live-schema1.json', import.meta.url), 'utf8'));
@@ -128,11 +129,13 @@ try {
     const req = indexedDB.open('reptrack');
     req.onsuccess = () => { const g = req.result.transaction('exercises').objectStore('exercises').getAll(); g.onsuccess = () => resolve(g.result.find((e) => e.name === 'Pull Up')); };
   }));
-  check('stage 3: the imported old backup’s exercises have muscles', pullUp?.primaryMuscles?.includes('lats'), JSON.stringify(pullUp?.primaryMuscles));
+  check('stage 3: the imported old backup’s exercises have muscles', pullUp?.primaryMuscles?.includes('upper-back-lats'), JSON.stringify(pullUp?.primaryMuscles));
 
   // Stage 4: the body map and its sheet.
-  check('stage 4: the body map has one control per muscle', await page.locator('#body-card path.muscle[role="button"]').count() === 18);
-  await page.focus('#body-card path.muscle[data-muscle="chest"][role="button"]');
+  // (Since the 3D muscle map, the ranked list is the keyboard route to a muscle.)
+  await page.waitForSelector('#mm-rank button[data-muscle="chest"]', { timeout: 10000 });
+  check('stage 4: every muscle group is one control', await page.locator('#mm-rank button.mm-row').count() === 18);
+  await page.focus('#mm-rank button[data-muscle="chest"]');
   await page.keyboard.press('Enter');
   check('stage 4: a muscle opens its exercise suggestions', await page.waitForSelector('#muscle-sheet li', { timeout: 8000 }).then(() => true, () => false));
   await page.click('#muscle-sheet button:has-text("Close")');
@@ -150,6 +153,40 @@ try {
   await page.keyboard.press('Escape');
   await page.click('#tab-settings');
   await page.selectOption('#set-theme', 'light');
+
+  // 3D muscle map brief: the map on Progress, the toggles, the legacy copy.
+  await page.click('#tab-progress');
+  check('muscle map: "Your muscles" with a figure and all 18 groups listed', await page.waitForFunction(() => document.querySelectorAll('#mm-rank button.mm-row').length === 18 && (document.querySelector('#muscle-map canvas') || document.querySelector('#muscle-map svg.body-map')), null, { timeout: 10000 }).then(() => true, () => false));
+  await page.click('#muscle-map [aria-label="Count by"] button:has-text("Weight")');
+  check('muscle map: Weight mode with its note', await page.waitForSelector('#mm-weight-note', { timeout: 8000 }).then(() => true, () => false));
+  await page.click('#muscle-map [aria-label="Count by"] button:has-text("Sets")');
+
+  const mainSets = await page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('reptrack');
+    req.onsuccess = () => { const g = req.result.transaction('sets').objectStore('sets').count(); g.onsuccess = () => { req.result.close(); resolve(g.result); }; };
+  }));
+  const legacy = await context.newPage();
+  await legacy.goto(`${SITE}legacy/index.html`, { waitUntil: 'load' });
+  check('legacy: the old version loads at /legacy/', await legacy.title() === 'RepTrack (legacy)', await legacy.title());
+  check('legacy: the separate-data banner shows', await legacy.waitForSelector('#legacy-banner', { timeout: 10000 }).then(() => true, () => false));
+  check('legacy: noindex', /noindex/.test(await legacy.getAttribute('meta[name="robots"]', 'content') || ''));
+  const legacyDb = await legacy.evaluate(async () => (await indexedDB.databases()).map((d) => d.name));
+  check('legacy: its own database, next to the main one', legacyDb.includes('reptrack-legacy') && legacyDb.includes('reptrack'), legacyDb.join(', '));
+  for (let i = 0; i < 100; i += 1) {
+    const ok = await legacy.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).some((r) => r.scope.endsWith('/legacy/') && r.active));
+    if (ok) break;
+    await legacy.waitForTimeout(100);
+  }
+  await legacy.reload({ waitUntil: 'load' });
+  check('legacy: controlled by its own service worker', /\/legacy\/sw\.js$/.test(await legacy.evaluate(() => navigator.serviceWorker.controller?.scriptURL || '')));
+  const keys = await legacy.evaluate(() => caches.keys());
+  check('legacy: its own cache, and the main one kept', keys.some((k) => k.startsWith('reptrack-legacy-shell-')) && keys.includes(expect), keys.join(', '));
+  await legacy.close();
+  const mainAfter = await page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('reptrack');
+    req.onsuccess = () => { const g = req.result.transaction('sets').objectStore('sets').count(); g.onsuccess = () => { req.result.close(); resolve(g.result); }; };
+  }));
+  check('legacy: opening it left the main data unchanged', mainAfter === mainSets, `${mainSets} → ${mainAfter}`);
 
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await context.close();

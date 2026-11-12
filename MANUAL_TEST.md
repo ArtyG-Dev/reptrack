@@ -188,6 +188,24 @@ Also worth a quick look while you're in there:
 - **Orrery:** View, tap a planet. Its region's exercises appear. Close the sheet; the
   view is still there. With a keyboard, Tab rings each planet in turn.
 
+## Check 9: the 3D muscle map and the legacy copy (about 4 minutes)
+
+- **Rotate the mannequin:** Progress → Your muscles. Drag sideways: it turns all the way
+  round. Drag up and down: it tilts a little and stops. Tap a thigh: the Quads panel opens.
+  Full screen: it turns slowly by itself and carries on after you let go.
+- **Switch counting modes:** Weight shows kilograms and the note about bodyweight and
+  timed exercises; push-ups and planks don't count as zero. Switch back to Sets, then
+  reopen the app: the choice is kept. Try 30 and 90 days too.
+- **Add a custom exercise without muscles, then edit it later:** Exercises → Add, name it
+  "Cable crossover", leave muscles empty, save. Log it: it appears as Unassigned in the
+  list. After 3 sets a small prompt offers to set its muscles. Tap "Not now", then edit the
+  exercise and pick Chest: the chest now counts all its sets.
+- **Say an exercise that isn't in the list** ("pec deck fly 40 for 12"): it offers to create
+  it, with a suggestion; "Assign later" works too.
+- **Open the legacy copy** (`/reptrack/legacy/`): it's the old version, with a banner
+  saying its data is separate. Log a set there; it does not appear in the main app, and a
+  set logged in the main app does not appear there.
+
 ## While you are there (optional, 30 seconds each)
 
 - **Offline:** turn on flight mode, force-close the app, reopen it from the home screen.

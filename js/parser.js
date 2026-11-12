@@ -438,10 +438,11 @@ export function parseTranscript(transcript, ctx = {}) {
         intent: 'log',
         exercise: null,
         exerciseConfidence: match.score,
+        unknownName: spokenName,
         error: `No exercise matches "${spokenName}". Closest is ${match.exercise.name} — add it in Exercises, or pick one and try again.`
       };
     } else {
-      return { ...base, intent: 'log', error: `No exercise matches "${spokenName}".` };
+      return { ...base, intent: 'log', unknownName: spokenName, error: `No exercise matches "${spokenName}".` };
     }
   }
 

@@ -49,8 +49,8 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
     });
   };
 
-  async function fresh({ init } = {}) {
-    const context = await browser.newContext({ acceptDownloads: true });
+  async function fresh({ init, context: options = {} } = {}) {
+    const context = await browser.newContext({ acceptDownloads: true, ...options });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
@@ -619,13 +619,16 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
       req.onsuccess = () => { const g = req.result.transaction('exercises').objectStore('exercises').getAll(); g.onsuccess = () => resolve(g.result.find((e) => e.name === 'Deadlift')); };
     }));
     assert.deepEqual(ex.primaryMuscles, ['lower-back', 'glutes', 'quads', 'hamstrings']);
-    assert.deepEqual(ex.secondaryMuscles, ['forearms', 'lats', 'upper-back', 'calves']);
+    assert.deepEqual(ex.secondaryMuscles, ['upper-back-lats', 'traps', 'forearms', 'calves']);
     await context.close();
   });
 
-  /* ---------- Stage 4: the body map ---------- */
+  /* ---------- Stage 4: the body map ----------
+   * Since the 3D muscle map, these drive the flat figures, which are what
+   * reduced motion (and no WebGL2) shows, inside the new "Your muscles" card. */
+  const FLAT = { reducedMotion: 'reduce' };
 
-  const muscle = (m) => `#body-card path.muscle[data-muscle="${m}"][role="button"]`;
+  const muscle = (m) => `#muscle-map path.muscle[data-muscle="${m}"][role="button"]`;
   /* A paired muscle's box centre is the gap between left and right, so tap the
    * left shape: just inside its left edge, half way down. */
   const tapMuscle = async (page, m) => {
@@ -638,19 +641,19 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
   };
 
   test('body map: heat follows this week’s sets, labels state the count, keyboard opens suggestions', async () => {
-    const { context, page, errors } = await fresh({ init: () => { /* narrow phone */ } });
+    const { context, page, errors } = await fresh({ context: FLAT });
     await page.setViewportSize({ width: 393, height: 900 });
     await page.click('#start-session');
     for (let i = 0; i < 3; i += 1) await logPhrase(page, 'deadlift 140 kilos for 5');
     for (let i = 0; i < 4; i += 1) await logPhrase(page, 'squat 100 kilos for 5');
     await page.click('#tab-progress');
-    await page.waitForSelector('#body-card');
+    await page.waitForSelector('#muscle-map');
     // Glutes: 3 deadlift + 4 squat primaries = 7 → level 2. Quads: 4 + 1.5 = 5.5 → 2. Chest: 0.
-    assert.match(await page.getAttribute('#body-card path.muscle[data-muscle="glutes"]', 'class'), /heat-2/);
-    assert.match(await page.getAttribute('#body-card path.muscle[data-muscle="lats"]', 'class'), /heat-1/);
-    assert.match(await page.getAttribute('#body-card path.muscle[data-muscle="chest"]', 'class'), /heat-0/);
-    assert.equal(await page.getAttribute('#body-card path.muscle[data-muscle="hamstrings"][role="button"]', 'aria-label'), 'Hamstrings: 5 sets this week');
-    assert.equal(await page.locator('#body-card path.muscle[role="button"]').count(), 18, 'each muscle is one control');
+    assert.match(await page.getAttribute('#muscle-map path.muscle[data-muscle="glutes"]', 'class'), /heat-2/);
+    assert.match(await page.getAttribute('#muscle-map path.muscle[data-muscle="upper-back-lats"]', 'class'), /heat-1/);
+    assert.match(await page.getAttribute('#muscle-map path.muscle[data-muscle="chest"]', 'class'), /heat-0/);
+    assert.equal(await page.getAttribute('#muscle-map path.muscle[data-muscle="hamstrings"][role="button"]', 'aria-label'), 'Hamstrings: 5 sets in the last 7 days');
+    assert.equal(await page.locator('#muscle-map path.muscle[role="button"]').count(), 18, 'each muscle is one control');
 
     // Narrow: one side at a time, with a flip button.
     assert.equal(await page.isVisible('.body-view[data-side="back"]'), false);
@@ -671,7 +674,7 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
   });
 
   test('the recovery guard shows a note and still lets you log; "Log this" goes through the confirm sheet', async () => {
-    const { context, page } = await fresh();
+    const { context, page } = await fresh({ context: FLAT });
     await page.click('#start-session');
     for (let i = 0; i < 6; i += 1) await logPhrase(page, 'bench press 60 kilos for 8');
     await page.click('#tab-progress');
@@ -688,7 +691,7 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
   });
 
   test('a muscle none of your exercises work offers to add one, pre-selected; "Log this" with no session starts one only on save', async () => {
-    const { context, page } = await fresh();
+    const { context, page } = await fresh({ context: FLAT });
     await page.evaluate(() => new Promise((resolve) => {
       const req = indexedDB.open('reptrack');
       req.onsuccess = () => {
@@ -721,7 +724,7 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
   });
 
   test('the body figure follows the setting; definition never drops after a lapse', async () => {
-    const { context, page } = await fresh();
+    const { context, page } = await fresh({ context: FLAT });
     await page.click('#start-session');
     await logPhrase(page, 'deadlift 140 kilos for 5');
     await page.click('#tab-progress');
@@ -731,7 +734,7 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
     await page.selectOption('#set-body-figure', 'female');
     await page.click('#tab-progress');
     assert.notEqual(await outline(), neutral);
-    const level = () => page.getAttribute('#body-card path.muscle[data-muscle="glutes"][role="button"]', 'data-definition');
+    const level = () => page.getAttribute('#muscle-map path.muscle[data-muscle="glutes"][role="button"]', 'data-definition');
     const before = await level();
     // Move every set 60 days into the past: lifetime work is unchanged, so is definition.
     await page.evaluate(() => new Promise((resolve) => {

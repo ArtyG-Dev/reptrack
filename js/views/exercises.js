@@ -2,44 +2,25 @@
 
 import * as state from '../state.js';
 import { el, clear, toast, openSheet, confirmSheet, disclosure, titleCase } from '../ui.js';
-import { CATEGORIES, MUSCLES } from '../exercises-seed.js';
-import { MUSCLE_LABELS } from '../muscles.js';
+import { CATEGORIES } from '../exercises-seed.js';
+import { MUSCLE_LABELS, isUnassigned } from '../muscles.js';
+import { musclePicker } from './muscle-picker.js';
 import { describeTarget } from '../plans.js';
 
 let filter = '';
 let containerRef = null;
 
-/** A row of toggle buttons, one per muscle. `other` is the opposite list: a
- *  muscle is primary or secondary, never both, so choosing it here drops it there.
- *  `sync` updates every chip in place, so keyboard focus stays where it was. */
-function muscleChips(kind, chosen, other, sync) {
-  return el('div', { class: 'chips', role: 'group', 'aria-label': `${kind === 'primary' ? 'Primary' : 'Secondary'} muscles`, id: `ex-${kind}-muscles` },
-    ...MUSCLES.map((m) => el('button', {
-      class: 'chip', type: 'button', 'aria-pressed': chosen.has(m) ? 'true' : 'false', dataset: { muscle: m },
-      onclick: () => { if (chosen.has(m)) chosen.delete(m); else { chosen.add(m); other.delete(m); } sync(); }
-    }, MUSCLE_LABELS[m])));
-}
-
-export function exerciseSheet(existing = null, { preselectMuscle = null } = {}) {
+export function exerciseSheet(existing = null, { preselectMuscle = null, name: presetName = '' } = {}) {
   const titleId = 'confirm-sheet-title';
   return openSheet('confirm-sheet', (ctx) => {
-    const primary = new Set(existing?.primaryMuscles || (preselectMuscle ? [preselectMuscle] : []));
-    const secondary = new Set(existing?.secondaryMuscles || []);
-    const sync = () => {
-      for (const [group, chosen] of [[primaryChips, primary], [secondaryChips, secondary]]) {
-        for (const chip of group.children) chip.setAttribute('aria-pressed', chosen.has(chip.dataset.muscle) ? 'true' : 'false');
-      }
-    };
-    const primaryChips = muscleChips('primary', primary, secondary, sync);
-    const secondaryChips = muscleChips('secondary', secondary, primary, sync);
-    const chipsHost = el('div', { class: 'stack' },
-      el('p', { class: 'small', style: 'margin:0', text: 'Primary muscles' }), primaryChips,
-      el('p', { class: 'small', style: 'margin:0', text: 'Secondary muscles' }), secondaryChips
-    );
-    const name = el('input', { type: 'text', id: 'ex-name', value: existing?.name || '', required: true, 'data-autofocus': '' });
+    const name = el('input', { type: 'text', id: 'ex-name', value: existing?.name || presetName, required: true, 'data-autofocus': '' });
     const aliases = el('input', { type: 'text', id: 'ex-aliases', value: (existing?.aliases || []).join(', '), placeholder: 'bench, flat bench' });
-    const group = el('select', { id: 'ex-group' }, ...['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'other']
-      .map((g) => el('option', { value: g, selected: (existing?.muscleGroup || 'other') === g }, g)));
+    const picker = musclePicker({
+      primary: existing?.primaryMuscles || (preselectMuscle ? [preselectMuscle] : []),
+      secondary: existing?.secondaryMuscles || [],
+      nameInput: name,
+      figure: state.getState().settings.bodyFigure || 'neutral'
+    });
 
     // Category is a suggestion list, not a fixed enum — the dropdown offers
     // CATEGORIES ∪ whatever is already in use, plus an explicit "type your own"
@@ -91,26 +72,21 @@ export function exerciseSheet(existing = null, { preselectMuscle = null } = {}) 
         ctx.close({
           name: name.value.trim(),
           aliases: aliases.value.split(',').map((a) => a.trim().toLowerCase()).filter(Boolean),
-          muscleGroup: group.value,
+          muscleGroup: existing?.muscleGroup || 'other',   // kept on the record; muscles below are what count
           category: (chosenCategory.trim() || 'strength').toLowerCase(),
           mode: mode.value,
           isBodyweight: bodyweight.checked,
           restSec: Number(rest.value) > 0 ? Math.round(Number(rest.value)) : null,   // blank: use the default
-          primaryMuscles: MUSCLES.filter((m) => primary.has(m)),
-          secondaryMuscles: MUSCLES.filter((m) => secondary.has(m))
+          ...picker.value()
         });
       }
     },
       el('h2', { id: titleId, text: existing ? 'Edit exercise' : 'Add exercise' }),
       el('div', { class: 'field' }, el('label', { for: 'ex-name', text: 'Name' }), name),
       el('div', { class: 'field' }, el('label', { for: 'ex-aliases', text: 'Aliases the voice parser should accept (comma separated)' }), aliases),
-      el('div', { class: 'field-row' },
-        el('div', {}, el('label', { for: 'ex-group', text: 'Muscle group' }), group),
-        el('div', {}, el('label', { for: 'ex-category', text: 'Category' }), category)
-      ),
+      el('div', { class: 'field' }, el('label', { for: 'ex-category', text: 'Category' }), category),
       customCategoryField,
-      el('div', { class: 'field' }, chipsHost,
-        el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'A working set counts 1 for each primary muscle and ½ for each secondary in the weekly charts.' })),
+      picker.node,
       el('div', { class: 'field' },
         el('label', { for: 'ex-mode', text: 'How it’s logged' }), mode,
         el('p', { class: 'small muted', style: 'margin:4px 0 0', text: 'Reps covers strength and calisthenics (weight is optional). Hold covers yoga poses, pilates holds, and timed calisthenics like a plank.' })
@@ -137,7 +113,7 @@ function exerciseRow(ex, rerender) {
         ex.mode === 'hold' ? el('span', { class: 'small muted', text: ' · hold' }) : null,
         ex.isBodyweight ? el('span', { class: 'small muted', text: ' · bodyweight' }) : null
       ),
-      el('p', { class: 'small muted', style: 'margin:0', text: `${ex.muscleGroup} · ${count} logged${(ex.aliases || []).length ? ` · ${ex.aliases.join(', ')}` : ''}` })
+      el('p', { class: 'small muted', style: 'margin:0', text: `${isUnassigned(ex) ? 'Unassigned' : (ex.primaryMuscles.length ? ex.primaryMuscles : ex.secondaryMuscles).map((m) => MUSCLE_LABELS[m]).join(', ')} · ${count} logged${(ex.aliases || []).length ? ` · ${ex.aliases.join(', ')}` : ''}` })
     ),
     el('button', {
       class: 'btn btn-sm', type: 'button', 'aria-label': `Edit ${ex.name}`,

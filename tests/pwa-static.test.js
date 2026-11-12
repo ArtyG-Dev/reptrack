@@ -128,7 +128,8 @@ test('the service worker precaches every shipped shell file', () => {
 
   const shipped = walk(ROOT)
     .map((f) => `./${relative(ROOT, f).split('\\').join('/')}`)
-    .filter((f) => /\.(js|css|png)$/.test(f) && !f.startsWith('./sw.js'));
+    .filter((f) => /\.(js|css|png)$/.test(f) && !f.startsWith('./sw.js'))
+    .filter((f) => !f.startsWith('./legacy/'));          // the legacy copy has its own worker: tested below
 
   for (const file of shipped) {
     assert.ok(listed.includes(file), `${file} is shipped but not in the service worker PRECACHE list`);
@@ -200,4 +201,41 @@ test('no browser dialogs — every prompt is an in-app sheet', () => {
   for (const banned of [/\balert\(/, /\bwindow\.confirm\(/, /\bwindow\.prompt\(/, /(?<![.\w])confirm\(/, /(?<![.\w])prompt\(/]) {
     assert.ok(!banned.test(sources), `${banned} must not be used — use ui.js sheets`);
   }
+});
+
+/* ---------- the legacy copy at /legacy/ (DEPLOY.md) ---------- */
+
+test('the legacy copy is isolated: own database, own worker and caches, own manifest, noindex kept', () => {
+  const L = (p) => readFileSync(join(ROOT, 'legacy', p), 'utf8');
+  assert.match(L('js/db.js'), /export const DB_NAME = 'reptrack-legacy';/);
+  const legacySw = L('sw.js');
+  assert.match(legacySw, /const CACHE = 'reptrack-legacy-shell-v\d+';/);
+  assert.match(legacySw, /n\.startsWith\('reptrack-legacy-'\) && n !== CACHE/, 'it deletes only its own caches');
+  const manifest = JSON.parse(L('manifest.webmanifest'));
+  assert.equal(manifest.id, 'reptrack-legacy');
+  assert.equal(manifest.name, 'RepTrack (legacy)');
+  assert.equal(manifest.start_url, './index.html');
+  assert.equal(manifest.scope, './');
+  const html = L('index.html');
+  assert.match(html, /<meta name="robots" content="noindex/);
+  assert.match(html, /<script type="module" src="legacy-boot.js"><\/script>/);
+  const boot = L('legacy-boot.js');
+  assert.match(boot, /Legacy version: data here is separate from the main app\./);
+  for (const key of boot.matchAll(/(?:get|set)\(([A-Z_]+)/g)) assert.ok(['COPIED', 'DISMISSED', 'k'].includes(key[1]));
+  assert.match(boot, /const COPIED = 'legacy:copied';/);
+  assert.match(boot, /const DISMISSED = 'legacy:bannerDismissed';/);
+
+  // Its worker precaches every file it ships, like the main one.
+  const listed = [...legacySw.matchAll(/'(\.\/[^']*)'/g)].map((m) => m[1]).filter((p) => p !== './');
+  for (const entry of listed) assert.ok(existsSync(join(ROOT, 'legacy', entry)), `legacy precaches ${entry}, which does not exist`);
+  const shipped = walk(join(ROOT, 'legacy')).map((f) => `./${relative(join(ROOT, 'legacy'), f).split('\\').join('/')}`)
+    .filter((f) => /\.(js|css|png)$/.test(f) && f !== './sw.js');
+  for (const file of shipped) assert.ok(listed.includes(file), `legacy ships ${file} but does not precache it`);
+});
+
+test('the main worker never answers for /legacy/ and deletes only its own caches', () => {
+  assert.match(swSource, /url\.pathname\.startsWith\(new URL\('\.\/legacy\/', self\.registration\.scope\)\.pathname\)\) return;/);
+  assert.match(swSource, /n\.startsWith\('reptrack-shell-'\) && n !== CACHE/);
+  const precache = swSource.slice(swSource.indexOf('const PRECACHE = ['), swSource.indexOf('];', swSource.indexOf('const PRECACHE = [')));
+  assert.doesNotMatch(precache, /legacy/, 'nothing under legacy/ is in the main precache');
 });

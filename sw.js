@@ -59,7 +59,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.filter((n) => n !== CACHE).map((n) => caches.delete(n)));
+    // Only this worker's own older caches: the legacy copy at /legacy/ keeps
+    // its own ("reptrack-legacy-…"), and must survive this one updating.
+    await Promise.all(names.filter((n) => n.startsWith('reptrack-shell-') && n !== CACHE).map((n) => caches.delete(n)));
     await self.clients.claim();
   })());
 });
@@ -70,6 +72,10 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // The legacy copy has its own worker, scoped to /legacy/. This one never
+  // answers for it — not even a navigation, which would otherwise get this
+  // app's shell — and never caches its files.
+  if (url.pathname.startsWith(new URL('./legacy/', self.registration.scope).pathname)) return;
 
   // Navigations always resolve to the cached shell so a cold offline launch works.
   if (req.mode === 'navigate') {

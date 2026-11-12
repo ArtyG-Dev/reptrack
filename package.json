@@ -13,7 +13,10 @@
     "acceptance": "node scripts/run-acceptance.mjs",
     "skins": "node scripts/measure-skins.mjs",
     "palettes": "node scripts/check-skin-palettes.mjs",
-    "visuals": "node scripts/capture-visuals.mjs"
+    "visuals": "node scripts/capture-visuals.mjs",
+    "musclemap": "node scripts/measure-musclemap.mjs",
+    "musclemap:shots": "node scripts/capture-musclemap.mjs",
+    "legacy": "node scripts/build-legacy.mjs"
   },
   "devDependencies": {
     "axe-core": "^4.13.0",

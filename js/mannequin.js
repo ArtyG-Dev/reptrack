@@ -79,7 +79,7 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const norm = (a) => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
 /** A unit sphere as (latitude, longitude) quads, positions = normals. */
-function sphereGrid(lat = 14, lon = 20) {
+function sphereGrid(lat = 12, lon = 18) {
   const tris = [];
   const at = (i, j) => {
     const t = (i / lat) * Math.PI; const p = (j / lon) * Math.PI * 2;

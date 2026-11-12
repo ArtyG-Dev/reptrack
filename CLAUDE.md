@@ -61,7 +61,9 @@ js/
   graphic-view.js       the full-screen graphic view (View button on Today)
   reminders.js          when to show the backup reminder (pure)
   skin-data.js          what Monolith / Constellation / Orrery draw: faces, stars, lines, planets (pure)
-  bodymap.js            the body-map SVG: pure geometry for three figures × front/back, and its renderer
+  bodymap.js            the flat body figures (SVG): three figures × front/back; the 3D map's fallback
+  mannequin.js          the 3D muscle map's geometry: primitives per muscle group, mesh, camera, ray-picking (pure)
+  mannequin-gl.js       its WebGL2 renderer: own small context, drawn on demand
   muscles.js            heat levels, recovery guard, suggestion order, definition; weekly working sets per muscle, a muscle's 12-week series, backfill guess (pure)
   plans.js              plan checklist progress, prefill, plan-from-session, update-to-what-I-did (pure)
   wake.js               the session screen wake lock
@@ -74,9 +76,13 @@ js/
     progress.js         per-exercise charts (mode-aware), personal bests, nudge
     exercises.js        exercise dictionary CRUD, grouped into collapsible categories
     settings.js         preferences incl. theme, export/import, wipe, storage estimate
-    muscle-sheet.js     a muscle's (or region's) exercise suggestions, "Log this", "Add an exercise for …"
+    muscle-sheet.js     a muscle's (or region's) panel: period total, trend, suggestions, "Log this"
+    muscle-map.js       "Your muscles" on Progress: 3D or flat figure, toggles, ranked list, full screen
+    muscle-picker.js    optional muscle choice for an exercise: suggestion, tap-the-figure, chips
 
-scripts/                serve, icons, footprint, Lighthouse (all themes), skin CPU, acceptance loop
+legacy/                 the pre-3D-muscle-map build (tag v-pre-musclemap), isolated; see DEPLOY.md
+scripts/                serve, icons, footprint, Lighthouse (all themes), skin CPU, muscle-map CPU and
+                        screenshots, build-legacy, acceptance loop
 tests/                  node:test — unit, IndexedDB (fake-indexeddb) and Playwright browser
 ```
 
@@ -92,7 +98,7 @@ out of the app — every colour it draws comes from CSS custom properties.
 
 ```
 Exercise  { id, name, aliases[], muscleGroup, primaryMuscles[], secondaryMuscles[], category, mode,
-            isCustom, isBodyweight, restSec }
+            isCustom, isBodyweight, restSec, muscleReminder }
 Session   { id, dateISO, startTs, endTs, durationSec, notes, lastModified, visibility,
             sessionType, className, instructor, location, attendance, planId, planMarks }
 SetEntry  { id, sessionId, exerciseId, dateISO, order, weight, unit, reps, rpe,
@@ -108,19 +114,89 @@ Indexes: `sessions.by_date`, `sets.by_session`, `sets.by_exercise`, `runs.by_dat
 
 Details that look redundant and are not:
 
-- **Muscles.** `MUSCLES` in `exercises-seed.js` is the 18-muscle taxonomy (chest,
-  front/side/rear delts, biceps, triceps, forearms, abs, obliques, lats, upper/lower back,
-  glutes, quads, hamstrings, calves, adductors, hip flexors). Each exercise lists
-  `primaryMuscles[]` and `secondaryMuscles[]` from it, never one muscle in both; the old
-  single `muscleGroup` stays, for the backfill and the Exercises list line. A working set
-  counts **1 per primary, 0.5 per secondary** (`js/muscles.js`); warm-ups count nothing.
-  No DB version bump: the fields are additive. **`settings.muscleBackfillDone`** gates a
-  once-per-install pass in `state.init()` that gives every exercise with no muscles the
-  starter mapping of the same name, else a primaries-only guess from `muscleGroup`
-  (`MUSCLE_GROUP_MUSCLES`), never overwriting a non-empty list. After that pass, only
-  records whose fields are *absent* (old-shaped exercises arriving from an import, in either
-  mode) are filled, so an empty list chosen in the editor stays empty.
-- **The body map** (Progress → "This week's muscles"). One `<path>` per muscle per view,
+- **Muscles.** One list everywhere (the 3D figure's primitives, the flat figures, the
+  selector, the ranked list, the Orrery regions), `MUSCLES` + `MUSCLE_LABELS` in
+  `exercises-seed.js`. The canonical seventeen plus Adductors, kept at the user's request:
+
+  | id | label | id | label |
+  |---|---|---|---|
+  | `chest` | Chest | `abs` | Abs |
+  | `front-delts` | Front shoulders | `obliques` | Obliques |
+  | `side-delts` | Side shoulders | `lower-back` | Lower back |
+  | `rear-delts` | Rear shoulders | `glutes` | Glutes |
+  | `upper-back-lats` | Upper back / lats | `hip-flexors` | Hip flexors |
+  | `traps` | Traps | `quads` | Quads |
+  | `biceps` | Biceps | `hamstrings` | Hamstrings |
+  | `triceps` | Triceps | `calves` | Calves |
+  | `forearms` | Forearms | `adductors` | Adductors |
+
+  The mapping lives **on the Exercise** (`primaryMuscles[]` = main, `secondaryMuscles[]` =
+  supporting, never one muscle in both), never on a set: every count is computed from
+  SetEntry + Exercise when shown, so editing an exercise's muscles re-counts its whole
+  history. **An exercise with neither list is Unassigned:** counted on its own ranked-list
+  row, never spread over the body or guessed at. Every starter has at least one muscle.
+  The old single `muscleGroup` stays on records (it seeded the first backfill) but is no
+  longer edited. **Taxonomy v2** (`settings.muscleTaxonomyV2Done`): `state.init()` always
+  renames retired ids (`lats`, `upper-back` → `upper-back-lats`, also for imports), and once
+  gives starters still on their first mapping the corrected one (`migrateMuscles`,
+  `SEED_MUSCLES_V1`); an edited starter is left alone. `settings.muscleBackfillDone` is the
+  earlier once-only pass from `muscleGroup`.
+- **Counting modes** (`muscles.muscleTotals()`, `settings.muscleCountMode`
+  `'sets' | 'weight'`, `settings.musclePeriodDays` `7 | 30 | 90`; switching changes nothing
+  stored). **Sets:** 1 per working set to each main muscle, 0.5 to each supporting one, for
+  every exercise type. **Weight:** weight × reps to main, half to supporting, in the user's
+  unit; hold-mode and bodyweight exercises are **excluded and reported as such**
+  (`excludedOnly`), never shown as 0. Warm-ups count nothing in either. Heat: Sets mode uses
+  the Stage 4 thresholds per week (`heatLevelFor` scales a 30/90-day total to 7 days);
+  Weight mode is relative to the most-trained group in view. A muscle's trend is daily over
+  7 days and weekly over 30/90 (`muscleTrend`).
+- **Custom exercises.** Muscles are optional (`views/muscle-picker.js`). A suggestion from
+  the name comes from the on-device keyword table `KEYWORD_MUSCLES` in `muscles.js`
+  (first match wins, specific before general), shown and applied only on "Use suggestion":
+
+  | words in the name | main | supporting |
+  |---|---|---|
+  | leg / hamstring / nordic curl | hamstrings | calves |
+  | calf, calves | calves | |
+  | lateral / side raise | side shoulders | |
+  | front raise | front shoulders | |
+  | rear delt, reverse fly, face pull | rear shoulders | traps |
+  | shrug | traps | forearms |
+  | pull-up, chin-up, pulldown | upper back / lats | biceps |
+  | deadlift, RDL, good morning | hamstrings, glutes, lower back | forearms |
+  | squat, lunge, leg press, split squat | quads, glutes | adductors |
+  | hip thrust, glute bridge, kickback | glutes | hamstrings |
+  | dip | triceps, chest | front shoulders |
+  | tricep, skull crusher, pushdown | triceps | |
+  | extension | quads | |
+  | curl | biceps | forearms |
+  | row | upper back / lats | biceps, rear shoulders |
+  | overhead / shoulder / military / Arnold press | front shoulders | side shoulders, triceps |
+  | bench / chest / incline / decline press, fly, push-up | chest | front shoulders, triceps |
+  | press | chest, front shoulders | triceps |
+  | crunch, sit-up, plank, leg / knee raise, ab | abs | obliques, hip flexors |
+  | raise | side shoulders | front shoulders |
+  | twist, woodchop, side bend | obliques | abs |
+  | wrist, grip, farmer's walk / carry | forearms | traps |
+
+  **`Exercise.muscleReminder`** (`{ prompts, lastAt }`, absent until used): an unassigned
+  exercise asks once after 3 logged working sets and at most once more 10 sets after that
+  (`reminderDue`, `REMINDER`), then never. A spoken name not in the dictionary carries
+  `unknownName` from the parser and Today offers "Create … as a new exercise", with
+  "Assign later"; the phrase then goes through the normal confirm sheet.
+- **The muscle map** (Progress → "Your muscles", `views/muscle-map.js`). A stylised 3D
+  mannequin (`mannequin.js`: ellipsoids and capsules, one or a mirrored pair per muscle
+  group, plus plain grey pieces; three figures differ only in proportions), drawn by
+  `mannequin-gl.js` in its own context **on demand**: on Progress it is held at a
+  three-quarter front angle and costs nothing until dragged. The canvas and context live for
+  the page and are moved between renders, never recreated. Drag uses the shared orbit
+  (free turn, tilt ±30°); a tap ray-picks the group (`pickMuscle`) and opens its panel
+  (`muscle-sheet.js`: total and trend in the active mode, then suggestions). Full screen turns
+  slowly by itself at ≤30 fps, waits while held and pauses when hidden. **Reduced motion, no
+  WebGL2 or a lost context use the flat figures** (`bodymap.js`), with the same counts,
+  levels and colours. A ranked list of every group (plus Unassigned) is always shown, so
+  nothing depends on colour, and it is the keyboard and screen-reader route to every panel.
+- **The flat figures** (the muscle map's fallback, and the exercise editor's tap-to-select). One `<path>` per muscle per view,
   each muscle a `role="button"` on exactly one view (`VIEW_OF` in `bodymap.js`). Fill is
   this week's weighted sets through `heatLevel()` (`HEAT_THRESHOLDS` — the one place the
   0 / <4 / 4–<10 / ≥10 cut-offs live) into `--heat-0…--heat-3`, declared in every theme
@@ -724,6 +800,15 @@ npm run acceptance # tests + footprint + Lighthouse + skin cost, rewrites ACCEPT
   dictionary, backfilling a starter exercise into an existing one by name without touching
   what's already there, running that backfill exactly once, and not duplicating a starter
   that already exists under a different case.
+- `mannequin`, `muscles` — the 3D geometry and ray-picking from every side; counting modes,
+  Unassigned, re-counting after an edit, the taxonomy migration, the keyword table, the
+  reminder schedule.
+- `musclemap` — real Chromium: the 3D view held still on Progress, drag and tilt clamp, tap
+  picking, full-screen auto-rotation, the flat fallback under reduced motion and without
+  WebGL2, toggles persisting, Weight mode's exclusions, Unassigned and re-counting, the
+  reminder, voice "create".
+- `legacy` — the legacy copy's one-time data copy, banner, data kept separate both ways,
+  and each page controlled and cached by its own service worker.
 - `contrast` — parses `css/styles.css` and checks every text pair ≥ 4.5:1 in all five
   themes; for the glass skins it composites the panel scrim over both extremes of the
   backdrop range and checks the result, asserts every `--backdrop-*` token sits inside that

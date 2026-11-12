@@ -13,6 +13,8 @@ import * as store from '../store.js';
 import { todayISO } from '../store.js';
 import * as graphicView from '../graphic-view.js';
 import { planProgress, prefillFor, describeTarget } from '../plans.js';
+import { musclePicker } from './muscle-picker.js';
+import { exerciseSheet } from './exercises.js';
 
 let listening = false;
 let restEndsAt = null;
@@ -250,7 +252,55 @@ export async function editSet(entry, proposed = null, transcript = '') {
   toast('Set updated.');
 }
 
-async function handleParsed(parsed) {
+/**
+ * A spoken name that isn't in the dictionary: offer to create it, with the
+ * muscles optional and a suggestion from the name shown (never applied on its
+ * own). "Assign later" creates it with none. Then the phrase is read again and
+ * goes through the normal confirm sheet, so still nothing saves unconfirmed.
+ */
+function createExerciseSheet(spokenName) {
+  const titleId = 'confirm-sheet-title';
+  return openSheet('confirm-sheet', (ctx) => {
+    const name = el('input', { type: 'text', id: 'new-ex-name', value: titleCase(spokenName), required: true });
+    const mode = el('select', { id: 'new-ex-mode' },
+      el('option', { value: 'reps', selected: true }, 'Reps (weight × reps)'),
+      el('option', { value: 'hold' }, 'Hold (timed)'));
+    const picker = musclePicker({ nameInput: name, figure: state.getState().settings.bodyFigure || 'neutral' });
+    const finish = (withMuscles) => {
+      if (!name.value.trim()) { toast('Give the exercise a name.'); return; }
+      ctx.close({
+        name: name.value.trim(),
+        aliases: [spokenName.trim().toLowerCase()].filter((a) => a && a !== name.value.trim().toLowerCase()),
+        mode: mode.value,
+        category: 'strength',
+        isCustom: true,
+        ...(withMuscles ? picker.value() : { primaryMuscles: [], secondaryMuscles: [] })
+      });
+    };
+    return el('form', { method: 'dialog', id: 'create-exercise', onsubmit: (e) => { e.preventDefault(); finish(true); } },
+      el('h2', { id: titleId, text: `Create “${titleCase(spokenName)}” as a new exercise?` }),
+      el('p', { class: 'small muted', text: 'It isn’t in your exercises yet. Muscles are optional: you can set them now or any time later.' }),
+      el('div', { class: 'field' }, el('label', { for: 'new-ex-name', text: 'Name' }), name),
+      el('div', { class: 'field' }, el('label', { for: 'new-ex-mode', text: 'How it’s logged' }), mode),
+      picker.node,
+      el('div', { class: 'sheet-actions' },
+        el('button', { class: 'btn', type: 'button', 'data-autofocus': '', onclick: () => ctx.close(null) }, 'Cancel'),
+        el('button', { class: 'btn', type: 'button', id: 'create-assign-later', onclick: () => finish(false) }, 'Assign later'),
+        el('button', { class: 'btn btn-primary', type: 'submit' }, 'Create')
+      )
+    );
+  }, { labelledBy: titleId });
+}
+
+async function handleParsed(parsed, { created = false } = {}) {
+  if (!parsed.ok && parsed.unknownName && !created) {
+    const input = await createExerciseSheet(parsed.unknownName);
+    if (!input) return;
+    await state.addExercise(input);
+    toast(`Added ${input.name}.`);
+    await handleParsed(parseTranscript(parsed.transcript, state.parserContext()), { created: true });
+    return;
+  }
   if (!parsed.ok) {
     const retry = await confirmSheet({
       title: 'Could not read that',
@@ -625,6 +675,26 @@ function exerciseGroup(group, s) {
   );
 }
 
+/** One gentle, dismissible prompt for an exercise with no muscles set. */
+function muscleReminderCard(s) {
+  const ex = s.muscleReminderFor ? state.exerciseById(s.muscleReminderFor) : null;
+  if (!ex) return null;
+  return el('div', { class: 'card stack', id: 'muscle-reminder', role: 'status' },
+    el('p', { style: 'margin:0' }, 'Want to set which muscles ', el('em', { text: ex.name }), ' works? It’ll then show on your muscle map.'),
+    el('div', { class: 'row' },
+      el('button', {
+        class: 'btn btn-sm btn-primary', type: 'button', id: 'reminder-set-muscles',
+        onclick: async () => {
+          state.dismissMuscleReminder();
+          const input = await exerciseSheet(ex);
+          if (input) { await state.updateExercise({ ...ex, ...input }); toast(`Saved ${input.name}.`); }
+        }
+      }, 'Set muscles'),
+      el('button', { class: 'btn btn-sm', type: 'button', id: 'reminder-not-now', onclick: () => state.dismissMuscleReminder() }, 'Not now')
+    )
+  );
+}
+
 function setsCard(s) {
   const groups = setsGroupedByExercise(s.sessionSets);
   if (!groups.length) {
@@ -747,7 +817,7 @@ export function render(container) {
   containerRef.append(
     el('h2', { class: 'visually-hidden', text: 'Active session' }),
     activeCard(s),
-    ...[planCard(s)].filter(Boolean),
+    ...[muscleReminderCard(s), planCard(s)].filter(Boolean),
     setsCard(s),
     ...(runs ? [runs] : []),
     finishCard()

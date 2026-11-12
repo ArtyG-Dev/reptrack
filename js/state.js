@@ -9,7 +9,7 @@ import { buildWeeklySummary, weekRange, summaryFilename } from './summary.js';
 import { activityVisualState, frostedDates, trainingDays, effectiveToday } from './consistency.js';
 import { monolithFaces, starField, constellationLinks, orreryPlanets } from './skin-data.js';
 import { itemsFromSets, updatedItems } from './plans.js';
-import { hasMuscles, guessMuscles } from './muscles.js';
+import { hasMuscles, guessMuscles, migrateMuscles } from './muscles.js';
 
 const state = {
   ready: false,
@@ -128,6 +128,15 @@ async function backfillMuscles() {
   for (const ex of due) await store.updateExercise({ ...ex, ...guessMuscles(ex) });
   if (due.length) state.exercises = await store.listExercises();
   if (firstTime) state.settings = await store.saveSettings({ muscleBackfillDone: true });
+
+  // Taxonomy v2: retired ids (lats, upper-back) are always renamed, which also
+  // covers an old backup arriving by import. Once per install, a starter still
+  // on its original mapping takes the corrected one; an edited one is left alone.
+  const correctSeeds = !state.settings.muscleTaxonomyV2Done;
+  const moved = state.exercises.map((ex) => migrateMuscles(ex, { correctSeeds })).filter((ex, i) => ex !== state.exercises[i]);
+  for (const ex of moved) await store.updateExercise(ex);
+  if (moved.length) state.exercises = await store.listExercises();
+  if (correctSeeds) state.settings = await store.saveSettings({ muscleTaxonomyV2Done: true });
 }
 
 export async function reloadAll() {

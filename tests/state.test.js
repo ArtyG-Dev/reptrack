@@ -140,7 +140,21 @@ test('a schema-1 backup with no muscle fields imports, and its exercises get mus
     await store.importAll(backup, { mode });
     await state.reloadAll();
     const ex = state.getState().exercises;
-    assert.deepEqual(ex.find((e) => e.id === 'ex_old_1').secondaryMuscles, ['biceps', 'upper-back', 'rear-delts'], mode);
+    assert.deepEqual(ex.find((e) => e.id === 'ex_old_1').secondaryMuscles, ['biceps', 'rear-delts', 'forearms'], mode);
     assert.deepEqual(ex.find((e) => e.id === 'ex_old_2').primaryMuscles, ['biceps', 'triceps'], mode);
   }
+});
+
+test('taxonomy v2 on an existing install: retired ids renamed, starters corrected once, edits kept', async () => {
+  const pull = await store.addExercise({ name: 'Pull Up', isCustom: false, primaryMuscles: ['lats'], secondaryMuscles: ['biceps', 'upper-back', 'rear-delts'] });
+  const row = await store.addExercise({ name: 'Barbell Row', isCustom: false, primaryMuscles: ['lats'], secondaryMuscles: ['biceps'] });   // edited by the user
+  const mine = await store.addExercise({ name: 'Rack Pull', isCustom: true, primaryMuscles: ['upper-back', 'glutes'], secondaryMuscles: ['lats'] });
+  await store.saveSettings({ muscleBackfillDone: true, seedBackfillDone: true });
+  const { exercises, settings } = await state.init();
+  const get = (id) => exercises.find((e) => e.id === id);
+  assert.deepEqual(get(pull.id).secondaryMuscles, ['biceps', 'rear-delts', 'forearms'], 'the corrected starter mapping');
+  assert.deepEqual([get(row.id).primaryMuscles, get(row.id).secondaryMuscles], [['upper-back-lats'], ['biceps']], 'renamed, edit kept');
+  assert.deepEqual([get(mine.id).primaryMuscles, get(mine.id).secondaryMuscles], [['upper-back-lats', 'glutes'], []], 'never in both lists');
+  assert.equal(settings.muscleTaxonomyV2Done, true);
+  for (const ex of exercises) for (const m of [...ex.primaryMuscles, ...ex.secondaryMuscles]) assert.ok(!['lats', 'upper-back'].includes(m), `${ex.name}: ${m}`);
 });

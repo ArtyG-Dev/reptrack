@@ -7,13 +7,12 @@
  * nothing (progression.workingSets()).
  */
 
-import { MUSCLES, SEED_EXERCISES, MUSCLE_GROUP_MUSCLES } from './exercises-seed.js';
-import { workingSets } from './progression.js';
+import { MUSCLES, MUSCLE_LABELS, SEED_EXERCISES, MUSCLE_GROUP_MUSCLES } from './exercises-seed.js';
+import { workingSets, toKg, fromKg } from './progression.js';
 import { weekRange } from './summary.js';
 import { shiftDays } from './consistency.js';
 
-/** "front-delts" → "Front delts". */
-export const MUSCLE_LABELS = Object.fromEntries(MUSCLES.map((m) => [m, m[0].toUpperCase() + m.slice(1).replace(/-/g, ' ')]));
+export { MUSCLE_LABELS };
 
 /** Has this exercise any muscles recorded? An absent field (a record from before
  *  muscles existed) and two empty lists both count as none. */
@@ -130,4 +129,218 @@ export function definitionLevel(muscle, sets = [], exercisesById = new Map()) {
   const prs = workingSets(sets).filter((s) => s.isPR && exercisesById.get(s.exerciseId)?.primaryMuscles?.includes(muscle)).length;
   const score = lifetime + 5 * prs;
   return DEFINITION_STEPS.filter((step) => score >= step).length;
+}
+
+/* ---------- Muscle map v2: counting modes, periods, Unassigned ---------- */
+
+/** The periods the muscle map can show, in days, and its two counting modes.
+ *  Both read the same stored data; switching changes nothing that's stored. */
+export const PERIODS = Object.freeze([7, 30, 90]);
+export const COUNT_MODES = Object.freeze(['sets', 'weight']);
+
+/** The last `days` days ending today, inclusive. */
+export function periodRange(todayISO, days) {
+  return { fromISO: shiftDays(todayISO, -(days - 1)), toISO: todayISO };
+}
+
+/** Does a set have added weight to count in Weight mode? Hold-mode and
+ *  bodyweight exercises do not: they are excluded, never counted as zero. */
+export function countsForWeight(set, exercise) {
+  if (!exercise || exercise.mode === 'hold' || exercise.isBodyweight) return false;
+  if (set.holdSeconds != null) return false;
+  return toKg(set.weight, set.unit) > 0 && Number(set.reps) > 0;
+}
+
+/** An exercise with no muscles chosen. Counted on its own row, never spread
+ *  over the body or guessed at. */
+export const isUnassigned = (exercise) => !hasMuscles(exercise);
+
+/**
+ * Totals per muscle for a date range, in the chosen mode.
+ *   sets:   1 per working set to each main muscle, 0.5 to each supporting one
+ *   weight: weight × reps (in `unit`) to each main muscle, half to each supporting one
+ * @returns {{ totals: Object<string, number>, unassigned: number, excludedOnly: Set<string>, excluded: number }}
+ *   `excludedOnly`: in Weight mode, muscles that were trained in the range only
+ *   by excluded (bodyweight / timed) sets, so the view can say so instead of 0.
+ */
+export function muscleTotals({ sets = [], exercisesById = new Map(), fromISO = '', toISO = '9999-12-31', mode = 'sets', unit = 'kg' }) {
+  const totals = Object.fromEntries(MUSCLES.map((m) => [m, 0]));
+  const touchedByExcluded = new Set();
+  let unassigned = 0;
+  let excluded = 0;
+  for (const s of workingSets(sets)) {
+    if (!s?.dateISO || s.dateISO < fromISO || s.dateISO > toISO) continue;
+    const ex = exercisesById.get(s.exerciseId);
+    if (!ex) continue;
+    let amount = 1;
+    if (mode === 'weight') {
+      if (!countsForWeight(s, ex)) {
+        excluded += 1;
+        for (const m of [...(ex.primaryMuscles || []), ...(ex.secondaryMuscles || [])]) touchedByExcluded.add(m);
+        continue;
+      }
+      amount = fromKg(toKg(s.weight, s.unit) * Number(s.reps), unit);
+    }
+    if (isUnassigned(ex)) { unassigned += amount; continue; }
+    for (const m of ex.primaryMuscles || []) if (m in totals) totals[m] += amount * PRIMARY;
+    for (const m of ex.secondaryMuscles || []) if (m in totals) totals[m] += amount * SECONDARY;
+  }
+  const excludedOnly = new Set([...touchedByExcluded].filter((m) => m in totals && totals[m] === 0));
+  return { totals, unassigned, excludedOnly, excluded };
+}
+
+/** Muscle groups, most-trained first (ties in list order), for the ranked list. */
+export function rankMuscles({ totals, excludedOnly = new Set() }) {
+  return MUSCLES
+    .map((muscle, i) => ({ muscle, i, value: totals[muscle] || 0, excludedOnly: excludedOnly.has(muscle) }))
+    .sort((a, b) => b.value - a.value || a.i - b.i)
+    .map(({ muscle, value, excludedOnly: ex }) => ({ muscle, value, excludedOnly: ex }));
+}
+
+/**
+ * Heat level 0–3 for a total, so the colour scale means the same at any period.
+ *   sets:   the Stage 4 thresholds, applied per week (a 30-day total is scaled to 7 days)
+ *   weight: relative to the most-trained muscle in view; kilograms have no
+ *           absolute scale that fits every lifter
+ */
+export function heatLevelFor(value, { mode = 'sets', days = 7, max = 0 } = {}) {
+  if (!(value > 0)) return 0;
+  if (mode === 'weight') {
+    const share = max > 0 ? value / max : 1;
+    return share > 2 / 3 ? 3 : share > 1 / 3 ? 2 : 1;
+  }
+  return heatLevel((value * 7) / days);
+}
+
+/**
+ * One muscle's trend across the period, oldest first, as chart points: daily for
+ * a 7-day period (a single weekly point would show nothing), weekly otherwise —
+ * buckets of 7 days ending today, the oldest possibly shorter.
+ */
+export function muscleTrend({ sets, exercisesById, muscle, todayISO, days = 7, mode = 'sets', unit = 'kg' }) {
+  const step = days <= 7 ? 1 : 7;
+  const points = [];
+  for (let end = 0; end < days; end += step) {
+    const toISO = shiftDays(todayISO, -end);
+    const fromISO = shiftDays(todayISO, -Math.min(end + step - 1, days - 1));
+    const value = muscleTotals({ sets, exercisesById, fromISO, toISO, mode, unit }).totals[muscle] || 0;
+    points.unshift({ label: fromISO, value });
+  }
+  return points;
+}
+
+/* ---------- Taxonomy v2 migration ---------- */
+
+/** Ids from the first taxonomy that no longer exist, and what they became. */
+export const RETIRED_MUSCLES = Object.freeze({ lats: 'upper-back-lats', 'upper-back': 'upper-back-lats' });
+
+/**
+ * The starter mappings as the first taxonomy shipped them, for the starters
+ * whose mapping was corrected (DECISIONS). A starter still on exactly this
+ * mapping (after renaming retired ids) gets the corrected one; one the user
+ * has edited is left alone.
+ */
+export const SEED_MUSCLES_V1 = Object.freeze({
+  'Overhead Press': [['front-delts'], ['side-delts', 'triceps', 'upper-back']],
+  'Front Squat': [['quads'], ['glutes', 'abs', 'upper-back']],
+  Deadlift: [['glutes', 'hamstrings', 'lower-back'], ['upper-back', 'lats', 'forearms', 'quads']],
+  'Barbell Row': [['lats', 'upper-back'], ['rear-delts', 'biceps', 'lower-back']],
+  'Lat Pulldown': [['lats'], ['biceps', 'upper-back']],
+  'Face Pull': [['rear-delts'], ['upper-back']],
+  'Pull Up': [['lats'], ['biceps', 'upper-back', 'rear-delts']],
+  'Downward Dog': [[], ['hamstrings', 'calves']],
+  "Child's Pose": [[], []]
+});
+
+/** Retired ids renamed, duplicates dropped, and never one muscle in both lists. */
+export function renameRetired({ primaryMuscles = [], secondaryMuscles = [] }) {
+  const fix = (list) => [...new Set(list.map((m) => RETIRED_MUSCLES[m] || m))];
+  const primary = fix(primaryMuscles);
+  return { primaryMuscles: primary, secondaryMuscles: fix(secondaryMuscles).filter((m) => !primary.includes(m)) };
+}
+
+const sameList = (a, b) => a.length === b.length && a.every((m) => b.includes(m));
+
+/**
+ * An exercise moved to taxonomy v2. Always renames retired ids. With
+ * `correctSeeds`, a starter still on its original mapping takes the corrected
+ * one from SEED_EXERCISES.
+ * @returns the exercise, unchanged (same object) if nothing needed changing
+ */
+export function migrateMuscles(exercise, { correctSeeds = false } = {}) {
+  if (!Array.isArray(exercise?.primaryMuscles)) return exercise;
+  let next = renameRetired(exercise);
+  if (correctSeeds && !exercise.isCustom) {
+    const v1 = SEED_MUSCLES_V1[exercise.name];
+    const seed = SEED_EXERCISES.find((s) => s.name === exercise.name);
+    if (v1 && seed) {
+      const original = renameRetired({ primaryMuscles: v1[0], secondaryMuscles: v1[1] });
+      if (sameList(next.primaryMuscles, original.primaryMuscles) && sameList(next.secondaryMuscles, original.secondaryMuscles)) {
+        next = { primaryMuscles: [...seed.primaryMuscles], secondaryMuscles: [...seed.secondaryMuscles] };
+      }
+    }
+  }
+  const changed = !sameList(next.primaryMuscles, exercise.primaryMuscles) || !sameList(next.secondaryMuscles, exercise.secondaryMuscles || []);
+  return changed ? { ...exercise, ...next } : exercise;
+}
+
+/* ---------- Custom exercises: a suggestion from the name ---------- */
+
+/**
+ * A small on-device keyword table: words in an exercise's name → likely
+ * muscles. Only ever shown as a suggestion the user confirms or changes; it
+ * is never applied on its own. First match wins, so the more specific words
+ * (e.g. "leg curl", "calf raise") come before the general ones.
+ */
+export const KEYWORD_MUSCLES = Object.freeze([
+  [/\b(leg|hamstring|nordic) curls?\b/, ['hamstrings'], ['calves']],
+  [/\bcalf|calves\b/, ['calves'], []],
+  [/\b(lateral|side|lat) raises?\b/, ['side-delts'], []],
+  [/\b(front) raises?\b/, ['front-delts'], []],
+  [/\b(rear|reverse) (delt|fly|flye)s?\b|\bface pulls?\b/, ['rear-delts'], ['traps']],
+  [/\bshrugs?\b/, ['traps'], ['forearms']],
+  [/\b(pull ?ups?|chin ?ups?|pull ?downs?|pulldowns?)\b/, ['upper-back-lats'], ['biceps']],
+  [/\bdeadlifts?\b|\brdls?\b|\bgood mornings?\b/, ['hamstrings', 'glutes', 'lower-back'], ['forearms']],
+  [/\bsquats?\b|\blunges?\b|\bleg press(es)?\b|\bsplit squats?\b/, ['quads', 'glutes'], ['adductors']],
+  [/\bhip thrusts?\b|\bglute bridges?\b|\bkickbacks?\b/, ['glutes'], ['hamstrings']],
+  [/\bdips?\b/, ['triceps', 'chest'], ['front-delts']],
+  [/\btriceps?\b|\bskull ?crushers?\b|\bpush ?downs?\b|\bpushdowns?\b/, ['triceps'], []],
+  [/\b(leg )?extensions?\b/, ['quads'], []],
+  [/\bcurls?\b/, ['biceps'], ['forearms']],
+  [/\brows?\b/, ['upper-back-lats'], ['biceps', 'rear-delts']],
+  [/\b(overhead|shoulder|military|arnold) press(es)?\b/, ['front-delts'], ['side-delts', 'triceps']],
+  [/\b(bench|chest|incline|decline) press(es)?\b|\bflyes?\b|\bflys?\b|\bpush ?ups?\b|\bpress ?ups?\b/, ['chest'], ['front-delts', 'triceps']],
+  [/\bpress(es)?\b/, ['chest', 'front-delts'], ['triceps']],
+  [/\bcrunch(es)?\b|\bsit ?ups?\b|\bplanks?\b|\b(leg|knee) raises?\b|\bab\b|\babs\b/, ['abs'], ['obliques', 'hip-flexors']],
+  [/\braises?\b/, ['side-delts'], ['front-delts']],
+  [/\b(russian )?twists?\b|\bwoodchop(per)?s?\b|\bside bends?\b/, ['obliques'], ['abs']],
+  [/\bwrist|grip|farmer'?s? (walk|carry)\b/, ['forearms'], ['traps']]
+]);
+
+/** Suggested muscles for a name, or null when nothing in the table fits. */
+export function suggestMuscles(name) {
+  const text = String(name || '').toLowerCase();
+  for (const [pattern, primary, secondary] of KEYWORD_MUSCLES) {
+    if (pattern.test(text)) return { primaryMuscles: [...primary], secondaryMuscles: secondary.filter((m) => !primary.includes(m)) };
+  }
+  return null;
+}
+
+/* ---------- The "set its muscles?" reminder ---------- */
+
+/** After this many logged sets of an unassigned exercise, ask once; after
+ *  this many more since a "Not now", ask one last time. */
+export const REMINDER = Object.freeze({ first: 3, again: 10, maxPrompts: 2 });
+
+/**
+ * Is the reminder due for an unassigned exercise?
+ * @param {number} logged   working sets ever logged for it
+ * @param {{ prompts?: number, lastAt?: number }} state  stored on the exercise
+ */
+export function reminderDue(exercise, logged, state = exercise?.muscleReminder || {}) {
+  if (!exercise || !isUnassigned(exercise)) return false;
+  const prompts = state.prompts || 0;
+  if (prompts >= REMINDER.maxPrompts) return false;
+  if (prompts === 0) return logged >= REMINDER.first;
+  return logged >= (state.lastAt || 0) + REMINDER.again;
 }

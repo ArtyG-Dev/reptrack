@@ -619,7 +619,7 @@ describe('features', { skip: findChromium() ? false : 'no Chromium build availab
       req.onsuccess = () => { const g = req.result.transaction('exercises').objectStore('exercises').getAll(); g.onsuccess = () => resolve(g.result.find((e) => e.name === 'Deadlift')); };
     }));
     assert.deepEqual(ex.primaryMuscles, ['lower-back', 'glutes', 'quads', 'hamstrings']);
-    assert.deepEqual(ex.secondaryMuscles, ['forearms', 'lats', 'upper-back', 'calves']);
+    assert.deepEqual(ex.secondaryMuscles, ['upper-back-lats', 'traps', 'forearms', 'calves']);
     await context.close();
   });
 

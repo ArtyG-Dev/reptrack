@@ -381,7 +381,7 @@ legacy copy in `DEPLOY.md`.
 | 163 | Voice: an unknown name offers "create" with optional muscles | `musclemap.test.js` | ✅ |
 | 164 | Screenshots: 4 angles, both modes, Unassigned row, legacy banner | `docs/screenshots/musclemap-*.jpg`, `VISUALS.md` → "The 3D muscle map" | ✅ |
 | 165 | CPU within budget; footprint < 50 MB | `scripts/measure-musclemap.mjs`: Progress +0%, full screen +0.5% app JS, 28.4 fps (DECISIONS #109); footprint in the measured block | ✅ headless / ⚠️ device |
-| 166 | Full suite green on merged `main`; cache bumped; both sites re-verified live | See the live verification entry in DECISIONS | (filled in after the merge) |
+| 166 | Full suite green on merged `main`; cache bumped; both sites re-verified live | Acceptance 414/414 on the merged head; SW `reptrack-shell-v14`; `verify-live.mjs` 37/37 including `/reptrack/legacy/`, plus a live log in each version showing the data kept separate (DECISIONS #110) | ✅ |
 | 167 | `MANUAL_TEST.md` on-phone checks | Check 9 | ⚠️ needs a phone |
 
 ## Baseline before the 3D muscle map (`v-pre-musclemap`)

@@ -1714,3 +1714,19 @@ on demand. In full screen, turning: **+0.5% app JS over the no-canvas baseline**
 SwiftShader, the same effect reported for the skins and for the same reason. Lowering the
 sphere grid from 14×20 to 12×18 took full screen from 24.3 to 28.4 fps here with no
 visible difference. Footprint stays far under 50 MB (see ACCEPTANCE).
+
+### 110. 3D muscle map: merged and verified live
+
+PR ArtyG-Dev/reptrack#1 merged as `98a407c` after `npm run acceptance` passed on its head
+(414 tests, Lighthouse a11y 100 in all nine themes, skins within budget, footprint
+4.307 MB). The Pages run for the merge succeeded, and the deployed worker is
+`reptrack-shell-v14`. `scripts/verify-live.mjs reptrack-shell-v14`: 37/37 on the live site.
+That covers every earlier stage's checks, the muscle map with all 18 groups and Weight mode,
+and the legacy copy at `/reptrack/legacy/`: the old version, banner, `noindex`, its own
+database beside the main one, its own worker in control, its own cache with the main one
+kept, and the main data unchanged by opening it. A separate live run logged sets in both
+versions: the main app's two sets were copied once (2), a set logged in legacy left
+main at 2, and a set logged in main left legacy at 3.
+
+Still open: the tag `v-pre-musclemap` is not on GitHub (#107); the branch
+`stable-pre-musclemap` marks the same commit.
